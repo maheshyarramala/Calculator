@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.BankAccount
@@ -204,17 +205,17 @@ fun FinanceHubScreen(
     floatingActionButton = {
       when (uiState.selectedTab) {
         FinanceTab.EXPENSES -> {
-          ExtendedFloatingActionButton(
+          FloatingActionButton(
             onClick = {
               haptic.performHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.setShowAddExpense(true)
             },
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
-            icon = { Icon(Icons.Default.Add, contentDescription = null) },
-            text = { Text("Log Expense") },
             modifier = Modifier.testTag("add_expense_fab")
-          )
+          ) {
+            Icon(Icons.Default.Add, contentDescription = "Log Expense")
+          }
         }
         FinanceTab.TRIPS -> {
           FloatingActionButton(
@@ -246,16 +247,20 @@ fun FinanceHubScreen(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column {
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
           Text(
             text = "Finance & Money",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
           )
           Text(
             text = "Custom categories, bank accounts & trips",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
           )
         }
 
@@ -265,12 +270,18 @@ fun FinanceHubScreen(
             viewModel.setShowBackupModal(true)
           },
           shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
           modifier = Modifier.testTag("backup_restore_header_btn")
         ) {
-          Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
-          Spacer(modifier = Modifier.width(6.dp))
-          Text("Backup / Restore", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+          Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text(
+            text = "Backup / Restore",
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false
+          )
         }
       }
 
@@ -378,7 +389,7 @@ private fun ExpensesSection(
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
     // Total Net Balance Dashboard Banner
@@ -479,26 +490,32 @@ private fun ExpensesSection(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column {
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
           Text(
             text = "My Bank & Cash Accounts",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
           )
           Text(
             text = "Track opening balance & live account funds",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
           )
         }
-        TextButton(
+        FilledTonalButton(
           onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onAddAccountClick()
-          }
+          },
+          shape = RoundedCornerShape(10.dp),
+          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
         ) {
-          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
           Spacer(modifier = Modifier.width(4.dp))
-          Text("+ Add Account", fontSize = 12.sp)
+          Text("Account", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
         }
       }
     }
@@ -667,11 +684,12 @@ private fun ExpensesSection(
             contentColor = Color(0xFFDC2626)
           ),
           shape = RoundedCornerShape(12.dp),
+          contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
           modifier = Modifier.weight(1f)
         ) {
-          Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("- Expense", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+          Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(15.dp))
+          Spacer(modifier = Modifier.width(3.dp))
+          Text("- Expense", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, maxLines = 1, softWrap = false)
         }
 
         FilledTonalButton(
@@ -684,11 +702,12 @@ private fun ExpensesSection(
             contentColor = Color(0xFF059669)
           ),
           shape = RoundedCornerShape(12.dp),
+          contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
           modifier = Modifier.weight(1f)
         ) {
-          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("+ Income", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+          Spacer(modifier = Modifier.width(3.dp))
+          Text("+ Income", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, maxLines = 1, softWrap = false)
         }
 
         OutlinedButton(
@@ -697,11 +716,12 @@ private fun ExpensesSection(
             onAddCategoryClick()
           },
           shape = RoundedCornerShape(12.dp),
+          contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
           modifier = Modifier.weight(1f)
         ) {
           Icon(Icons.Default.Sell, contentDescription = null, modifier = Modifier.size(14.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("Category", fontSize = 11.5.sp)
+          Spacer(modifier = Modifier.width(3.dp))
+          Text("Category", fontSize = 11.sp, maxLines = 1, softWrap = false)
         }
       }
     }
@@ -1013,7 +1033,10 @@ private fun SpendingAnalyticsCard(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.weight(1f).padding(end = 8.dp)
+        ) {
           Icon(
             Icons.Default.PieChart,
             contentDescription = null,
@@ -1022,16 +1045,27 @@ private fun SpendingAnalyticsCard(
           )
           Spacer(modifier = Modifier.width(8.dp))
           Text(
-            text = "Category Spending Analytics",
+            text = "Spending Analytics",
             fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
           )
         }
-        Text(
-          text = "${catSpendList.size} Categories",
-          fontSize = 11.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        ) {
+          Text(
+            text = "${catSpendList.size} Categories",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+          )
+        }
       }
 
       // Donut Chart Row

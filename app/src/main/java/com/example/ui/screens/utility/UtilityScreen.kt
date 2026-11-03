@@ -67,74 +67,95 @@ fun UtilityScreen(
     },
     modifier = modifier.fillMaxSize()
   ) { paddingValues ->
-    LazyColumn(
+    Column(
       modifier = Modifier
         .fillMaxSize()
-        .padding(paddingValues),
-      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp)
+        .padding(paddingValues)
     ) {
       // Sub-Tabs with distinctive icons so users can choose visually
-      item {
-        TabRow(
-          selectedTabIndex = state.selectedTab.ordinal,
-          containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("utility_tabs")
-        ) {
-          UtilityTab.values().forEach { tab ->
-            val icon = when (tab) {
-              UtilityTab.CURRENCY -> Icons.Default.CurrencyExchange
-              UtilityTab.UNIT_CONVERTER -> Icons.Default.Straighten
-              UtilityTab.TIP_SPLIT -> Icons.Default.Group
-              UtilityTab.GST_TAX -> Icons.AutoMirrored.Filled.ReceiptLong
-            }
-            Tab(
-              selected = state.selectedTab == tab,
-              onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                viewModel.selectTab(tab)
-              },
-              icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
-              text = {
-                Text(
-                  text = tab.title,
-                  fontWeight = if (state.selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
-                  fontSize = 11.sp
-                )
-              }
-            )
+      TabRow(
+        selectedTabIndex = state.selectedTab.ordinal,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("utility_tabs")
+      ) {
+        UtilityTab.values().forEach { tab ->
+          val icon = when (tab) {
+            UtilityTab.CURRENCY -> Icons.Default.CurrencyExchange
+            UtilityTab.UNIT_CONVERTER -> Icons.Default.Straighten
+            UtilityTab.TIP_SPLIT -> Icons.Default.Group
+            UtilityTab.GST_TAX -> Icons.AutoMirrored.Filled.ReceiptLong
           }
+          Tab(
+            selected = state.selectedTab == tab,
+            onClick = {
+              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              viewModel.selectTab(tab)
+            },
+            icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+            text = {
+              Text(
+                text = tab.title,
+                fontWeight = if (state.selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
+                fontSize = 11.sp
+              )
+            }
+          )
         }
       }
 
       // Main Content by active Tab
       when (state.selectedTab) {
         UtilityTab.CURRENCY -> {
-          item {
-            CurrencyCalculatorSection(viewModel = viewModel)
+          LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+          ) {
+            item {
+              CurrencyCalculatorSection(viewModel = viewModel)
+            }
+            item {
+              Spacer(modifier = Modifier.height(32.dp))
+            }
           }
         }
         UtilityTab.UNIT_CONVERTER -> {
-          item {
-            UnitConverterSection(viewModel = viewModel)
+          LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+          ) {
+            item {
+              UnitConverterSection(viewModel = viewModel)
+            }
+            item {
+              Spacer(modifier = Modifier.height(32.dp))
+            }
           }
         }
         UtilityTab.TIP_SPLIT -> {
-          item {
-            TipSplitSection(viewModel = viewModel)
-          }
+          val splitBillViewModel: com.example.ui.screens.splitbill.SplitBillViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+          com.example.ui.screens.splitbill.SplitBillScreen(
+            viewModel = splitBillViewModel,
+            modifier = Modifier.fillMaxSize()
+          )
         }
         UtilityTab.GST_TAX -> {
-          item {
-            GstTaxSection(viewModel = viewModel)
+          LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+          ) {
+            item {
+              GstTaxSection(viewModel = viewModel)
+            }
+            item {
+              Spacer(modifier = Modifier.height(32.dp))
+            }
           }
         }
-      }
-
-      item {
-        Spacer(modifier = Modifier.height(32.dp))
       }
     }
   }
@@ -667,9 +688,9 @@ private fun UnitConverterSection(viewModel: UtilityViewModel) {
         }
       }
 
-      // Visual Icon Selection for Category (Instead of plain text)
+      // Visual Icon Selection for Category (Scrollable to prevent wrapping)
       Text("Category:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      Row(
+      LazyRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
@@ -679,7 +700,7 @@ private fun UnitConverterSection(viewModel: UtilityViewModel) {
           UnitConverter.Category.TEMPERATURE to Icons.Default.Thermostat,
           UnitConverter.Category.CURRENCY to Icons.Default.CurrencyExchange
         )
-        categories.forEach { (cat, icon) ->
+        items(categories) { (cat, icon) ->
           FilterChip(
             selected = state.unitCategory == cat,
             onClick = {
@@ -687,8 +708,7 @@ private fun UnitConverterSection(viewModel: UtilityViewModel) {
               viewModel.selectCategory(cat)
             },
             leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
-            label = { Text(cat.title, fontSize = 11.sp) },
-            modifier = Modifier.weight(1f)
+            label = { Text(cat.title, fontSize = 12.sp, maxLines = 1, softWrap = false) }
           )
         }
       }
@@ -784,10 +804,13 @@ private fun UnitDropdown(
       value = "${selected.name} (${selected.symbol})",
       onValueChange = {},
       readOnly = true,
-      label = { Text(label) },
+      singleLine = true,
+      maxLines = 1,
+      label = { Text(label, fontSize = 12.sp, maxLines = 1) },
+      textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
       trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
       shape = RoundedCornerShape(12.dp),
-      modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+      modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
     )
     ExposedDropdownMenu(
       expanded = expanded,
