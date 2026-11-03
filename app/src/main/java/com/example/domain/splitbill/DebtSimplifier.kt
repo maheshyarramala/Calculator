@@ -157,7 +157,7 @@ object DebtSimplifier {
     BigDecimal.valueOf(nonNegative(amount))
       .setScale(2, RoundingMode.HALF_UP)
       .movePointRight(2)
-      .longValue()
+      .toLong()
 
   /**
    * Greedy Debt Minimization Algorithm.
