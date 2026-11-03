@@ -2,6 +2,12 @@ package com.example.ui.screens.home
 
 import com.example.ui.theme.performConfiguredHapticFeedback
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +36,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -36,7 +44,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import com.example.data.local.entity.TripRecord
+import com.example.data.local.entity.BankAccount
+import com.example.data.local.entity.CreditCardBillReminder
 import com.example.ui.components.CurrencyFormatter
 import com.example.domain.calculator.SubscriptionDueDateCalculator
 import com.example.R
@@ -45,8 +57,12 @@ import com.example.ui.screens.finance.FinanceHubViewModel
 import com.example.ui.screens.finance.FinanceTab
 import com.example.ui.screens.utility.UtilityTab
 import com.example.ui.screens.utility.UtilityViewModel
+import java.time.Instant
 import java.text.SimpleDateFormat
 import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
 import java.util.Calendar
 import java.util.Date
@@ -80,6 +96,48 @@ fun HomeScreen(
   val expenses by financeViewModel.expenses.collectAsState()
   val subscriptions by financeViewModel.subscriptions.collectAsState()
   val accounts by financeViewModel.accountsWithBalances.collectAsState()
+  val creditCardBillReminders by financeViewModel.creditCardBillReminders.collectAsState()
+  val context = LocalContext.current
+  val creditCardAccounts = remember(accounts) {
+    accounts.map { it.account }.filter { it.accountType.equals("Credit Card", ignoreCase = true) }
+  }
+  var showCreditCardReminderDialog by rememberSaveable { mutableStateOf(false) }
+  var editingCreditCardAccountId by rememberSaveable { mutableStateOf<Long?>(null) }
+  var pendingCreditCardReminder by remember { mutableStateOf<CreditCardBillReminder?>(null) }
+  val notificationPermissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission()
+  ) { granted ->
+    pendingCreditCardReminder?.let { reminder ->
+      val account = creditCardAccounts.firstOrNull { it.id == reminder.accountId }
+      if (account != null) {
+        financeViewModel.saveCreditCardBillReminder(
+          reminder.copy(notificationsEnabled = granted),
+          account.bankName
+        )
+        if (!granted) {
+          Toast.makeText(
+            context,
+            context.getString(R.string.card_bill_notification_permission_denied),
+            Toast.LENGTH_LONG
+          ).show()
+        }
+      }
+    }
+    pendingCreditCardReminder = null
+  }
+  val saveCreditCardReminder: (CreditCardBillReminder) -> Unit = { reminder ->
+    val account = creditCardAccounts.firstOrNull { it.id == reminder.accountId }
+    if (account != null) {
+      val notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+      if (reminder.notificationsEnabled && !notificationsAllowed) {
+        pendingCreditCardReminder = reminder
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+      } else {
+        financeViewModel.saveCreditCardBillReminder(reminder, account.bankName)
+      }
+    }
+  }
 
   // Format today's date
   val todayFormatted = remember {
@@ -100,7 +158,7 @@ fun HomeScreen(
   }
 
   LazyVerticalGrid(
-    columns = GridCells.Adaptive(minSize = 160.dp),
+    columns = GridCells.Fixed(2),
     contentPadding = PaddingValues(16.dp),
     horizontalArrangement = Arrangement.spacedBy(12.dp),
     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -162,14 +220,14 @@ fun HomeScreen(
               onLogExpenseClick()
             },
             shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
             modifier = Modifier
               .weight(1f)
               .testTag("home_quick_log_expense_btn")
           ) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text(stringResource(R.string.home_quick_log_expense), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(stringResource(R.string.home_quick_log_expense), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
           }
 
           FilledTonalButton(
@@ -178,14 +236,14 @@ fun HomeScreen(
               onAddIncomeClick()
             },
             shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
             modifier = Modifier
               .weight(1f)
               .testTag("home_quick_add_income_btn")
           ) {
             Icon(Icons.Default.TrendingUp, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text(stringResource(R.string.home_quick_add_income), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(stringResource(R.string.home_quick_add_income), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
           }
 
           FilledTonalButton(
@@ -194,14 +252,14 @@ fun HomeScreen(
               onNavigateToUtility(UtilityTab.TIP_SPLIT)
             },
             shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
             modifier = Modifier
               .weight(1f)
               .testTag("home_quick_split_bill_btn")
           ) {
             Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text(stringResource(R.string.home_quick_split_bill), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(stringResource(R.string.home_quick_split_bill), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
           }
         }
       }
@@ -224,6 +282,24 @@ fun HomeScreen(
         spent = currentMonthExpenses,
         limit = monthlyBudgetLimit,
         onClick = { onNavigateToFinance(FinanceTab.EXPENSES) }
+      )
+    }
+
+    item {
+      HomeCreditCardBillsWidget(
+        cardAccounts = creditCardAccounts,
+        reminders = creditCardBillReminders,
+        today = today,
+        onAddReminder = {
+          editingCreditCardAccountId = null
+          showCreditCardReminderDialog = true
+        },
+        onEditReminder = { reminder ->
+          editingCreditCardAccountId = reminder.accountId
+          showCreditCardReminderDialog = true
+        },
+        onMarkPaid = financeViewModel::markCreditCardBillPaid,
+        onOpenFinance = { onNavigateToFinance(FinanceTab.EXPENSES) }
       )
     }
 
@@ -282,6 +358,19 @@ fun HomeScreen(
         onClick = onNavigateToCalc
       )
     }
+  }
+
+  if (showCreditCardReminderDialog) {
+    CreditCardBillReminderDialog(
+      cardAccounts = creditCardAccounts,
+      reminders = creditCardBillReminders,
+      editingAccountId = editingCreditCardAccountId,
+      onDismiss = { showCreditCardReminderDialog = false },
+      onSave = { reminder ->
+        showCreditCardReminderDialog = false
+        saveCreditCardReminder(reminder)
+      }
+    )
   }
 }
 
@@ -676,6 +765,321 @@ private fun HomeTripSpeedometerWidget(
           )
         }
       }
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// CREDIT CARD BILL DUE-DATE ALERTS
+// -------------------------------------------------------------
+@Composable
+private fun HomeCreditCardBillsWidget(
+  cardAccounts: List<BankAccount>,
+  reminders: List<CreditCardBillReminder>,
+  today: LocalDate,
+  onAddReminder: () -> Unit,
+  onEditReminder: (CreditCardBillReminder) -> Unit,
+  onMarkPaid: (CreditCardBillReminder) -> Unit,
+  onOpenFinance: () -> Unit
+) {
+  val accountNames = remember(cardAccounts) { cardAccounts.associate { it.id to it.bankName } }
+  val configuredReminders = remember(reminders, accountNames) {
+    reminders.filter { it.accountId in accountNames }.sortedBy { it.dueDateEpochDay }
+  }
+  val hasUnconfiguredCards = cardAccounts.any { account ->
+    configuredReminders.none { it.accountId == account.id }
+  }
+
+  Card(
+    shape = RoundedCornerShape(20.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    modifier = Modifier
+      .fillMaxWidth()
+      .heightIn(min = 180.dp)
+      .testTag("widget_credit_card_bills")
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Icon(
+          Icons.Default.CreditCard,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(7.dp)
+        )
+        Text(
+          text = stringResource(R.string.card_bill_due_alerts_title),
+          style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+          maxLines = 2,
+          modifier = Modifier.weight(1f).padding(start = 8.dp)
+        )
+      }
+
+      if (configuredReminders.isEmpty()) {
+        Text(
+          text = if (cardAccounts.isEmpty()) {
+            stringResource(R.string.card_bill_no_credit_cards)
+          } else {
+            stringResource(R.string.card_bill_due_alerts_description)
+          },
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(
+          onClick = if (cardAccounts.isEmpty()) onOpenFinance else onAddReminder,
+          contentPadding = PaddingValues(horizontal = 0.dp)
+        ) {
+          Text(
+            if (cardAccounts.isEmpty()) stringResource(R.string.card_bill_add_credit_card)
+            else stringResource(R.string.card_bill_add_reminder)
+          )
+        }
+      } else {
+        configuredReminders.take(2).forEach { reminder ->
+          val daysLeft = (reminder.dueDateEpochDay - today.toEpochDay()).toInt()
+          val isPaid = reminder.paidDateEpochDay >= 0L
+          val alertColor = when {
+            isPaid -> Color(0xFF10B981)
+            daysLeft <= 3 -> Color(0xFFEF4444)
+            else -> MaterialTheme.colorScheme.primary
+          }
+          Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+              text = accountNames[reminder.accountId].orEmpty(),
+              style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+            Text(
+              text = CurrencyFormatter.format(reminder.amount),
+              style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
+              color = alertColor,
+              maxLines = 1
+            )
+            Text(
+              text = when {
+                isPaid -> stringResource(R.string.card_bill_paid)
+                daysLeft < 0 -> stringResource(R.string.card_bill_overdue)
+                daysLeft == 0 -> stringResource(R.string.card_bill_due_today_short)
+                daysLeft == 1 -> stringResource(R.string.card_bill_due_in_one_day)
+                else -> stringResource(R.string.card_bill_due_in_days_short, daysLeft)
+              },
+              style = MaterialTheme.typography.labelSmall,
+              color = alertColor
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+              TextButton(
+                onClick = { onEditReminder(reminder) },
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                modifier = Modifier.testTag("edit_card_bill_${reminder.accountId}")
+              ) {
+                Text(stringResource(R.string.card_bill_edit_reminder), fontSize = 10.sp)
+              }
+              if (!isPaid) {
+                TextButton(
+                  onClick = { onMarkPaid(reminder) },
+                  contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                  modifier = Modifier.testTag("pay_card_bill_${reminder.accountId}")
+                ) {
+                  Text(stringResource(R.string.card_bill_mark_paid), fontSize = 10.sp)
+                }
+              }
+            }
+          }
+        }
+        if (hasUnconfiguredCards) {
+          TextButton(
+            onClick = onAddReminder,
+            contentPadding = PaddingValues(horizontal = 0.dp)
+          ) {
+            Text(stringResource(R.string.card_bill_add_another), fontSize = 11.sp)
+          }
+        }
+      }
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreditCardBillReminderDialog(
+  cardAccounts: List<BankAccount>,
+  reminders: List<CreditCardBillReminder>,
+  editingAccountId: Long?,
+  onDismiss: () -> Unit,
+  onSave: (CreditCardBillReminder) -> Unit
+) {
+  val today = LocalDate.now()
+  var selectedAccountId by remember(editingAccountId) {
+    mutableStateOf(
+      editingAccountId ?: cardAccounts.firstOrNull { account ->
+        reminders.none { it.accountId == account.id }
+      }?.id ?: cardAccounts.firstOrNull()?.id
+    )
+  }
+  var amount by remember(editingAccountId) {
+    mutableStateOf(reminders.firstOrNull { it.accountId == editingAccountId }?.amount?.toString().orEmpty())
+  }
+  var selectedDueDate by remember(editingAccountId) {
+    mutableStateOf(
+      reminders.firstOrNull { it.accountId == editingAccountId }?.dueDateEpochDay
+        ?: today.plusDays(7).toEpochDay()
+    )
+  }
+  var accountMenuExpanded by remember { mutableStateOf(false) }
+  var showDatePicker by remember { mutableStateOf(false) }
+  val initialPickerDate = reminders.firstOrNull { it.accountId == selectedAccountId }
+    ?.dueDateEpochDay ?: today.plusDays(7).toEpochDay()
+  val datePickerState = key(selectedAccountId, reminders) {
+    rememberDatePickerState(
+      initialSelectedDateMillis = LocalDate.ofEpochDay(initialPickerDate)
+        .atStartOfDay(ZoneOffset.UTC)
+        .toInstant()
+        .toEpochMilli()
+    )
+  }
+  val selectedAccount = cardAccounts.firstOrNull { it.id == selectedAccountId }
+  val enteredAmount = amount.toDoubleOrNull()
+  val isDueDateValid = selectedDueDate >= today.toEpochDay()
+
+  LaunchedEffect(selectedAccountId, reminders) {
+    val existing = reminders.firstOrNull { it.accountId == selectedAccountId }
+    amount = existing?.amount?.toString().orEmpty()
+    selectedDueDate = existing?.dueDateEpochDay ?: today.plusDays(7).toEpochDay()
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(stringResource(R.string.card_bill_due_alerts_title)) },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box {
+          OutlinedButton(
+            onClick = { accountMenuExpanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = editingAccountId == null
+          ) {
+            Text(
+              selectedAccount?.bankName ?: stringResource(R.string.card_bill_select_account),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
+          DropdownMenu(
+            expanded = accountMenuExpanded,
+            onDismissRequest = { accountMenuExpanded = false }
+          ) {
+            cardAccounts.forEach { account ->
+              DropdownMenuItem(
+                text = { Text(account.bankName) },
+                onClick = {
+                  selectedAccountId = account.id
+                  accountMenuExpanded = false
+                }
+              )
+            }
+          }
+        }
+
+        OutlinedTextField(
+          value = amount,
+          onValueChange = { input ->
+            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) amount = input
+          },
+          label = { Text(stringResource(R.string.card_bill_amount)) },
+          prefix = { Text("₹") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedButton(
+          onClick = { showDatePicker = true },
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Text(
+            stringResource(
+              R.string.card_bill_due_date_value,
+              LocalDate.ofEpochDay(selectedDueDate).format(
+                DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault())
+              )
+            )
+          )
+        }
+
+        Text(
+          stringResource(R.string.card_bill_notification_schedule),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (!isDueDateValid) {
+          Text(
+            stringResource(R.string.card_bill_due_date_must_be_future),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error
+          )
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          if (selectedAccount != null && enteredAmount != null && enteredAmount > 0.0 && isDueDateValid) {
+            onSave(
+              CreditCardBillReminder(
+                accountId = selectedAccount.id,
+                amount = enteredAmount,
+                dueDateEpochDay = selectedDueDate
+              )
+            )
+          }
+        },
+        enabled = selectedAccount != null && enteredAmount != null && enteredAmount > 0.0 && isDueDateValid
+      ) {
+        Text(stringResource(R.string.card_bill_save_reminder))
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+    }
+  )
+
+  if (showDatePicker) {
+    DatePickerDialog(
+      onDismissRequest = { showDatePicker = false },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            datePickerState.selectedDateMillis?.let { dateMillis ->
+              selectedDueDate = Instant.ofEpochMilli(dateMillis)
+                .atZone(ZoneOffset.UTC)
+                .toLocalDate()
+                .toEpochDay()
+            }
+            showDatePicker = false
+          }
+        ) { Text(stringResource(R.string.common_confirm)) }
+      },
+      dismissButton = {
+        TextButton(onClick = { showDatePicker = false }) {
+          Text(stringResource(R.string.common_cancel))
+        }
+      }
+    ) {
+      DatePicker(state = datePickerState)
     }
   }
 }

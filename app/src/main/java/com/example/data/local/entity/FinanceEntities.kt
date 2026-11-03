@@ -43,6 +43,18 @@ data class BankAccount(
   val notes: String = ""
 )
 
+@Entity(tableName = "credit_card_bill_reminders")
+data class CreditCardBillReminder(
+  @PrimaryKey
+  val accountId: Long,
+  val amount: Double,
+  val dueDateEpochDay: Long,
+  @ColumnInfo(defaultValue = "-1")
+  val paidDateEpochDay: Long = -1L,
+  @ColumnInfo(defaultValue = "1")
+  val notificationsEnabled: Boolean = true
+)
+
 @Entity(tableName = "trips")
 data class TripRecord(
   @PrimaryKey(autoGenerate = true)

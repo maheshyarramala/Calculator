@@ -10,6 +10,7 @@ import com.example.data.local.dao.CalculationHistoryDao
 import com.example.data.local.dao.FinanceDao
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.CalculationRecord
+import com.example.data.local.entity.CreditCardBillReminder
 import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.TripRecord
@@ -23,10 +24,11 @@ import kotlinx.coroutines.launch
     ExpenseCategory::class,
     ExpenseRecord::class,
     BankAccount::class,
+    CreditCardBillReminder::class,
     TripRecord::class,
     com.example.data.local.entity.SubscriptionRecord::class
   ],
-  version = 5,
+  version = 6,
   exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,6 +40,18 @@ abstract class AppDatabase : RoomDatabase() {
       override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE subscriptions ADD COLUMN dueMonth INTEGER NOT NULL DEFAULT 1")
         db.execSQL("ALTER TABLE subscriptions ADD COLUMN dueDayOfWeek INTEGER NOT NULL DEFAULT 1")
+      }
+    }
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS credit_card_bill_reminders (" +
+            "accountId INTEGER NOT NULL PRIMARY KEY, " +
+            "amount REAL NOT NULL, " +
+            "dueDateEpochDay INTEGER NOT NULL, " +
+            "paidDateEpochDay INTEGER NOT NULL DEFAULT -1, " +
+            "notificationsEnabled INTEGER NOT NULL DEFAULT 1)"
+        )
       }
     }
 
@@ -52,6 +66,7 @@ abstract class AppDatabase : RoomDatabase() {
           "omni_calc_db"
         )
           .addMigrations(MIGRATION_4_5)
+          .addMigrations(MIGRATION_5_6)
           .fallbackToDestructiveMigration(true)
           .addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {

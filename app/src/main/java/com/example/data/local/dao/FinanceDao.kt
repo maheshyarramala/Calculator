@@ -2,6 +2,7 @@ package com.example.data.local.dao
 
 import androidx.room.*
 import com.example.data.local.entity.BankAccount
+import com.example.data.local.entity.CreditCardBillReminder
 import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.TripRecord
@@ -63,6 +64,21 @@ interface FinanceDao {
 
   @Query("DELETE FROM bank_accounts")
   suspend fun deleteAllBankAccounts()
+
+  @Query("SELECT * FROM credit_card_bill_reminders ORDER BY dueDateEpochDay ASC")
+  fun getAllCreditCardBillReminders(): Flow<List<CreditCardBillReminder>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertCreditCardBillReminder(reminder: CreditCardBillReminder)
+
+  @Query("UPDATE credit_card_bill_reminders SET paidDateEpochDay = :paidDateEpochDay WHERE accountId = :accountId")
+  suspend fun markCreditCardBillPaid(accountId: Long, paidDateEpochDay: Long)
+
+  @Query("DELETE FROM credit_card_bill_reminders WHERE accountId = :accountId")
+  suspend fun deleteCreditCardBillReminder(accountId: Long)
+
+  @Query("DELETE FROM credit_card_bill_reminders")
+  suspend fun deleteAllCreditCardBillReminders()
 
   @Query("SELECT * FROM trips ORDER BY id DESC")
   fun getAllTrips(): Flow<List<TripRecord>>

@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.BankAccount
+import com.example.data.local.entity.CreditCardBillReminder
 import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.TripRecord
@@ -18,9 +19,11 @@ import com.example.domain.backup.BackupParseResult
 import com.example.domain.backup.FinanceBackupManager
 import com.example.domain.backup.FinanceBackupPayload
 import com.example.data.local.entity.SubscriptionRecord
+import com.example.domain.notification.CreditCardBillNotificationScheduler
 import org.json.JSONObject
 import java.util.Calendar
 import android.net.Uri
+import java.time.LocalDate
 
 enum class FinanceTab(val title: String) {
   EXPENSES("Expenses & Accounts"),
@@ -75,6 +78,10 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   val bankAccounts: StateFlow<List<BankAccount>> = dao.getAllBankAccounts()
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  val creditCardBillReminders: StateFlow<List<CreditCardBillReminder>> =
+    dao.getAllCreditCardBillReminders()
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   val trips: StateFlow<List<TripRecord>> = dao.getAllTrips()
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -321,8 +328,35 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   fun deleteBankAccount(account: BankAccount) {
     viewModelScope.launch {
+      dao.deleteCreditCardBillReminder(account.id)
+      CreditCardBillNotificationScheduler.cancel(getApplication(), account.id)
       dao.deleteBankAccount(account)
       _uiState.update { it.copy(toastMessage = "Account removed") }
+    }
+  }
+
+  fun saveCreditCardBillReminder(reminder: CreditCardBillReminder, accountName: String) {
+    viewModelScope.launch {
+      dao.insertCreditCardBillReminder(reminder)
+      CreditCardBillNotificationScheduler.schedule(getApplication(), reminder, accountName)
+      _uiState.update { it.copy(toastMessage = "Payment reminder saved for $accountName") }
+    }
+  }
+
+  fun markCreditCardBillPaid(reminder: CreditCardBillReminder) {
+    viewModelScope.launch {
+      val today = LocalDate.now().toEpochDay()
+      dao.markCreditCardBillPaid(reminder.accountId, today)
+      CreditCardBillNotificationScheduler.cancel(getApplication(), reminder.accountId)
+      _uiState.update { it.copy(toastMessage = "Credit card bill marked as paid") }
+    }
+  }
+
+  fun deleteCreditCardBillReminder(accountId: Long) {
+    viewModelScope.launch {
+      dao.deleteCreditCardBillReminder(accountId)
+      CreditCardBillNotificationScheduler.cancel(getApplication(), accountId)
+      _uiState.update { it.copy(toastMessage = "Credit card reminder removed") }
     }
   }
 
@@ -546,6 +580,10 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
           val payload = result.payload
           if (replaceExisting) {
             dao.deleteAllCustomCategories()
+            creditCardBillReminders.value.forEach {
+              CreditCardBillNotificationScheduler.cancel(getApplication(), it.accountId)
+            }
+            dao.deleteAllCreditCardBillReminders()
             dao.deleteAllBankAccounts()
             dao.deleteAllTrips()
             dao.deleteAllExpenses()
