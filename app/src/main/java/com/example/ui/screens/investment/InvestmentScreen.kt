@@ -6,7 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -69,17 +70,25 @@ fun InvestmentScreen(
             .testTag("investment_tabs")
         ) {
           InvestmentTab.values().forEach { tab ->
+            val icon = when (tab) {
+              InvestmentTab.SIP -> Icons.AutoMirrored.Filled.TrendingUp
+              InvestmentTab.LUMPSUM -> Icons.Default.Payments
+              InvestmentTab.COMPOUND -> Icons.Default.Percent
+              InvestmentTab.PPF -> Icons.Default.AccountBalance
+              InvestmentTab.FD -> Icons.Default.Savings
+            }
             Tab(
               selected = state.selectedTab == tab,
               onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.selectTab(tab)
               },
+              icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
               text = {
                 Text(
                   text = tab.title,
                   fontWeight = if (state.selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
-                  fontSize = 13.sp
+                  fontSize = 11.sp
                 )
               }
             )

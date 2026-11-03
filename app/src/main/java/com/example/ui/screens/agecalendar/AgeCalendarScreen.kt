@@ -72,17 +72,23 @@ fun AgeCalendarScreen(
             .testTag("age_calendar_tabs")
         ) {
           AgeCalendarTab.values().forEach { tab ->
+            val icon = when (tab) {
+              AgeCalendarTab.AGE -> Icons.Default.Cake
+              AgeCalendarTab.DATE_DIFF -> Icons.Default.DateRange
+              AgeCalendarTab.ADD_SUBTRACT -> Icons.Default.CalendarToday
+            }
             Tab(
               selected = state.selectedTab == tab,
               onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.selectTab(tab)
               },
+              icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
               text = {
                 Text(
                   text = tab.title,
                   fontWeight = if (state.selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
-                  fontSize = 12.sp
+                  fontSize = 11.sp
                 )
               }
             )
@@ -513,41 +519,78 @@ private fun DateAddSubtractSection(viewModel: AgeCalendarViewModel) {
           context = context
         )
 
-        // Add or Subtract Operation Toggle
+        // Add or Subtract Operation (Choose using visual icon cards)
+        Text("Operation:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-          Button(
+          Card(
             onClick = {
               haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.toggleAdjOperation(true)
             },
-            colors = ButtonDefaults.buttonColors(
-              containerColor = if (state.isAddition) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-              contentColor = if (state.isAddition) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = if (state.isAddition) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ),
+            border = if (state.isAddition) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
             modifier = Modifier.weight(1f)
           ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Add (+)")
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+              horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+              Icon(
+                Icons.Default.AddCircle,
+                contentDescription = null,
+                tint = if (state.isAddition) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(28.dp)
+              )
+              Spacer(modifier = Modifier.height(4.dp))
+              Text(
+                "Add (+)",
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = if (state.isAddition) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+              )
+            }
           }
 
-          Button(
+          Card(
             onClick = {
               haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.toggleAdjOperation(false)
             },
-            colors = ButtonDefaults.buttonColors(
-              containerColor = if (!state.isAddition) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-              contentColor = if (!state.isAddition) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = if (!state.isAddition) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ),
+            border = if (!state.isAddition) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
             modifier = Modifier.weight(1f)
           ) {
-            Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Subtract (-)")
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+              horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+              Icon(
+                Icons.Default.RemoveCircle,
+                contentDescription = null,
+                tint = if (!state.isAddition) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(28.dp)
+              )
+              Spacer(modifier = Modifier.height(4.dp))
+              Text(
+                "Subtract (-)",
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = if (!state.isAddition) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+              )
+            }
           }
         }
 

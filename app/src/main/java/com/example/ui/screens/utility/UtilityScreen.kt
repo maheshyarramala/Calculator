@@ -1,8 +1,10 @@
 package com.example.ui.screens.utility
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,7 +14,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -69,7 +73,7 @@ fun UtilityScreen(
       contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-      // Sub-Tabs: Currency / Units / Tip & Split / GST
+      // Sub-Tabs with distinctive icons so users can choose visually
       item {
         TabRow(
           selectedTabIndex = state.selectedTab.ordinal,
@@ -79,17 +83,24 @@ fun UtilityScreen(
             .testTag("utility_tabs")
         ) {
           UtilityTab.values().forEach { tab ->
+            val icon = when (tab) {
+              UtilityTab.CURRENCY -> Icons.Default.CurrencyExchange
+              UtilityTab.UNIT_CONVERTER -> Icons.Default.Straighten
+              UtilityTab.TIP_SPLIT -> Icons.Default.Restaurant
+              UtilityTab.GST_TAX -> Icons.Default.ReceiptLong
+            }
             Tab(
               selected = state.selectedTab == tab,
               onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.selectTab(tab)
               },
+              icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
               text = {
                 Text(
                   text = tab.title,
                   fontWeight = if (state.selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
-                  fontSize = 12.sp
+                  fontSize = 11.sp
                 )
               }
             )
@@ -128,12 +139,14 @@ fun UtilityScreen(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
   val state by viewModel.uiState.collectAsState()
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
+
+  var showBaseCurrencyPicker by remember { mutableStateOf(false) }
+  var showTargetCurrencyPicker by remember { mutableStateOf(false) }
 
   val baseCurrency = CurrencyCalculator.defaultCurrencies.find { it.code == state.currencyBaseCode }
     ?: CurrencyCalculator.defaultCurrencies.first()
@@ -144,6 +157,33 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
   val targetRate = state.currencyRates[state.currencyTargetCode] ?: targetCurrency.ratePerUsd
   val rate1BaseInTarget = targetRate / baseRate
   val rate1TargetInBase = baseRate / targetRate
+
+  // Currency Selection Dialogs with visual flag icons
+  if (showBaseCurrencyPicker) {
+    CurrencyPickerDialog(
+      title = "Select Source Currency",
+      selectedCode = state.currencyBaseCode,
+      currencies = CurrencyCalculator.defaultCurrencies,
+      onDismiss = { showBaseCurrencyPicker = false },
+      onSelect = {
+        viewModel.updateCurrencyBase(it)
+        showBaseCurrencyPicker = false
+      }
+    )
+  }
+
+  if (showTargetCurrencyPicker) {
+    CurrencyPickerDialog(
+      title = "Select Target Currency",
+      selectedCode = state.currencyTargetCode,
+      currencies = CurrencyCalculator.defaultCurrencies,
+      onDismiss = { showTargetCurrencyPicker = false },
+      onSelect = {
+        viewModel.updateCurrencyTarget(it)
+        showTargetCurrencyPicker = false
+      }
+    )
+  }
 
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
     // 1-to-1 Currency Converter Card
@@ -164,16 +204,26 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
         ) {
           Column {
             Text("Currency Calculator", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-            Text("Real-time exchange conversion", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Real-time benchmark exchange rates", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
           }
-          FilledTonalIconButton(
-            onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-              viewModel.saveCalculation(context)
-            },
-            modifier = Modifier.testTag("save_currency_button")
-          ) {
-            Icon(Icons.Default.BookmarkAdd, contentDescription = "Save currency conversion")
+          Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilledTonalIconButton(
+              onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                viewModel.resetRatesToDefault()
+              }
+            ) {
+              Icon(Icons.Default.Refresh, contentDescription = "Reset benchmark rates", modifier = Modifier.size(18.dp))
+            }
+            FilledTonalIconButton(
+              onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.saveCalculation(context)
+              },
+              modifier = Modifier.testTag("save_currency_button")
+            ) {
+              Icon(Icons.Default.BookmarkAdd, contentDescription = "Save currency conversion")
+            }
           }
         }
 
@@ -181,43 +231,125 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
         NumberInputField(
           value = state.currencyAmountInput,
           onValueChange = { viewModel.updateCurrencyAmount(it) },
-          label = "Amount to Convert",
+          label = "Amount in ${baseCurrency.code} to Convert",
           prefix = baseCurrency.symbol,
           testTag = "currency_amount_input"
         )
 
-        // Currency Selectors & Swap
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          CurrencyDropdown(
-            selectedCode = state.currencyBaseCode,
-            onSelect = { viewModel.updateCurrencyBase(it) },
-            label = "From",
-            modifier = Modifier.weight(1f)
-          )
+        // Visual Currency Selection Cards (Instead of cramped side-by-side dropdowns)
+        Text("Choose Currencies (Tap icon to switch)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-          IconButton(
+        // "From" Currency Card
+        Card(
+          onClick = { showBaseCurrencyPicker = true },
+          shape = RoundedCornerShape(14.dp),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+          ),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(46.dp)
+                  .clip(CircleShape)
+                  .background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+              ) {
+                Text(baseCurrency.flag, fontSize = 26.sp)
+              }
+              Spacer(modifier = Modifier.width(12.dp))
+              Column {
+                Text("From (Source)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${baseCurrency.code} - ${baseCurrency.name}", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+              }
+            }
+            Icon(Icons.Default.ArrowDropDown, contentDescription = "Change currency", tint = MaterialTheme.colorScheme.primary)
+          }
+        }
+
+        // Swap Icon Button
+        Box(
+          modifier = Modifier.fillMaxWidth(),
+          contentAlignment = Alignment.Center
+        ) {
+          FilledIconButton(
             onClick = {
               haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.swapCurrencies()
             },
-            modifier = Modifier.padding(horizontal = 4.dp)
+            colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
           ) {
-            Icon(Icons.Default.SwapHoriz, contentDescription = "Swap Currencies")
+            Icon(Icons.Default.SwapVert, contentDescription = "Swap Currencies", modifier = Modifier.size(24.dp))
           }
-
-          CurrencyDropdown(
-            selectedCode = state.currencyTargetCode,
-            onSelect = { viewModel.updateCurrencyTarget(it) },
-            label = "To",
-            modifier = Modifier.weight(1f)
-          )
         }
 
-        // Prominent Converted Result Box (full values without 10k/5k truncation)
+        // "To" Currency Card
+        Card(
+          onClick = { showTargetCurrencyPicker = true },
+          shape = RoundedCornerShape(14.dp),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+          ),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(46.dp)
+                  .clip(CircleShape)
+                  .background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+              ) {
+                Text(targetCurrency.flag, fontSize = 26.sp)
+              }
+              Spacer(modifier = Modifier.width(12.dp))
+              Column {
+                Text("To (Target)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${targetCurrency.code} - ${targetCurrency.name}", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+              }
+            }
+            Icon(Icons.Default.ArrowDropDown, contentDescription = "Change currency", tint = MaterialTheme.colorScheme.primary)
+          }
+        }
+
+        // Quick Currency Icon Chips row
+        Text("Quick Currency Pick:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          items(listOf("USD", "INR", "EUR", "GBP", "AED", "SAR", "JPY", "CAD", "AUD", "SGD")) { code ->
+            val info = CurrencyCalculator.defaultCurrencies.find { it.code == code }
+            if (info != null) {
+              FilterChip(
+                selected = state.currencyTargetCode == code,
+                onClick = {
+                  haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  viewModel.updateCurrencyTarget(code)
+                },
+                leadingIcon = { Text(info.flag, fontSize = 14.sp) },
+                label = { Text(info.code, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+              )
+            }
+          }
+        }
+
+        // Prominent Converted Result Box (full values without truncation)
         Card(
           shape = RoundedCornerShape(16.dp),
           colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
@@ -265,11 +397,11 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
           verticalAlignment = Alignment.CenterVertically
         ) {
           Text(
-            text = "Exchange Rates Board",
+            text = "Live Exchange Rates Board",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
           )
           Text(
-            text = "Tap rate to customize",
+            text = "Tap ✏️ to customize rate",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -334,47 +466,86 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CurrencyDropdown(
+private fun CurrencyPickerDialog(
+  title: String,
   selectedCode: String,
-  onSelect: (String) -> Unit,
-  label: String,
-  modifier: Modifier = Modifier
+  currencies: List<CurrencyCalculator.CurrencyInfo>,
+  onDismiss: () -> Unit,
+  onSelect: (String) -> Unit
 ) {
-  var expanded by remember { mutableStateOf(false) }
-  val selected = CurrencyCalculator.defaultCurrencies.find { it.code == selectedCode }
-    ?: CurrencyCalculator.defaultCurrencies.first()
+  var searchQuery by remember { mutableStateOf("") }
 
-  ExposedDropdownMenuBox(
-    expanded = expanded,
-    onExpandedChange = { expanded = !expanded },
-    modifier = modifier
-  ) {
-    OutlinedTextField(
-      value = "${selected.flag} ${selected.code}",
-      onValueChange = {},
-      readOnly = true,
-      label = { Text(label) },
-      trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-      shape = RoundedCornerShape(12.dp),
-      modifier = Modifier.menuAnchor()
-    )
-    ExposedDropdownMenu(
-      expanded = expanded,
-      onDismissRequest = { expanded = false }
-    ) {
-      CurrencyCalculator.defaultCurrencies.forEach { curr ->
-        DropdownMenuItem(
-          text = { Text("${curr.flag} ${curr.code} - ${curr.name}") },
-          onClick = {
-            onSelect(curr.code)
-            expanded = false
-          }
-        )
-      }
+  val filtered = remember(currencies, searchQuery) {
+    if (searchQuery.isBlank()) currencies
+    else currencies.filter {
+      it.code.contains(searchQuery, ignoreCase = true) || it.name.contains(searchQuery, ignoreCase = true)
     }
   }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(title) },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(350.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        OutlinedTextField(
+          value = searchQuery,
+          onValueChange = { searchQuery = it },
+          placeholder = { Text("Search currency...") },
+          leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        LazyColumn(
+          modifier = Modifier.fillMaxSize(),
+          verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+          items(filtered) { curr ->
+            val isSelected = curr.code == selectedCode
+            Card(
+              onClick = { onSelect(curr.code) },
+              shape = RoundedCornerShape(10.dp),
+              colors = CardDefaults.cardColors(
+                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+              ),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Text(curr.flag, fontSize = 24.sp)
+                  Spacer(modifier = Modifier.width(12.dp))
+                  Column {
+                    Text(curr.code, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(curr.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  }
+                }
+                if (isSelected) {
+                  Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Close")
+      }
+    }
+  )
 }
 
 @Composable
@@ -388,14 +559,14 @@ private fun EditRateDialog(
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Edit Rate for ${currency.code}") },
+    title = { Text("Set Live Rate for ${currency.code}") },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Set how many ${currency.code} equal 1 US Dollar (USD):", style = MaterialTheme.typography.bodySmall)
+        Text("Enter the exact real-time rate per 1 US Dollar (USD):", style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(
           value = rateStr,
           onValueChange = { rateStr = it.filter { c -> c.isDigit() || c == '.' } },
-          label = { Text("Rate per 1 USD") },
+          label = { Text("1 USD = how many ${currency.code}") },
           prefix = { Text("${currency.symbol} ") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
@@ -409,7 +580,7 @@ private fun EditRateDialog(
           if (r > 0) onSave(currency.code, r)
         }
       ) {
-        Text("Save Rate")
+        Text("Save Live Rate")
       }
     },
     dismissButton = {
@@ -420,7 +591,6 @@ private fun EditRateDialog(
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun UnitConverterSection(viewModel: UtilityViewModel) {
   val state by viewModel.uiState.collectAsState()
@@ -461,19 +631,28 @@ private fun UnitConverterSection(viewModel: UtilityViewModel) {
         }
       }
 
-      // Category Chips
+      // Visual Icon Selection for Category (Instead of plain text)
+      Text("Category:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        UnitConverter.Category.values().forEach { cat ->
+        val categories = listOf(
+          UnitConverter.Category.LENGTH to Icons.Default.Straighten,
+          UnitConverter.Category.WEIGHT to Icons.Default.Scale,
+          UnitConverter.Category.TEMPERATURE to Icons.Default.Thermostat,
+          UnitConverter.Category.CURRENCY to Icons.Default.CurrencyExchange
+        )
+        categories.forEach { (cat, icon) ->
           FilterChip(
             selected = state.unitCategory == cat,
             onClick = {
               haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.selectCategory(cat)
             },
-            label = { Text(cat.title, fontSize = 11.sp) }
+            leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
+            label = { Text(cat.title, fontSize = 11.sp) },
+            modifier = Modifier.weight(1f)
           )
         }
       }
@@ -572,7 +751,7 @@ private fun UnitDropdown(
       label = { Text(label) },
       trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
       shape = RoundedCornerShape(12.dp),
-      modifier = Modifier.menuAnchor()
+      modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
     )
     ExposedDropdownMenu(
       expanded = expanded,
@@ -774,37 +953,35 @@ private fun GstTaxSection(viewModel: UtilityViewModel) {
         }
       }
 
+      // Visual Icon Selection Cards for GST Mode (Instead of plain side-by-side buttons)
+      Text("Select Calculation Mode:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
       ) {
-        Button(
+        SelectableIconCard(
+          title = "Add GST",
+          subtitle = "Exclusive Tax",
+          icon = Icons.Default.AddCircle,
+          isSelected = state.gstIsExclusive,
           onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             viewModel.updateGstExclusive(true)
           },
-          colors = ButtonDefaults.buttonColors(
-            containerColor = if (state.gstIsExclusive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (state.gstIsExclusive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-          ),
           modifier = Modifier.weight(1f)
-        ) {
-          Text("Add GST (Exclusive)", fontSize = 12.sp)
-        }
+        )
 
-        Button(
+        SelectableIconCard(
+          title = "Remove GST",
+          subtitle = "Inclusive Tax",
+          icon = Icons.Default.RemoveCircle,
+          isSelected = !state.gstIsExclusive,
           onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             viewModel.updateGstExclusive(false)
           },
-          colors = ButtonDefaults.buttonColors(
-            containerColor = if (!state.gstIsExclusive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (!state.gstIsExclusive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-          ),
           modifier = Modifier.weight(1f)
-        ) {
-          Text("Remove GST (Inclusive)", fontSize = 12.sp)
-        }
+        )
       }
 
       NumberInputField(
@@ -877,6 +1054,52 @@ private fun GstTaxSection(viewModel: UtilityViewModel) {
           }
         }
       }
+    }
+  }
+}
+
+@Composable
+fun SelectableIconCard(
+  title: String,
+  subtitle: String,
+  icon: ImageVector,
+  isSelected: Boolean,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier
+) {
+  Card(
+    onClick = onClick,
+    shape = RoundedCornerShape(14.dp),
+    colors = CardDefaults.cardColors(
+      containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ),
+    border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+    modifier = modifier
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(14.dp),
+      horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+      Icon(
+        icon,
+        contentDescription = null,
+        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(28.dp)
+      )
+      Spacer(modifier = Modifier.height(6.dp))
+      Text(
+        text = title,
+        fontWeight = FontWeight.Bold,
+        fontSize = 13.sp,
+        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+      )
+      Text(
+        text = subtitle,
+        fontSize = 10.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
     }
   }
 }

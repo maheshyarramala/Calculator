@@ -1,18 +1,24 @@
-name: Build Android APK
+name: Build & Release Android APK
 
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name (e.g., v1.0.0)'
+        required: false
+        default: ''
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
-    name: Build & Package APK
+    name: Build & Publish APK
     runs-on: ubuntu-latest
 
     steps:
@@ -45,9 +51,49 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK Artifact
+      - name: Prepare Named APK File
+        run: |
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/OmniCalc.apk
+
+      - name: Upload APK to Actions Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: omnicalc-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: OmniCalc-APK
+          path: release-artifacts/OmniCalc.apk
           retention-days: 30
+
+      - name: Determine Release Tag
+        id: release_tag
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            echo "tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=v1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to GitHub Releases
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: "OmniCalc Release ${{ steps.release_tag.outputs.tag }}"
+          body: |
+            ### 📱 OmniCalc Android APK Release
+            Download and install `OmniCalc.apk` below on any Android device to test the app!
+
+            #### Included Features:
+            - **EMI & Loan Calculator**: Interactive amortization schedules with prepayment savings simulations and sharing.
+            - **Wealth & Investment**: SIP growth projections, Lump Sum, Compound Interest, PPF, and Fixed Deposit.
+            - **Scientific Calculator**: Standard & full scientific keypad with trigonometry and logarithms.
+            - **Age & Calendar**: Exact age breakdowns, next birthday countdowns, date difference, and date arithmetic.
+            - **Currency & Utilities**: Real-time accurate multi-currency converter, customizable rates, Unit Converter, Tip & Split, and GST Calculator.
+          files: |
+            release-artifacts/OmniCalc.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

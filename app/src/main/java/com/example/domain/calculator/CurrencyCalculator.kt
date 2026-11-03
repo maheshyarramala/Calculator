@@ -10,21 +10,26 @@ object CurrencyCalculator {
     val ratePerUsd: Double // How many of this currency = 1 USD
   )
 
+  // Accurate global benchmark rates relative to 1 USD
   val defaultCurrencies = listOf(
     CurrencyInfo("USD", "US Dollar", "$", "🇺🇸", 1.0),
-    CurrencyInfo("INR", "Indian Rupee", "₹", "🇮🇳", 86.40),
-    CurrencyInfo("EUR", "Euro", "€", "🇪🇺", 0.92),
-    CurrencyInfo("GBP", "British Pound", "£", "🇬🇧", 0.79),
-    CurrencyInfo("AED", "UAE Dirham", "AED", "🇦🇪", 3.67),
-    CurrencyInfo("JPY", "Japanese Yen", "¥", "🇯🇵", 154.20),
-    CurrencyInfo("CAD", "Canadian Dollar", "C$", "🇨🇦", 1.38),
-    CurrencyInfo("AUD", "Australian Dollar", "A$", "🇦🇺", 1.52),
-    CurrencyInfo("CHF", "Swiss Franc", "CHF", "🇨🇭", 0.88),
-    CurrencyInfo("CNY", "Chinese Yuan", "¥", "🇨🇳", 7.24),
-    CurrencyInfo("SGD", "Singapore Dollar", "S$", "🇸🇬", 1.34),
+    CurrencyInfo("INR", "Indian Rupee", "₹", "🇮🇳", 86.85),
+    CurrencyInfo("EUR", "Euro", "€", "🇪🇺", 0.952),
+    CurrencyInfo("GBP", "British Pound", "£", "🇬🇧", 0.795),
+    CurrencyInfo("AED", "UAE Dirham", "AED", "🇦🇪", 3.6725),
     CurrencyInfo("SAR", "Saudi Riyal", "﷼", "🇸🇦", 3.75),
-    CurrencyInfo("KWD", "Kuwaiti Dinar", "KD", "🇰🇼", 0.31),
-    CurrencyInfo("QAR", "Qatari Riyal", "QR", "🇶🇦", 3.64)
+    CurrencyInfo("JPY", "Japanese Yen", "¥", "🇯🇵", 152.80),
+    CurrencyInfo("CAD", "Canadian Dollar", "C$", "🇨🇦", 1.405),
+    CurrencyInfo("AUD", "Australian Dollar", "A$", "🇦🇺", 1.542),
+    CurrencyInfo("CHF", "Swiss Franc", "CHF", "🇨🇭", 0.902),
+    CurrencyInfo("CNY", "Chinese Yuan", "¥", "🇨🇳", 7.285),
+    CurrencyInfo("SGD", "Singapore Dollar", "S$", "🇸🇬", 1.348),
+    CurrencyInfo("KWD", "Kuwaiti Dinar", "KD", "🇰🇼", 0.3075),
+    CurrencyInfo("QAR", "Qatari Riyal", "QR", "🇶🇦", 3.64),
+    CurrencyInfo("MYR", "Malaysian Ringgit", "RM", "🇲🇾", 4.45),
+    CurrencyInfo("NZD", "New Zealand Dollar", "NZ$", "🇳🇿", 1.72),
+    CurrencyInfo("KRW", "South Korean Won", "₩", "🇰🇷", 1420.0),
+    CurrencyInfo("BRL", "Brazilian Real", "R$", "🇧🇷", 5.75)
   )
 
   data class ConvertedCurrency(

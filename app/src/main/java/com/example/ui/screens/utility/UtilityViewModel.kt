@@ -115,6 +115,14 @@ class UtilityViewModel : ViewModel() {
     recalculateCurrency()
   }
 
+  fun resetRatesToDefault() {
+    val defaults = CurrencyCalculator.defaultCurrencies.associate { it.code to it.ratePerUsd }
+    _uiState.update {
+      it.copy(currencyRates = defaults, toastMessage = "Exchange rates reset to standard market rates")
+    }
+    recalculateCurrency()
+  }
+
   private fun recalculateCurrency() {
     val state = _uiState.value
     val amount = state.currencyAmountInput.toDoubleOrNull() ?: 0.0
