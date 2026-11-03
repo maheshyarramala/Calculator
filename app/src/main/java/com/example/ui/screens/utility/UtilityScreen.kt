@@ -66,6 +66,7 @@ fun UtilityScreen(
         }
       }
     },
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     modifier = modifier.fillMaxSize()
   ) { paddingValues ->
     Column(

@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -81,23 +83,15 @@ fun SplitBillScreen(
     breakdowns.sumOf { it.totalToPay }
   }
 
-  val totalPaid = remember(state.participants) {
-    state.participants.sumOf { it.paidAmount }
+  val totalPaid = remember(breakdowns) {
+    breakdowns.sumOf { it.paidAmount }
   }
 
   val simplifiedTransfers = remember(breakdowns, state.simplifyDebtsEnabled) {
     if (state.simplifyDebtsEnabled) {
       DebtSimplifier.simplifyDebts(breakdowns)
     } else {
-      // Non-simplified direct debts: every debtor owes the group primary payer
-      val primaryPayer = state.participants.maxByOrNull { it.paidAmount }
-      if (primaryPayer != null) {
-        breakdowns.filter { it.netBalance < -0.01 }.map { b ->
-          DebtTransfer(fromParticipant = b.participant, toParticipant = primaryPayer, amount = Math.abs(b.netBalance))
-        }
-      } else {
-        emptyList()
-      }
+      DebtSimplifier.directTransfers(breakdowns)
     }
   }
 
@@ -125,8 +119,8 @@ fun SplitBillScreen(
       participants = state.participants,
       currencySymbol = state.currencySymbol,
       onDismiss = { viewModel.setShowAddItemDialog(false) },
-      onConfirm = { title, price, qty, isAlcohol, claimedIds ->
-        viewModel.addItem(title, price, qty, isAlcohol, claimedIds)
+      onConfirm = { title, price, qty, isAlcohol, claimedIds, paidById ->
+        viewModel.addItem(title, price, qty, isAlcohol, claimedIds, paidById)
         viewModel.setShowAddItemDialog(false)
       }
     )
@@ -184,27 +178,44 @@ fun SplitBillScreen(
     Spacer(modifier = Modifier.height(10.dp))
 
     // Mode Selector Chips Row
-    LazyRow(
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    Column(
+      verticalArrangement = Arrangement.spacedBy(4.dp),
       modifier = Modifier.fillMaxWidth()
     ) {
-      items(SplitMode.values()) { mode ->
-        val icon = when (mode) {
-          SplitMode.EQUAL -> Icons.Default.Balance
-          SplitMode.ITEMIZED -> Icons.Default.RestaurantMenu
-          SplitMode.EXACT -> Icons.Default.Pin
-          SplitMode.PERCENTAGE -> Icons.Default.Percent
-          SplitMode.SHARES -> Icons.Default.PieChart
+      SplitMode.values().toList().chunked(3).forEach { modes ->
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+          modes.forEach { mode ->
+            val icon = when (mode) {
+              SplitMode.EQUAL -> Icons.Default.Balance
+              SplitMode.ITEMIZED -> Icons.Default.RestaurantMenu
+              SplitMode.EXACT -> Icons.Default.Pin
+              SplitMode.PERCENTAGE -> Icons.Default.Percent
+              SplitMode.SHARES -> Icons.Default.PieChart
+            }
+            FilterChip(
+              selected = state.splitMode == mode,
+              onClick = {
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                viewModel.setSplitMode(mode)
+              },
+              leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
+              label = {
+                Text(
+                  text = when (mode) {
+                    SplitMode.EQUAL -> "Equal"
+                    SplitMode.ITEMIZED -> "Items"
+                    SplitMode.EXACT -> "Exact"
+                    SplitMode.PERCENTAGE -> "Percent"
+                    SplitMode.SHARES -> "Shares"
+                  },
+                  fontSize = 10.5.sp,
+                  maxLines = 1,
+                  softWrap = false
+                )
+              },
+            )
+          }
         }
-        FilterChip(
-          selected = state.splitMode == mode,
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-            viewModel.setSplitMode(mode)
-          },
-          leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
-          label = { Text(mode.title, fontSize = 11.5.sp, maxLines = 1, softWrap = false) }
-        )
       }
     }
 
@@ -268,23 +279,51 @@ fun SplitBillScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Subtotal, Tax, Tip, Discount Pills
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-          Text("Tax: ${state.currencySymbol}${String.format(Locale.US, "%.1f", state.taxAmount)}", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-          Text("Tip: ${state.currencySymbol}${String.format(Locale.US, "%.1f", state.tipAmount)}", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-          if (state.discountAmount > 0) {
-            Text("Discount: -${state.currencySymbol}${String.format(Locale.US, "%.1f", state.discountAmount)}", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+        val diff = totalPaid - totalBill
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text(
+              "Tax: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", state.taxAmount)}",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Medium
+            )
+            Text(
+              "Tip: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", state.tipAmount)}",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Medium
+            )
           }
-          val diff = totalPaid - totalBill
-          Text(
-            text = if (totalBill <= 0.0) "No Items" else if (Math.abs(diff) < 0.1) "Fully Paid ✓" else if (diff < 0) "Owed: ${state.currencySymbol}${String.format(Locale.US, "%.1f", -diff)}" else "Overpaid",
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (totalBill <= 0.0) MaterialTheme.colorScheme.onSurfaceVariant else if (Math.abs(diff) < 0.1) Color(0xFF059669) else Color(0xFFDC2626)
-          )
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            if (state.discountAmount > 0) {
+              Text(
+                "Discount: -${state.currencySymbol}${String.format(Locale.US, "%,.2f", state.discountAmount)}",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF10B981)
+              )
+            }
+            Text(
+              text = when {
+                totalBill <= 0.0 -> "No Items"
+                Math.abs(diff) < 0.005 -> "Fully Paid ✓"
+                diff < 0.0 -> "Owed: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", -diff)}"
+                else -> "Overpaid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", diff)}"
+              },
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Bold,
+              color = when {
+                totalBill <= 0.0 -> MaterialTheme.colorScheme.onSurfaceVariant
+                Math.abs(diff) < 0.005 -> Color(0xFF059669)
+                else -> Color(0xFFDC2626)
+              }
+            )
+          }
         }
       }
     }
@@ -350,14 +389,33 @@ private fun ItemsAndBillTab(
   onAddItemClick: () -> Unit
 ) {
   val haptic = LocalHapticFeedback.current
+  var taxInput by remember { mutableStateOf(amountInputText(state.taxAmount)) }
+  var tipInput by remember { mutableStateOf(amountInputText(state.tipAmount)) }
+  var discountInput by remember { mutableStateOf(amountInputText(state.discountAmount)) }
+
+  LaunchedEffect(state.taxAmount) {
+    if (taxInput.toDoubleOrNull() != state.taxAmount && !taxInput.endsWith(".")) {
+      taxInput = amountInputText(state.taxAmount)
+    }
+  }
+  LaunchedEffect(state.tipAmount) {
+    if (tipInput.toDoubleOrNull() != state.tipAmount && !tipInput.endsWith(".")) {
+      tipInput = amountInputText(state.tipAmount)
+    }
+  }
+  LaunchedEffect(state.discountAmount) {
+    if (discountInput.toDoubleOrNull() != state.discountAmount && !discountInput.endsWith(".")) {
+      discountInput = amountInputText(state.discountAmount)
+    }
+  }
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
     verticalArrangement = Arrangement.spacedBy(10.dp),
     contentPadding = PaddingValues(bottom = 80.dp)
   ) {
-    if (state.splitMode != SplitMode.ITEMIZED) {
-      // Manual Total Input for Equal / Exact / Shares modes
+    if (state.splitMode != SplitMode.ITEMIZED && state.splitMode != SplitMode.EXACT) {
+      // Exact mode derives the subtotal from the amount entered for each diner.
       item {
         Card(
           shape = RoundedCornerShape(14.dp),
@@ -391,24 +449,33 @@ private fun ItemsAndBillTab(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
           ) {
             OutlinedTextField(
-              value = if (state.taxAmount > 0) state.taxAmount.toString().removeSuffix(".0") else "",
-              onValueChange = { viewModel.setTaxAmount(it.toDoubleOrNull() ?: 0.0) },
+              value = taxInput,
+              onValueChange = {
+                taxInput = it
+                viewModel.setTaxAmount(it.toDoubleOrNull() ?: 0.0)
+              },
               label = { Text("Tax (${state.currencySymbol})", fontSize = 11.sp) },
               singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
               modifier = Modifier.weight(1f)
             )
             OutlinedTextField(
-              value = if (state.tipAmount > 0) state.tipAmount.toString().removeSuffix(".0") else "",
-              onValueChange = { viewModel.setTipAmount(it.toDoubleOrNull() ?: 0.0) },
+              value = tipInput,
+              onValueChange = {
+                tipInput = it
+                viewModel.setTipAmount(it.toDoubleOrNull() ?: 0.0)
+              },
               label = { Text("Tip (${state.currencySymbol})", fontSize = 11.sp) },
               singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
               modifier = Modifier.weight(1f)
             )
             OutlinedTextField(
-              value = if (state.discountAmount > 0) state.discountAmount.toString().removeSuffix(".0") else "",
-              onValueChange = { viewModel.setDiscountAmount(it.toDoubleOrNull() ?: 0.0) },
+              value = discountInput,
+              onValueChange = {
+                discountInput = it
+                viewModel.setDiscountAmount(it.toDoubleOrNull() ?: 0.0)
+              },
               label = { Text("Discount", fontSize = 11.sp) },
               singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -421,34 +488,34 @@ private fun ItemsAndBillTab(
 
     // Items Section Header
     item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Column {
-          Text(
-            text = "Dishes & Line Items (${state.items.size})",
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-          )
-          Text(
-            text = "Tap diner avatar to assign who ate/drank what",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-
-        FilledTonalButton(
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onAddItemClick()
-          },
-          shape = RoundedCornerShape(10.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+      Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+          text = "Dishes & Line Items (${state.items.size})",
+          style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
         ) {
-          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("+ Dish", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+          Text(
+            text = "Tap diner avatar to assign who ate/drank each item",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f).padding(end = 8.dp)
+          )
+          FilledTonalButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+              onAddItemClick()
+            },
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+          ) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Add dish", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+          }
         }
       }
     }
@@ -540,7 +607,9 @@ private fun ItemsAndBillTab(
                 text = "${if (item.quantity > 1) "${item.quantity}x " else ""}${item.title}",
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.5.sp,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
               )
             }
 
@@ -560,6 +629,17 @@ private fun ItemsAndBillTab(
             }
           }
 
+          val payerName = state.participants.firstOrNull {
+            it.id == item.paidByParticipantId
+          }?.name
+          if (payerName != null) {
+            Text(
+              text = "Paid by $payerName",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+
           Spacer(modifier = Modifier.height(10.dp))
 
           // Avatar Claim Chips: Tap to toggle claim for each person
@@ -575,12 +655,6 @@ private fun ItemsAndBillTab(
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
               ) {
                 Text("All Split", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-              }
-              TextButton(
-                onClick = { viewModel.clearItemClaims(item.id) },
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-              ) {
-                Text("Clear", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
               }
             }
           }
@@ -747,6 +821,16 @@ private fun DinersAndClaimsTab(
       }
     }
 
+    if (breakdowns.isNotEmpty()) {
+      item {
+        ShareDistributionChart(
+          breakdowns = breakdowns,
+          currencySymbol = state.currencySymbol,
+          splitMode = state.splitMode
+        )
+      }
+    }
+
     if (breakdowns.isEmpty()) {
       item {
         Card(
@@ -769,6 +853,18 @@ private fun DinersAndClaimsTab(
 
     items(breakdowns, key = { it.participant.id }) { b ->
       val p = b.participant
+      var exactAmountInput by remember(p.id, state.splitMode) {
+        mutableStateOf(amountInputText(p.exactAmount))
+      }
+      var percentageInput by remember(p.id, state.splitMode) {
+        mutableStateOf(amountInputText(p.percentage))
+      }
+      var paidAmountInput by remember(p.id) {
+        mutableStateOf(amountInputText(p.paidAmount))
+      }
+      var sharesInput by remember(p.id, state.splitMode) {
+        mutableStateOf(p.shares.toString())
+      }
       val avatarColor = try {
         Color(android.graphics.Color.parseColor(p.avatarColorHex))
       } catch (e: Exception) {
@@ -842,16 +938,107 @@ private fun DinersAndClaimsTab(
           Spacer(modifier = Modifier.height(10.dp))
 
           // Prorated breakdown details
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Text("Food/Drink: ${state.currencySymbol}${String.format(Locale.US, "%.1f", b.subtotal)}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text("Tax Share: ${state.currencySymbol}${String.format(Locale.US, "%.1f", b.taxShare)}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text("Tip Share: ${state.currencySymbol}${String.format(Locale.US, "%.1f", b.tipShare)}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface)
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Text(
+                text = "${if (state.splitMode == SplitMode.ITEMIZED) "Food/Drink" else "Subtotal"}: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.subtotal)}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+              )
+              Text(
+                text = "Tax: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.taxShare)}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+              )
+            }
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Text(
+                text = "Tip: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.tipShare)}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+              )
+              Text(
+                text = "Discount: -${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.discountShare)}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+              )
+            }
           }
 
           Spacer(modifier = Modifier.height(8.dp))
+          when (state.splitMode) {
+            SplitMode.EXACT -> {
+              OutlinedTextField(
+                value = exactAmountInput,
+                onValueChange = {
+                  exactAmountInput = it
+                  it.toDoubleOrNull()?.let { amount -> viewModel.updateParticipantExact(p.id, amount) }
+                },
+                label = { Text("Exact subtotal", fontSize = 10.sp) },
+                prefix = { Text(state.currencySymbol, fontSize = 11.sp) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth()
+              )
+            }
+            SplitMode.PERCENTAGE -> {
+              OutlinedTextField(
+                value = percentageInput,
+                onValueChange = {
+                  percentageInput = it
+                  it.toDoubleOrNull()?.let { percentage ->
+                    viewModel.updateParticipantPercentage(p.id, percentage)
+                  }
+                },
+                label = { Text("Share weight (%)", fontSize = 10.sp) },
+                suffix = { Text("%") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth()
+              )
+            }
+            SplitMode.SHARES -> {
+              OutlinedTextField(
+                value = sharesInput,
+                onValueChange = {
+                  sharesInput = it
+                  it.toIntOrNull()?.let { shares -> viewModel.updateParticipantShares(p.id, shares) }
+                },
+                label = { Text("Share units", fontSize = 10.sp) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+              )
+            }
+            SplitMode.EQUAL, SplitMode.ITEMIZED -> Unit
+          }
+
+          if (state.splitMode == SplitMode.EQUAL) {
+            Text(
+              text = "Equal share: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.totalToPay)}",
+              style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+              color = MaterialTheme.colorScheme.primary
+            )
+          }
+
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
           Spacer(modifier = Modifier.height(8.dp))
 
@@ -862,7 +1049,11 @@ private fun DinersAndClaimsTab(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-              Text("Amount Paid to Restaurant / Server:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
+              Text(
+                text = "Paid to restaurant: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.paidAmount)}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurface
+              )
               Spacer(modifier = Modifier.height(2.dp))
               if (b.netBalance > 0.01) {
                 Text(
@@ -884,9 +1075,12 @@ private fun DinersAndClaimsTab(
             }
 
             OutlinedTextField(
-              value = if (p.paidAmount > 0) p.paidAmount.toString().removeSuffix(".0") else "",
-              onValueChange = { viewModel.updateParticipantPaid(p.id, it.toDoubleOrNull() ?: 0.0) },
-              label = { Text("Paid", fontSize = 10.sp) },
+              value = paidAmountInput,
+              onValueChange = {
+                paidAmountInput = it
+                it.toDoubleOrNull()?.let { amount -> viewModel.updateParticipantPaid(p.id, amount) }
+              },
+              label = { Text("Other paid", fontSize = 10.sp) },
               prefix = { Text(state.currencySymbol, fontSize = 11.sp) },
               singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -898,6 +1092,111 @@ private fun DinersAndClaimsTab(
     }
   }
 }
+
+@Composable
+private fun ShareDistributionChart(
+  breakdowns: List<PersonBreakdown>,
+  currencySymbol: String,
+  splitMode: SplitMode
+) {
+  val total = breakdowns.sumOf { it.totalToPay }
+  Card(
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+    modifier = Modifier.fillMaxWidth()
+  ) {
+    Column(
+      modifier = Modifier.padding(14.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text("Share distribution", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(
+          text = "$currencySymbol${String.format(Locale.US, "%,.2f", total)} total",
+          fontWeight = FontWeight.Bold,
+          fontSize = 12.sp,
+          color = MaterialTheme.colorScheme.primary
+        )
+      }
+      if (splitMode == SplitMode.PERCENTAGE) {
+        val enteredTotal = breakdowns.sumOf { it.participant.percentage }
+        val shareHint = if (enteredTotal <= 0.0) {
+          "Add percentage weights; shares are currently equal."
+        } else if (kotlin.math.abs(enteredTotal - 100.0) > 0.05) {
+          "Entered weights total ${String.format(Locale.US, "%.1f", enteredTotal)}%; amounts are scaled to the full bill."
+        } else {
+          null
+        }
+        if (shareHint != null) {
+          Text(
+            text = shareHint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+      }
+      breakdowns.forEach { breakdown ->
+        val fraction = if (total > 0.0) {
+          (breakdown.totalToPay / total).toFloat().coerceIn(0f, 1f)
+        } else {
+          0f
+        }
+        val color = try {
+          Color(android.graphics.Color.parseColor(breakdown.participant.avatarColorHex))
+        } catch (_: IllegalArgumentException) {
+          MaterialTheme.colorScheme.primary
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text(
+              text = breakdown.participant.name,
+              style = MaterialTheme.typography.labelMedium,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f)
+            )
+            Text(
+              text = "$currencySymbol${String.format(Locale.US, "%,.2f", breakdown.totalToPay)}  ${String.format(Locale.US, "%.1f", fraction * 100)}%",
+              style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+              color = MaterialTheme.colorScheme.onSurface
+            )
+          }
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(8.dp)
+              .clip(CircleShape)
+              .background(MaterialTheme.colorScheme.surface)
+          ) {
+            Box(
+              modifier = Modifier
+                .fillMaxWidth(fraction)
+                .fillMaxHeight()
+                .background(color)
+            )
+          }
+          if (splitMode == SplitMode.PERCENTAGE) {
+            Text(
+              text = "Weight entered: ${String.format(Locale.US, "%.1f", breakdown.participant.percentage)}%",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        }
+      }
+    }
+  }
+}
+
+private fun amountInputText(amount: Double): String =
+  if (amount <= 0.0 || !amount.isFinite()) "" else amount.toString().removeSuffix(".0")
 
 @Composable
 private fun SettlementLedgerTab(
@@ -1326,19 +1625,33 @@ private fun AddReceiptItemDialog(
   participants: List<Participant>,
   currencySymbol: String,
   onDismiss: () -> Unit,
-  onConfirm: (title: String, price: Double, qty: Int, isAlcohol: Boolean, claimedIds: List<String>) -> Unit
+  onConfirm: (
+    title: String,
+    price: Double,
+    qty: Int,
+    isAlcohol: Boolean,
+    claimedIds: List<String>,
+    paidByParticipantId: String?
+  ) -> Unit
 ) {
   var title by remember { mutableStateOf("") }
   var priceStr by remember { mutableStateOf("") }
   var qtyStr by remember { mutableStateOf("1") }
   var isAlcohol by remember { mutableStateOf(false) }
   var selectedParticipantIds by remember { mutableStateOf(participants.map { it.id }) }
+  var selectedPayerId by remember { mutableStateOf(participants.firstOrNull()?.id) }
+  var payerMenuExpanded by remember { mutableStateOf(false) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
     title = { Text("Add Dish / Line Item") },
     text = {
-      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Column(
+        modifier = Modifier
+          .heightIn(max = 320.dp)
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
         OutlinedTextField(
           value = title,
           onValueChange = { title = it },
@@ -1372,6 +1685,35 @@ private fun AddReceiptItemDialog(
           Text("🍷 Drink / Alcohol item", fontSize = 12.sp)
           Switch(checked = isAlcohol, onCheckedChange = { isAlcohol = it })
         }
+
+        Box {
+          OutlinedButton(
+            onClick = { payerMenuExpanded = true },
+            enabled = participants.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            val payerName = participants.firstOrNull { it.id == selectedPayerId }?.name
+            Text(
+              text = payerName?.let { "Paid by: $it" } ?: "Choose who paid",
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
+          DropdownMenu(
+            expanded = payerMenuExpanded,
+            onDismissRequest = { payerMenuExpanded = false }
+          ) {
+            participants.forEach { participant ->
+              DropdownMenuItem(
+                text = { Text(participant.name) },
+                onClick = {
+                  selectedPayerId = participant.id
+                  payerMenuExpanded = false
+                }
+              )
+            }
+          }
+        }
       }
     },
     confirmButton = {
@@ -1379,7 +1721,7 @@ private fun AddReceiptItemDialog(
         onClick = {
           val price = priceStr.toDoubleOrNull() ?: 0.0
           val qty = qtyStr.toIntOrNull() ?: 1
-          onConfirm(title, price, qty, isAlcohol, selectedParticipantIds)
+          onConfirm(title, price, qty, isAlcohol, selectedParticipantIds, selectedPayerId)
         },
         enabled = title.isNotBlank() && priceStr.isNotBlank()
       ) {

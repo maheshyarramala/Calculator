@@ -1,9 +1,11 @@
 package com.example.domain.splitbill
 
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.min
-import kotlin.math.round
 
 object DebtSimplifier {
 
@@ -22,81 +24,33 @@ object DebtSimplifier {
   ): List<PersonBreakdown> {
     if (participants.isEmpty()) return emptyList()
 
-    val safeTax = if (tax < 0) 0.0 else tax
-    val safeTip = if (tip < 0) 0.0 else tip
-    val safeDiscount = if (discount < 0) 0.0 else discount
+    val safeTax = nonNegative(tax)
+    val safeTip = nonNegative(tip)
+    val safeDiscount = nonNegative(discount)
 
     return when (mode) {
-      SplitMode.ITEMIZED -> {
-        calculateItemizedBreakdowns(participants, items, safeTax, safeTip, safeDiscount)
-      }
+      SplitMode.ITEMIZED -> calculateItemizedBreakdowns(
+        participants, items, safeTax, safeTip, safeDiscount
+      )
       SplitMode.EQUAL -> {
-        val total = (manualBillTotal + safeTax + safeTip - safeDiscount).coerceAtLeast(0.0)
-        val perPerson = if (participants.isNotEmpty()) total / participants.size else 0.0
-        participants.map { p ->
-          val rounded = roundToTwoDecimals(perPerson)
-          PersonBreakdown(
-            participant = p,
-            subtotal = roundToTwoDecimals(manualBillTotal / participants.size),
-            taxShare = roundToTwoDecimals(safeTax / participants.size),
-            tipShare = roundToTwoDecimals(safeTip / participants.size),
-            discountShare = roundToTwoDecimals(safeDiscount / participants.size),
-            totalToPay = rounded,
-            paidAmount = p.paidAmount,
-            netBalance = roundToTwoDecimals(p.paidAmount - rounded)
-          )
-        }
+        val weights = List(participants.size) { 1.0 }
+        val subtotals = distribute(nonNegative(manualBillTotal), weights)
+        buildBreakdowns(participants, subtotals, safeTax, safeTip, safeDiscount, weights)
       }
       SplitMode.EXACT -> {
-        participants.map { p ->
-          val exact = p.exactAmount.coerceAtLeast(0.0)
-          PersonBreakdown(
-            participant = p,
-            subtotal = exact,
-            taxShare = 0.0,
-            tipShare = 0.0,
-            discountShare = 0.0,
-            totalToPay = roundToTwoDecimals(exact),
-            paidAmount = p.paidAmount,
-            netBalance = roundToTwoDecimals(p.paidAmount - exact)
-          )
-        }
+        val weights = participants.map { nonNegative(it.exactAmount) }
+        val subtotals = distribute(weights.sum(), weights)
+        buildBreakdowns(participants, subtotals, safeTax, safeTip, safeDiscount, weights)
       }
       SplitMode.PERCENTAGE -> {
-        val total = (manualBillTotal + safeTax + safeTip - safeDiscount).coerceAtLeast(0.0)
-        participants.map { p ->
-          val share = (total * (p.percentage / 100.0)).coerceAtLeast(0.0)
-          val rounded = roundToTwoDecimals(share)
-          PersonBreakdown(
-            participant = p,
-            subtotal = roundToTwoDecimals(manualBillTotal * (p.percentage / 100.0)),
-            taxShare = roundToTwoDecimals(safeTax * (p.percentage / 100.0)),
-            tipShare = roundToTwoDecimals(safeTip * (p.percentage / 100.0)),
-            discountShare = roundToTwoDecimals(safeDiscount * (p.percentage / 100.0)),
-            totalToPay = rounded,
-            paidAmount = p.paidAmount,
-            netBalance = roundToTwoDecimals(p.paidAmount - rounded)
-          )
-        }
+        val weights = participants.map { nonNegative(it.percentage) }
+        val subtotals = distribute(nonNegative(manualBillTotal), weights)
+        buildBreakdowns(participants, subtotals, safeTax, safeTip, safeDiscount, weights)
       }
       SplitMode.SHARES -> {
-        val totalShares = participants.sumOf { it.shares.coerceAtLeast(1) }.toDouble()
-        val total = (manualBillTotal + safeTax + safeTip - safeDiscount).coerceAtLeast(0.0)
-        participants.map { p ->
-          val ratio = if (totalShares > 0) p.shares.toDouble() / totalShares else 0.0
-          val share = total * ratio
-          val rounded = roundToTwoDecimals(share)
-          PersonBreakdown(
-            participant = p,
-            subtotal = roundToTwoDecimals(manualBillTotal * ratio),
-            taxShare = roundToTwoDecimals(safeTax * ratio),
-            tipShare = roundToTwoDecimals(safeTip * ratio),
-            discountShare = roundToTwoDecimals(safeDiscount * ratio),
-            totalToPay = rounded,
-            paidAmount = p.paidAmount,
-            netBalance = roundToTwoDecimals(p.paidAmount - rounded)
-          )
-        }
+        val weights = participants.map { it.shares.coerceAtLeast(1).toDouble() }
+        val subtotals = distribute(nonNegative(manualBillTotal), weights)
+        buildBreakdowns(participants, subtotals, safeTax, safeTip, safeDiscount, weights)
       }
     }
   }
@@ -108,71 +62,102 @@ object DebtSimplifier {
     tip: Double,
     discount: Double
   ): List<PersonBreakdown> {
-    // 1. Calculate each participant's claimed subtotal
-    val subtotalByParticipant = mutableMapOf<String, Double>()
-    participants.forEach { subtotalByParticipant[it.id] = 0.0 }
-
-    // If an item is claimed by nobody, split it evenly across all participants as common item
+    val subtotalCentsByParticipant = participants.associate { it.id to 0L }.toMutableMap()
     val allParticipantIds = participants.map { it.id }
-
     items.forEach { item ->
       val claimants = if (item.claimedParticipantIds.isEmpty()) {
         allParticipantIds
       } else {
-        item.claimedParticipantIds.filter { id -> participants.any { it.id == id } }
+        item.claimedParticipantIds.filter { id -> id in subtotalCentsByParticipant }
       }
-
       val effectiveClaimants = if (claimants.isEmpty()) allParticipantIds else claimants
-      val itemTotal = item.price * item.quantity
-      val perPersonPrice = itemTotal / effectiveClaimants.size
-
-      effectiveClaimants.forEach { pId ->
-        subtotalByParticipant[pId] = (subtotalByParticipant[pId] ?: 0.0) + perPersonPrice
+      if (effectiveClaimants.isNotEmpty()) {
+        val itemCents = toCents(nonNegative(item.price) * item.quantity.coerceAtLeast(1))
+        val itemShares = distributeCents(itemCents, List(effectiveClaimants.size) { 1.0 })
+        effectiveClaimants.forEachIndexed { index, participantId ->
+          subtotalCentsByParticipant[participantId] =
+            (subtotalCentsByParticipant[participantId] ?: 0L) + itemShares[index]
+        }
       }
     }
 
-    val totalItemsSubtotal = subtotalByParticipant.values.sum()
-    val grandTotal = (totalItemsSubtotal + tax + tip - discount).coerceAtLeast(0.0)
+    val subtotals = participants.map { (subtotalCentsByParticipant[it.id] ?: 0L) / 100.0 }
+    val weights = subtotals.map { it.coerceAtLeast(0.0) }
+    val paymentsByParticipant = participants.associate { participant ->
+      val itemPayments = items
+        .filter { it.paidByParticipantId == participant.id }
+        .sumOf { toCents(nonNegative(it.price) * it.quantity.coerceAtLeast(1)) / 100.0 }
+      participant.id to (nonNegative(participant.paidAmount) + itemPayments)
+    }
+    return buildBreakdowns(participants, subtotals, tax, tip, discount, weights, paymentsByParticipant)
+  }
 
-    val breakdowns = mutableListOf<PersonBreakdown>()
-    var runningSum = 0.0
+  private fun buildBreakdowns(
+    participants: List<Participant>,
+    subtotals: List<Double>,
+    tax: Double,
+    tip: Double,
+    discount: Double,
+    weights: List<Double>,
+    paymentsByParticipant: Map<String, Double> = participants.associate { it.id to it.paidAmount }
+  ): List<PersonBreakdown> {
+    val baseTotal = subtotals.sum()
+    val safeDiscount = nonNegative(discount).coerceAtMost(baseTotal + tax + tip)
+    val taxShares = distribute(tax, weights)
+    val tipShares = distribute(tip, weights)
+    val discountShares = distribute(safeDiscount, weights)
+    val grandTotal = (baseTotal + tax + tip - safeDiscount).coerceAtLeast(0.0)
+    val totalShares = distribute(grandTotal, weights)
 
-    participants.forEachIndexed { index, participant ->
-      val pSubtotal = subtotalByParticipant[participant.id] ?: 0.0
-      val ratio = if (totalItemsSubtotal > 0.0001) pSubtotal / totalItemsSubtotal else (1.0 / participants.size)
-
-      val pTax = tax * ratio
-      val pTip = tip * ratio
-      val pDiscount = discount * ratio
-      var pTotal = (pSubtotal + pTax + pTip - pDiscount).coerceAtLeast(0.0)
-
-      // Round to 2 decimals
-      pTotal = roundToTwoDecimals(pTotal)
-
-      // Handle the last participant to deterministically resolve any rounding cent drift
-      if (index == participants.size - 1 && participants.size > 1) {
-        val diff = roundToTwoDecimals(grandTotal - (runningSum + pTotal))
-        pTotal = (pTotal + diff).coerceAtLeast(0.0)
-      } else {
-        runningSum += pTotal
-      }
-
-      breakdowns.add(
-        PersonBreakdown(
-          participant = participant,
-          subtotal = roundToTwoDecimals(pSubtotal),
-          taxShare = roundToTwoDecimals(pTax),
-          tipShare = roundToTwoDecimals(pTip),
-          discountShare = roundToTwoDecimals(pDiscount),
-          totalToPay = pTotal,
-          paidAmount = participant.paidAmount,
-          netBalance = roundToTwoDecimals(participant.paidAmount - pTotal)
-        )
+    return participants.mapIndexed { index, participant ->
+      val paid = paymentsByParticipant[participant.id] ?: 0.0
+      val totalToPay = totalShares[index]
+      PersonBreakdown(
+        participant = participant,
+        subtotal = subtotals[index],
+        taxShare = taxShares[index],
+        tipShare = tipShares[index],
+        discountShare = discountShares[index],
+        totalToPay = totalToPay,
+        paidAmount = roundToTwoDecimals(paid),
+        netBalance = roundToTwoDecimals(paid - totalToPay)
       )
     }
-
-    return breakdowns
   }
+
+  private fun distribute(amount: Double, weights: List<Double>): List<Double> {
+    if (weights.isEmpty()) return emptyList()
+    val cents = toCents(amount)
+    return distributeCents(cents, weights).map { it / 100.0 }
+  }
+
+  private fun distributeCents(amountCents: Long, weights: List<Double>): List<Long> {
+    if (weights.isEmpty()) return emptyList()
+    val safeWeights = weights.map { nonNegative(it) }
+    val weightTotal = safeWeights.sum()
+    val actualWeights = if (weightTotal > 0.0) safeWeights else List(weights.size) { 1.0 }
+    val actualTotal = actualWeights.sum()
+    val exactShares = actualWeights.map { amountCents * it / actualTotal }
+    val cents = exactShares.map { floor(it).toLong() }.toMutableList()
+    var remainder = amountCents - cents.sum()
+    val priority = exactShares.indices.sortedByDescending { exactShares[it] - cents[it] }
+    var priorityIndex = 0
+    while (remainder > 0) {
+      cents[priority[priorityIndex % priority.size]]++
+      remainder--
+      priorityIndex++
+    }
+    return cents
+  }
+
+  private fun nonNegative(value: Double): Double =
+    if (value.isFinite()) value.coerceAtLeast(0.0) else 0.0
+
+  private fun toCents(amount: Double): Long =
+    BigDecimal.valueOf(nonNegative(amount))
+      .setScale(2, RoundingMode.HALF_UP)
+      .movePointRight(2)
+      .longValue()
 
   /**
    * Greedy Debt Minimization Algorithm.
@@ -180,6 +165,17 @@ object DebtSimplifier {
    * e.g., if A owes B $20 and B owes C $20, simplifies to: A pays C $20.
    */
   fun simplifyDebts(breakdowns: List<PersonBreakdown>): List<DebtTransfer> {
+    return calculateTransfers(breakdowns, optimize = true)
+  }
+
+  fun directTransfers(breakdowns: List<PersonBreakdown>): List<DebtTransfer> {
+    return calculateTransfers(breakdowns, optimize = false)
+  }
+
+  private fun calculateTransfers(
+    breakdowns: List<PersonBreakdown>,
+    optimize: Boolean
+  ): List<DebtTransfer> {
     if (breakdowns.size < 2) return emptyList()
 
     // Map each participant to their net balance (paid - owed)
@@ -192,16 +188,17 @@ object DebtSimplifier {
 
     breakdowns.forEach { b ->
       val net = roundToTwoDecimals(b.paidAmount - b.totalToPay)
-      if (net > 0.01) {
+      if (net > 0.005) {
         creditors.add(BalanceEntry(b.participant, net))
-      } else if (net < -0.01) {
+      } else if (net < -0.005) {
         debtors.add(BalanceEntry(b.participant, abs(net)))
       }
     }
 
-    // Sort to optimize matching (largest debtor pays largest creditor)
-    creditors.sortByDescending { it.balance }
-    debtors.sortByDescending { it.balance }
+    if (optimize) {
+      creditors.sortByDescending { it.balance }
+      debtors.sortByDescending { it.balance }
+    }
 
     val transfers = mutableListOf<DebtTransfer>()
 
@@ -214,7 +211,7 @@ object DebtSimplifier {
 
       val amountToTransfer = roundToTwoDecimals(min(creditor.balance, debtor.balance))
 
-      if (amountToTransfer > 0.01) {
+      if (amountToTransfer > 0.005) {
         transfers.add(
           DebtTransfer(
             fromParticipant = debtor.participant,
@@ -227,10 +224,10 @@ object DebtSimplifier {
       creditor.balance = roundToTwoDecimals(creditor.balance - amountToTransfer)
       debtor.balance = roundToTwoDecimals(debtor.balance - amountToTransfer)
 
-      if (creditor.balance <= 0.01) {
+      if (creditor.balance <= 0.005) {
         cIndex++
       }
-      if (debtor.balance <= 0.01) {
+      if (debtor.balance <= 0.005) {
         dIndex++
       }
     }
@@ -239,7 +236,10 @@ object DebtSimplifier {
   }
 
   fun roundToTwoDecimals(value: Double): Double {
-    return round(value * 100.0) / 100.0
+    if (!value.isFinite()) return 0.0
+    return BigDecimal.valueOf(value)
+      .setScale(2, RoundingMode.HALF_UP)
+      .toDouble()
   }
 
   fun formatCurrency(amount: Double, symbol: String = "₹"): String {

@@ -51,19 +51,19 @@ class SplitBillViewModel : ViewModel() {
   }
 
   fun setManualBillTotal(amount: Double) {
-    _uiState.update { it.copy(manualBillTotal = amount.coerceAtLeast(0.0)) }
+    _uiState.update { it.copy(manualBillTotal = nonNegative(amount)) }
   }
 
   fun setTaxAmount(tax: Double) {
-    _uiState.update { it.copy(taxAmount = tax.coerceAtLeast(0.0)) }
+    _uiState.update { it.copy(taxAmount = nonNegative(tax)) }
   }
 
   fun setTipAmount(tip: Double) {
-    _uiState.update { it.copy(tipAmount = tip.coerceAtLeast(0.0)) }
+    _uiState.update { it.copy(tipAmount = nonNegative(tip)) }
   }
 
   fun setDiscountAmount(discount: Double) {
-    _uiState.update { it.copy(discountAmount = discount.coerceAtLeast(0.0)) }
+    _uiState.update { it.copy(discountAmount = nonNegative(discount)) }
   }
 
   fun toggleSimplifyDebts() {
@@ -92,7 +92,7 @@ class SplitBillViewModel : ViewModel() {
       avatarColorHex = randomColor,
       upiId = upiId.trim(),
       paypalUsername = paypal.trim(),
-      paidAmount = paid
+      paidAmount = nonNegative(paid)
     )
     _uiState.update {
       it.copy(participants = it.participants + newParticipant)
@@ -103,7 +103,10 @@ class SplitBillViewModel : ViewModel() {
     _uiState.update { state ->
       val updatedParticipants = state.participants.filter { it.id != id }
       val updatedItems = state.items.map { item ->
-        item.copy(claimedParticipantIds = item.claimedParticipantIds.filter { it != id })
+        item.copy(
+          claimedParticipantIds = item.claimedParticipantIds.filter { it != id },
+          paidByParticipantId = item.paidByParticipantId?.takeUnless { it == id }
+        )
       }
       state.copy(participants = updatedParticipants, items = updatedItems)
     }
@@ -113,7 +116,7 @@ class SplitBillViewModel : ViewModel() {
     _uiState.update { state ->
       state.copy(
         participants = state.participants.map { p ->
-          if (p.id == id) p.copy(paidAmount = paid.coerceAtLeast(0.0)) else p
+          if (p.id == id) p.copy(paidAmount = nonNegative(paid)) else p
         }
       )
     }
@@ -123,7 +126,7 @@ class SplitBillViewModel : ViewModel() {
     _uiState.update { state ->
       state.copy(
         participants = state.participants.map { p ->
-          if (p.id == id) p.copy(exactAmount = exact.coerceAtLeast(0.0)) else p
+          if (p.id == id) p.copy(exactAmount = nonNegative(exact)) else p
         }
       )
     }
@@ -133,7 +136,7 @@ class SplitBillViewModel : ViewModel() {
     _uiState.update { state ->
       state.copy(
         participants = state.participants.map { p ->
-          if (p.id == id) p.copy(percentage = pct.coerceAtLeast(0.0)) else p
+          if (p.id == id) p.copy(percentage = nonNegative(pct)) else p
         }
       )
     }
@@ -150,14 +153,22 @@ class SplitBillViewModel : ViewModel() {
   }
 
   // Items Management
-  fun addItem(title: String, price: Double, quantity: Int, isAlcohol: Boolean, claimedIds: List<String>) {
+  fun addItem(
+    title: String,
+    price: Double,
+    quantity: Int,
+    isAlcohol: Boolean,
+    claimedIds: List<String>,
+    paidByParticipantId: String? = null
+  ) {
     val newItem = ReceiptItem(
       id = UUID.randomUUID().toString(),
       title = title.ifBlank { "Item" },
-      price = price.coerceAtLeast(0.0),
+      price = nonNegative(price),
       quantity = quantity.coerceAtLeast(1),
       isAlcoholOrSpecial = isAlcohol,
-      claimedParticipantIds = claimedIds
+      claimedParticipantIds = claimedIds,
+      paidByParticipantId = paidByParticipantId
     )
     _uiState.update { it.copy(items = it.items + newItem) }
   }
@@ -173,11 +184,16 @@ class SplitBillViewModel : ViewModel() {
       state.copy(
         items = state.items.map { item ->
           if (item.id == itemId) {
-            val isClaimed = item.claimedParticipantIds.contains(participantId)
-            val updatedClaims = if (isClaimed) {
-              item.claimedParticipantIds - participantId
+            val currentClaims = if (item.claimedParticipantIds.isEmpty()) {
+              state.participants.map { it.id }
             } else {
-              item.claimedParticipantIds + participantId
+              item.claimedParticipantIds
+            }
+            val isClaimed = participantId in currentClaims
+            val updatedClaims = if (isClaimed) {
+              currentClaims - participantId
+            } else {
+              currentClaims + participantId
             }
             item.copy(claimedParticipantIds = updatedClaims)
           } else {
@@ -194,16 +210,6 @@ class SplitBillViewModel : ViewModel() {
       state.copy(
         items = state.items.map { item ->
           if (item.id == itemId) item.copy(claimedParticipantIds = allIds) else item
-        }
-      )
-    }
-  }
-
-  fun clearItemClaims(itemId: String) {
-    _uiState.update { state ->
-      state.copy(
-        items = state.items.map { item ->
-          if (item.id == itemId) item.copy(claimedParticipantIds = emptyList()) else item
         }
       )
     }
@@ -239,4 +245,7 @@ class SplitBillViewModel : ViewModel() {
       state.copy(settledTransferKeys = updated)
     }
   }
+
+  private fun nonNegative(value: Double): Double =
+    if (value.isFinite()) value.coerceAtLeast(0.0) else 0.0
 }

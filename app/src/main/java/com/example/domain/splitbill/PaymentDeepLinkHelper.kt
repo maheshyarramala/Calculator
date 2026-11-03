@@ -77,16 +77,16 @@ object PaymentDeepLinkHelper {
       if (b.paidAmount > 0) {
         sb.append(" (Paid: $currencySymbol${String.format(Locale.US, "%,.2f", b.paidAmount)})")
       }
-      if (b.netBalance > 0.01) {
+      if (b.netBalance > 0.005) {
         sb.append(" 🟢 *Gets back $currencySymbol${String.format(Locale.US, "%,.2f", b.netBalance)}*")
-      } else if (b.netBalance < -0.01) {
+      } else if (b.netBalance < -0.005) {
         sb.append(" 🔴 *Owes $currencySymbol${String.format(Locale.US, "%,.2f", Math.abs(b.netBalance))}*")
       }
       sb.append("\n")
     }
 
     if (transfers.isNotEmpty()) {
-      sb.append("\n⚡ *Simplified Settlement (Who Owes Whom):*\n")
+      sb.append("\n⚡ *Settlement Transfers (Who Owes Whom):*\n")
       transfers.forEach { t ->
         sb.append("👉 *${t.fromParticipant.name}* ➔ pays *${t.toParticipant.name}* : $currencySymbol${String.format(Locale.US, "%,.2f", t.amount)}")
         if (t.toParticipant.upiId.isNotBlank()) {

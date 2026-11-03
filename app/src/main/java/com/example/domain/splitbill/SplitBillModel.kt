@@ -28,7 +28,8 @@ data class ReceiptItem(
   val price: Double,
   val quantity: Int = 1,
   val isAlcoholOrSpecial: Boolean = false,
-  val claimedParticipantIds: List<String> = emptyList()
+  val claimedParticipantIds: List<String> = emptyList(),
+  val paidByParticipantId: String? = null
 )
 
 data class PersonBreakdown(
