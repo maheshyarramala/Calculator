@@ -26,6 +26,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -518,7 +519,14 @@ private fun ThemeSettingsBottomSheet(
 
       // 1. Dark Mode Options
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Theme Mode", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Text(
+          text = "Theme Mode",
+          fontWeight = FontWeight.Bold,
+          style = MaterialTheme.typography.titleMedium,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.fillMaxWidth()
+        )
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -554,7 +562,14 @@ private fun ThemeSettingsBottomSheet(
 
       // 2. Accent Palette
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Accent Palette", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Text(
+          text = "Accent Palette",
+          fontWeight = FontWeight.Bold,
+          style = MaterialTheme.typography.titleMedium,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.fillMaxWidth()
+        )
         LazyRow(
           horizontalArrangement = Arrangement.spacedBy(10.dp),
           modifier = Modifier.fillMaxWidth()
@@ -603,7 +618,14 @@ private fun ThemeSettingsBottomSheet(
 
       // 3. Tactile Vibration Haptics
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Keypad Haptic Feedback", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Text(
+          text = "Keypad Haptic Feedback",
+          fontWeight = FontWeight.Bold,
+          style = MaterialTheme.typography.titleMedium,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.fillMaxWidth()
+        )
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp)
