@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -141,7 +142,7 @@ fun MainScreen(
           investmentViewModel.selectTab(InvestmentTab.LUMPSUM)
           showHubSheet = false
         },
-        CalculatorHubItem("Expense Tracker", "Custom categories & slabs", Icons.Default.ReceiptLong, Color(0xFFEF4444)) {
+        CalculatorHubItem("Expense Tracker", "Custom categories & slabs", Icons.AutoMirrored.Filled.ReceiptLong, Color(0xFFEF4444)) {
           currentDestination = MainDestination.FINANCE
           financeViewModel.selectTab(FinanceTab.EXPENSES)
           showHubSheet = false
@@ -185,7 +186,7 @@ fun MainScreen(
           utilityViewModel.selectTab(UtilityTab.UNIT_CONVERTER)
           showHubSheet = false
         },
-        CalculatorHubItem("GST & Tax", "Inclusive & exclusive", Icons.Default.ReceiptLong, Color(0xFF6366F1)) {
+        CalculatorHubItem("GST & Tax", "Inclusive & exclusive", Icons.AutoMirrored.Filled.ReceiptLong, Color(0xFF6366F1)) {
           currentDestination = MainDestination.UTILITIES
           utilityViewModel.selectTab(UtilityTab.GST_TAX)
           showHubSheet = false

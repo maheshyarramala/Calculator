@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -265,7 +266,7 @@ fun FinanceHubScreen(
       ) {
         FinanceTab.values().forEach { tab ->
           val icon = when (tab) {
-            FinanceTab.EXPENSES -> Icons.Default.ReceiptLong
+            FinanceTab.EXPENSES -> Icons.AutoMirrored.Filled.ReceiptLong
             FinanceTab.BANK_ACCOUNTS -> Icons.Default.AccountBalance
             FinanceTab.TRIPS -> Icons.Default.FlightTakeoff
           }
@@ -500,7 +501,7 @@ private fun ExpensesSection(
             horizontalAlignment = Alignment.CenterHorizontally
           ) {
             Icon(
-              Icons.Default.ReceiptLong,
+              Icons.AutoMirrored.Filled.ReceiptLong,
               contentDescription = null,
               modifier = Modifier.size(48.dp),
               tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)

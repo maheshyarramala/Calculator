@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -73,10 +75,10 @@ fun InterestCalculatorScreen(
           InterestMethod.values().forEach { method ->
             val icon = when (method) {
               InterestMethod.SIMPLE -> Icons.Default.Savings
-              InterestMethod.COMPOUND -> Icons.Default.TrendingUp
+              InterestMethod.COMPOUND -> Icons.AutoMirrored.Filled.TrendingUp
               InterestMethod.DOUBLING -> Icons.Default.Speed
               InterestMethod.EAR -> Icons.Default.Percent
-              InterestMethod.FLAT_VS_REDUCING -> Icons.Default.CompareArrows
+              InterestMethod.FLAT_VS_REDUCING -> Icons.AutoMirrored.Filled.CompareArrows
             }
             Tab(
               selected = state.selectedMethod == method,
