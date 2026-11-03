@@ -36,7 +36,7 @@ jobs:
         run: |
           if [ ! -f "app/google-services.json" ]; then
             echo "Creating placeholder google-services.json for build..."
-            echo '{"project_info":{"project_number":"123456789","project_id":"omnicalc-app","storage_bucket":"omnicalc.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789:android:abcdef","android_client_info":{"package_name":"com.example"}},"api_key":[{"current_key":"AIzaSyMockKeyForBuild123456789"}]}]}' > app/google-services.json
+            echo '{"project_info":{"project_number":"123456789012","project_id":"omnicalc-app","storage_bucket":"omnicalc-app.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789012:android:abcdef","android_client_info":{"package_name":"com.aistudio.allinonecalculator.vyrtq"}},"api_key":[{"current_key":"AIzaSyMockKeyForBuild123456789"}]},{"client_info":{"mobilesdk_app_id":"1:123456789012:android:fedcba","android_client_info":{"package_name":"com.example"}},"api_key":[{"current_key":"AIzaSyMockKeyForBuild123456789"}]}]}' > app/google-services.json
           fi
 
       - name: Ensure Debug Keystore Exists
