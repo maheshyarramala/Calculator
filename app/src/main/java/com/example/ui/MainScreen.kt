@@ -28,12 +28,14 @@ import com.example.ui.screens.investment.InvestmentViewModel
 import com.example.ui.screens.utility.UtilityScreen
 import com.example.ui.screens.utility.UtilityViewModel
 
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+
 enum class MainDestination(
   val label: String,
   val icon: ImageVector
 ) {
   EMI("EMI", Icons.Default.AccountBalance),
-  INVESTMENTS("Wealth", Icons.Default.TrendingUp),
+  INVESTMENTS("Wealth", Icons.AutoMirrored.Filled.TrendingUp),
   CALCULATOR("Calculator", Icons.Default.Calculate),
   AGE_CALENDAR("Age & Date", Icons.Default.CalendarMonth),
   UTILITIES("Utility", Icons.Default.Widgets)

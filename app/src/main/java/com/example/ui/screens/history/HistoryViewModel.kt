@@ -10,6 +10,7 @@ import com.example.data.local.entity.CalculationRecord
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
 
   private val dao = AppDatabase.getDatabase(application).calculationHistoryDao()

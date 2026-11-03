@@ -21,7 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
           context.applicationContext,
           AppDatabase::class.java,
           "omni_calc_db"
-        ).fallbackToDestructiveMigration().build()
+        ).fallbackToDestructiveMigration(true).build()
         INSTANCE = instance
         instance
       }
