@@ -44,6 +44,14 @@ import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.TripRecord
+import com.example.data.local.entity.SubscriptionRecord
+import org.json.JSONObject
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import java.util.Calendar
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import com.example.ui.components.CurrencyFormatter
 import com.example.ui.components.NumberInputField
 import android.net.Uri
@@ -52,6 +60,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,10 +77,22 @@ fun FinanceHubScreen(
   val totalIncome by viewModel.totalIncome.collectAsState()
   val totalExpense by viewModel.totalExpense.collectAsState()
   val trips by viewModel.trips.collectAsState()
+  val subscriptions by viewModel.subscriptions.collectAsState()
+  val monthlyBudgetLimit by viewModel.monthlyBudgetLimit.collectAsState()
+  val currentMonthExpenses by viewModel.currentMonthExpenses.collectAsState()
 
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
+  val snackbarHostState = remember { SnackbarHostState() }
+  val coroutineScope = rememberCoroutineScope()
   var preselectedTripIdForExpense by remember { mutableStateOf<Long?>(null) }
+
+  LaunchedEffect(uiState.toastMessage) {
+    uiState.toastMessage?.let { msg ->
+      snackbarHostState.showSnackbar(msg)
+      viewModel.clearToast()
+    }
+  }
   var editingAccountForOpeningBalance by remember { mutableStateOf<BankAccount?>(null) }
 
   // Storage Access Framework (SAF) Launchers for JSON Export & Import
@@ -187,20 +208,41 @@ fun FinanceHubScreen(
     )
   }
 
+  if (uiState.showAddSubscriptionDialog) {
+    AddSubscriptionDialog(
+      categories = categories,
+      bankAccounts = bankAccounts,
+      onDismiss = { viewModel.setShowAddSubscription(false) },
+      onConfirm = { name, amount, cycle, day, cat, accId, accName, notes ->
+        viewModel.addSubscription(name, amount, cycle, day, cat, accId, accName, notes)
+      }
+    )
+  }
+
+  if (uiState.showSetBudgetDialog) {
+    SetMonthlyBudgetDialog(
+      currentLimit = monthlyBudgetLimit,
+      onDismiss = { viewModel.setShowSetBudget(false) },
+      onConfirm = { newLimit ->
+        viewModel.setMonthlyBudgetLimit(newLimit)
+      }
+    )
+  }
+
+  uiState.selectedTripForCategoryCap?.let { trip ->
+    SetTripCategoryCapDialog(
+      trip = trip,
+      categories = categories,
+      onDismiss = { viewModel.setSelectedTripForCategoryCap(null) },
+      onConfirm = { catName, capAmount ->
+        viewModel.updateTripCategoryCap(trip, catName, capAmount)
+      }
+    )
+  }
+
   Scaffold(
     snackbarHost = {
-      uiState.toastMessage?.let { msg ->
-        Snackbar(
-          modifier = Modifier.padding(16.dp),
-          action = {
-            TextButton(onClick = { viewModel.clearToast() }) {
-              Text("OK", color = MaterialTheme.colorScheme.inversePrimary)
-            }
-          }
-        ) {
-          Text(msg)
-        }
-      }
+      SnackbarHost(hostState = snackbarHostState)
     },
     floatingActionButton = {
       when (uiState.selectedTab) {
@@ -215,6 +257,19 @@ fun FinanceHubScreen(
             modifier = Modifier.testTag("add_expense_fab")
           ) {
             Icon(Icons.Default.Add, contentDescription = "Log Expense")
+          }
+        }
+        FinanceTab.SUBSCRIPTIONS -> {
+          FloatingActionButton(
+            onClick = {
+              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              viewModel.setShowAddSubscription(true)
+            },
+            containerColor = Color(0xFF6366F1),
+            contentColor = Color.White,
+            modifier = Modifier.testTag("add_sub_fab")
+          ) {
+            Icon(Icons.Default.Add, contentDescription = "Add Subscription")
           }
         }
         FinanceTab.TRIPS -> {
@@ -285,7 +340,7 @@ fun FinanceHubScreen(
         }
       }
 
-      // Modern Tab Bar (Expenses & Accounts, Trip Manager)
+      // Modern Tab Bar (Expenses & Accounts, Subscriptions, Trip Manager)
       TabRow(
         selectedTabIndex = uiState.selectedTab.ordinal,
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -294,6 +349,7 @@ fun FinanceHubScreen(
         FinanceTab.values().forEach { tab ->
           val icon = when (tab) {
             FinanceTab.EXPENSES -> Icons.AutoMirrored.Filled.ReceiptLong
+            FinanceTab.SUBSCRIPTIONS -> Icons.Default.EventRepeat
             FinanceTab.TRIPS -> Icons.Default.FlightTakeoff
           }
           Tab(
@@ -302,8 +358,8 @@ fun FinanceHubScreen(
               haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.selectTab(tab)
             },
-            icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
-            text = { Text(tab.title, fontWeight = FontWeight.SemiBold, fontSize = 12.sp) },
+            icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            text = { Text(tab.title, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             modifier = Modifier.testTag("finance_tab_${tab.name.lowercase()}")
           )
         }
@@ -317,6 +373,9 @@ fun FinanceHubScreen(
           totalNetBalance = totalNetBalance,
           totalIncome = totalIncome,
           totalExpense = totalExpense,
+          monthlyBudgetLimit = monthlyBudgetLimit,
+          currentMonthExpenses = currentMonthExpenses,
+          onEditBudgetClick = { viewModel.setShowSetBudget(true) },
           selectedAccountFilterId = uiState.selectedAccountFilterId,
           onSelectAccountFilter = { viewModel.setSelectedAccountFilter(it) },
           onAddAccountClick = { viewModel.setShowAddBank(true) },
@@ -326,7 +385,26 @@ fun FinanceHubScreen(
           onAddIncomeClick = { viewModel.setShowAddIncome(true) },
           onAddCategoryClick = { viewModel.setShowAddCategory(true) },
           onDeleteCategory = { viewModel.deleteCategory(it) },
-          onDeleteExpense = { viewModel.deleteExpense(it) }
+          onDeleteExpense = { exp ->
+            viewModel.deleteExpenseWithUndo(exp) {
+              coroutineScope.launch {
+                val res = snackbarHostState.showSnackbar(
+                  message = "Deleted '${exp.title}'",
+                  actionLabel = "Undo",
+                  duration = SnackbarDuration.Short
+                )
+                if (res == SnackbarResult.ActionPerformed) {
+                  viewModel.restoreLastDeletedExpense()
+                }
+              }
+            }
+          }
+        )
+        FinanceTab.SUBSCRIPTIONS -> SubscriptionsSection(
+          subscriptions = subscriptions,
+          onAddSubscriptionClick = { viewModel.setShowAddSubscription(true) },
+          onMarkPaid = { viewModel.markSubscriptionPaid(it) },
+          onDeleteSubscription = { viewModel.deleteSubscription(it) }
         )
         FinanceTab.TRIPS -> TripsSection(
           trips = trips,
@@ -335,6 +413,8 @@ fun FinanceHubScreen(
             preselectedTripIdForExpense = trip.id
             viewModel.setShowAddExpense(true)
           },
+          onSetCategoryCap = { trip -> viewModel.setSelectedTripForCategoryCap(trip) },
+          onRemoveCategoryCap = { trip, cat -> viewModel.removeTripCategoryCap(trip, cat) },
           onExportTripPdf = { trip, tripExpenses ->
             try {
               val pdfFile = PdfReportGenerator.generateTripReport(context, trip, tripExpenses)
@@ -361,6 +441,9 @@ private fun ExpensesSection(
   totalNetBalance: Double,
   totalIncome: Double,
   totalExpense: Double,
+  monthlyBudgetLimit: Double,
+  currentMonthExpenses: Double,
+  onEditBudgetClick: () -> Unit,
   selectedAccountFilterId: Long?,
   onSelectAccountFilter: (Long?) -> Unit,
   onAddAccountClick: () -> Unit,
@@ -481,6 +564,15 @@ private fun ExpensesSection(
           }
         }
       }
+    }
+
+    // Monthly Expense Budget Progress Bar & Alerts
+    item(key = "monthly_budget_card") {
+      MonthlyBudgetCard(
+        spent = currentMonthExpenses,
+        limit = monthlyBudgetLimit,
+        onEditBudget = onEditBudgetClick
+      )
     }
 
     // Accounts & Balances Carousel
@@ -851,11 +943,44 @@ private fun ExpensesSection(
       }
     } else {
       items(displayedExpenses, key = { it.id }) { expense ->
-        ExpenseItemCard(
-          expense = expense,
-          categories = categories,
-          onDelete = { onDeleteExpense(expense) }
+        val dismissState = rememberSwipeToDismissBoxState(
+          confirmValueChange = { dismissValue ->
+            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+              onDeleteExpense(expense)
+              true
+            } else {
+              false
+            }
+          }
         )
+
+        SwipeToDismissBox(
+          state = dismissState,
+          enableDismissFromStartToEnd = false,
+          enableDismissFromEndToStart = true,
+          backgroundContent = {
+            Box(
+              modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFFEF4444))
+                .padding(horizontal = 20.dp),
+              contentAlignment = Alignment.CenterEnd
+            ) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Delete", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
+              }
+            }
+          }
+        ) {
+          ExpenseItemCard(
+            expense = expense,
+            categories = categories,
+            onDelete = { onDeleteExpense(expense) }
+          )
+        }
       }
     }
   }
@@ -918,12 +1043,16 @@ private fun ExpenseItemCard(
           )
         }
         Spacer(modifier = Modifier.width(12.dp))
-        Column {
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
           Text(
             text = expense.title,
             fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
           )
+          Spacer(modifier = Modifier.height(3.dp))
           Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -937,33 +1066,39 @@ private fun ExpenseItemCard(
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
                 color = catColor,
+                maxLines = 1,
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
               )
             }
             if (expense.bankAccountName.isNotBlank()) {
               Surface(
                 shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
               ) {
                 Text(
                   text = expense.bankAccountName,
                   fontSize = 10.sp,
                   fontWeight = FontWeight.Medium,
                   color = MaterialTheme.colorScheme.onSecondaryContainer,
+                  maxLines = 1,
                   modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
               }
             }
-            Text(
-              text = dateFormatted,
-              fontSize = 11.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
           }
+          Spacer(modifier = Modifier.height(2.dp))
+          Text(
+            text = dateFormatted,
+            fontSize = 10.5.sp,
+            maxLines = 1,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
           if (expense.notes.isNotBlank()) {
             Text(
               text = expense.notes,
               fontSize = 11.sp,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
               color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
             )
           }
@@ -1694,6 +1829,8 @@ private fun TripsSection(
   trips: List<TripRecord>,
   expenses: List<ExpenseRecord>,
   onAddExpenseForTrip: (TripRecord) -> Unit,
+  onSetCategoryCap: (TripRecord) -> Unit,
+  onRemoveCategoryCap: (TripRecord, String) -> Unit,
   onExportTripPdf: (TripRecord, List<ExpenseRecord>) -> Unit,
   onDeleteTrip: (TripRecord) -> Unit
 ) {
@@ -1727,7 +1864,7 @@ private fun TripsSection(
               style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
             )
             Text(
-              text = "Set budget caps, track live trip expenses, and export PDF statements.",
+              text = "Set category caps, track live daily burn rate, and export PDF statements.",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1782,6 +1919,8 @@ private fun TripsSection(
           spent = spent,
           tripExpenses = tripExpenses,
           onAddExpense = { onAddExpenseForTrip(trip) },
+          onSetCap = { onSetCategoryCap(trip) },
+          onRemoveCap = { cat -> onRemoveCategoryCap(trip, cat) },
           onExportPdf = { onExportTripPdf(trip, tripExpenses) },
           onDelete = { onDeleteTrip(trip) }
         )
@@ -1796,6 +1935,8 @@ private fun TripCardItem(
   spent: Double,
   tripExpenses: List<ExpenseRecord>,
   onAddExpense: () -> Unit,
+  onSetCap: () -> Unit,
+  onRemoveCap: (String) -> Unit,
   onExportPdf: () -> Unit,
   onDelete: () -> Unit
 ) {
@@ -1945,6 +2086,20 @@ private fun TripCardItem(
           trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
       }
+
+      // FEATURE: Daily Spending Rate Tracker with Speedometer Gauge
+      TripDailySpendingSpeedometer(
+        trip = trip,
+        spent = spent
+      )
+
+      // FEATURE: Category Budget Caps per Trip
+      TripCategoryCapsSection(
+        trip = trip,
+        tripExpenses = tripExpenses,
+        onSetCap = onSetCap,
+        onRemoveCap = onRemoveCap
+      )
 
       if (trip.notes.isNotBlank()) {
         Text(
@@ -2470,6 +2625,7 @@ private fun AddAccountDialog(
   )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddTripDialog(
   onDismiss: () -> Unit,
@@ -2481,6 +2637,58 @@ private fun AddTripDialog(
   var startDate by remember { mutableStateOf("") }
   var endDate by remember { mutableStateOf("") }
   var notes by remember { mutableStateOf("") }
+
+  var showStartDatePicker by remember { mutableStateOf(false) }
+  var showEndDatePicker by remember { mutableStateOf(false) }
+
+  val startDatePickerState = rememberDatePickerState()
+  val endDatePickerState = rememberDatePickerState()
+
+  if (showStartDatePicker) {
+    DatePickerDialog(
+      onDismissRequest = { showStartDatePicker = false },
+      confirmButton = {
+        TextButton(onClick = {
+          startDatePickerState.selectedDateMillis?.let { millis ->
+            startDate = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(millis))
+          }
+          showStartDatePicker = false
+        }) {
+          Text("OK")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showStartDatePicker = false }) {
+          Text("Cancel")
+        }
+      }
+    ) {
+      DatePicker(state = startDatePickerState)
+    }
+  }
+
+  if (showEndDatePicker) {
+    DatePickerDialog(
+      onDismissRequest = { showEndDatePicker = false },
+      confirmButton = {
+        TextButton(onClick = {
+          endDatePickerState.selectedDateMillis?.let { millis ->
+            endDate = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(millis))
+          }
+          showEndDatePicker = false
+        }) {
+          Text("OK")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showEndDatePicker = false }) {
+          Text("Cancel")
+        }
+      }
+    ) {
+      DatePicker(state = endDatePickerState)
+    }
+  }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -2524,19 +2732,35 @@ private fun AddTripDialog(
           OutlinedTextField(
             value = startDate,
             onValueChange = { startDate = it },
+            readOnly = true,
             label = { Text("Start Date") },
-            placeholder = { Text("DD/MM/YYYY") },
+            placeholder = { Text("Tap to Pick") },
+            trailingIcon = {
+              IconButton(onClick = { showStartDatePicker = true }) {
+                Icon(Icons.Default.CalendarToday, contentDescription = "Pick start date", modifier = Modifier.size(18.dp))
+              }
+            },
             singleLine = true,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+              .weight(1f)
+              .clickable { showStartDatePicker = true }
           )
 
           OutlinedTextField(
             value = endDate,
             onValueChange = { endDate = it },
+            readOnly = true,
             label = { Text("End Date") },
-            placeholder = { Text("DD/MM/YYYY") },
+            placeholder = { Text("Tap to Pick") },
+            trailingIcon = {
+              IconButton(onClick = { showEndDatePicker = true }) {
+                Icon(Icons.Default.CalendarMonth, contentDescription = "Pick end date", modifier = Modifier.size(18.dp))
+              }
+            },
             singleLine = true,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+              .weight(1f)
+              .clickable { showEndDatePicker = true }
           )
         }
 
@@ -2891,5 +3115,1032 @@ private fun PasteJsonBackupDialog(
       TextButton(onClick = onDismiss) { Text("Cancel") }
     }
   )
+}
+
+// -------------------------------------------------------------
+// MONTHLY BUDGET PROGRESS BAR & ALERTS CARD
+// -------------------------------------------------------------
+@Composable
+private fun MonthlyBudgetCard(
+  spent: Double,
+  limit: Double,
+  onEditBudget: () -> Unit
+) {
+  val ratio = if (limit > 0) (spent / limit).toFloat() else 0f
+  val progress = ratio.coerceIn(0f, 1f)
+  val isOver80 = ratio >= 0.8f && ratio < 1.0f
+  val isOver100 = ratio >= 1.0f
+  val remaining = limit - spent
+
+  val progressColor = when {
+    isOver100 -> Color(0xFFEF4444)
+    isOver80 -> Color(0xFFF59E0B)
+    else -> Color(0xFF10B981)
+  }
+
+  Card(
+    shape = RoundedCornerShape(20.dp),
+    colors = CardDefaults.cardColors(
+      containerColor = MaterialTheme.colorScheme.surface
+    ),
+    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    modifier = Modifier
+      .fillMaxWidth()
+      .testTag("monthly_budget_card")
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(18.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(
+            modifier = Modifier
+              .size(36.dp)
+              .clip(CircleShape)
+              .background(progressColor.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              Icons.Default.Speed,
+              contentDescription = null,
+              tint = progressColor,
+              modifier = Modifier.size(20.dp)
+            )
+          }
+          Spacer(modifier = Modifier.width(10.dp))
+          Column {
+            Text(
+              text = "Monthly Expense Budget",
+              style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+              text = "Target: ${CurrencyFormatter.format(limit)}",
+              fontSize = 11.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        }
+
+        IconButton(
+          onClick = onEditBudget,
+          modifier = Modifier.size(32.dp)
+        ) {
+          Icon(
+            Icons.Default.Edit,
+            contentDescription = "Set monthly target",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp)
+          )
+        }
+      }
+
+      // Spent vs Target row
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom
+      ) {
+        Column {
+          Text(
+            text = "Total Spent This Month",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Text(
+            text = CurrencyFormatter.format(spent),
+            fontSize = 20.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = if (isOver100) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurface
+          )
+        }
+
+        Column(horizontalAlignment = Alignment.End) {
+          Text(
+            text = if (isOver100) "Over Budget" else "Remaining",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Text(
+            text = if (isOver100) "+${CurrencyFormatter.format(spent - limit)}" else CurrencyFormatter.format(remaining),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isOver100) Color(0xFFEF4444) else Color(0xFF10B981)
+          )
+        }
+      }
+
+      LinearProgressIndicator(
+        progress = { progress },
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(8.dp)
+          .clip(RoundedCornerShape(4.dp)),
+        color = progressColor,
+        trackColor = MaterialTheme.colorScheme.surfaceVariant
+      )
+
+      // Alert Warning Banner when >= 80% or >= 100%
+      if (isOver100) {
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = Color(0xFFFEE2E2),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFB91C1C), modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "🚨 Warning: You have exceeded your monthly budget by ${CurrencyFormatter.format(spent - limit)} (${(ratio * 100).toInt()}%)!",
+              fontSize = 11.5.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = Color(0xFFB91C1C)
+            )
+          }
+        }
+      } else if (isOver80) {
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = Color(0xFFFEF3C7),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "⚠️ Caution: You have reached ${(ratio * 100).toInt()}% of your monthly target limit.",
+              fontSize = 11.5.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = Color(0xFFB45309)
+            )
+          }
+        }
+      }
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// RECURRING SUBSCRIPTIONS & MONTHLY BILLS SECTION
+// -------------------------------------------------------------
+@Composable
+private fun SubscriptionsSection(
+  subscriptions: List<SubscriptionRecord>,
+  onAddSubscriptionClick: () -> Unit,
+  onMarkPaid: (SubscriptionRecord) -> Unit,
+  onDeleteSubscription: (SubscriptionRecord) -> Unit
+) {
+  val haptic = LocalHapticFeedback.current
+  val todayDay = remember { Calendar.getInstance().get(Calendar.DAY_OF_MONTH) }
+  val totalMonthlyBills = remember(subscriptions) {
+    subscriptions.sumOf { it.amount }
+  }
+
+  LazyColumn(
+    modifier = Modifier.fillMaxSize(),
+    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp)
+  ) {
+    item(key = "subscriptions_header") {
+      Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+          containerColor = Color(0xFF6366F1).copy(alpha = 0.12f)
+        ),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column(
+          modifier = Modifier.padding(18.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(36.dp)
+                  .clip(CircleShape)
+                  .background(Color(0xFF6366F1).copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  Icons.Default.EventRepeat,
+                  contentDescription = null,
+                  tint = Color(0xFF6366F1),
+                  modifier = Modifier.size(20.dp)
+                )
+              }
+              Spacer(modifier = Modifier.width(10.dp))
+              Column {
+                Text(
+                  text = "Recurring Bills & Subscriptions",
+                  style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+                Text(
+                  text = "Track Netflix, Rent, Gym, SIP with due-date countdowns",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+          }
+
+          HorizontalDivider(color = Color(0xFF6366F1).copy(alpha = 0.2f))
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column {
+              Text("Total Monthly Commitments", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(
+                text = CurrencyFormatter.format(totalMonthlyBills),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF4F46E5)
+              )
+            }
+
+            FilledTonalButton(
+              onClick = onAddSubscriptionClick,
+              shape = RoundedCornerShape(12.dp),
+              contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+              Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("+ Add Bill", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+          }
+        }
+      }
+    }
+
+    if (subscriptions.isEmpty()) {
+      item(key = "empty_subscriptions") {
+        Card(
+          shape = RoundedCornerShape(16.dp),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+          ),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+          ) {
+            Icon(
+              Icons.Default.Schedule,
+              contentDescription = null,
+              modifier = Modifier.size(48.dp),
+              tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+              text = "No recurring bills tracked yet",
+              fontWeight = FontWeight.Medium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+              text = "Tap '+ Add Bill' to track Netflix, Rent, SIP, WiFi, Gym, etc.",
+              fontSize = 12.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+          }
+        }
+      }
+    } else {
+      items(subscriptions, key = { it.id }) { sub ->
+        val dismissState = rememberSwipeToDismissBoxState(
+          confirmValueChange = { dismissValue ->
+            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+              onDeleteSubscription(sub)
+              true
+            } else false
+          }
+        )
+
+        SwipeToDismissBox(
+          state = dismissState,
+          enableDismissFromStartToEnd = false,
+          enableDismissFromEndToStart = true,
+          backgroundContent = {
+            Box(
+              modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFFEF4444))
+                .padding(horizontal = 20.dp),
+              contentAlignment = Alignment.CenterEnd
+            ) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Delete", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
+              }
+            }
+          }
+        ) {
+          SubscriptionItemCard(
+            sub = sub,
+            todayDay = todayDay,
+            onMarkPaid = { onMarkPaid(sub) },
+            onDelete = { onDeleteSubscription(sub) }
+          )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun SubscriptionItemCard(
+  sub: SubscriptionRecord,
+  todayDay: Int,
+  onMarkPaid: () -> Unit,
+  onDelete: () -> Unit
+) {
+  val daysLeft = sub.dueDayOfMonth - todayDay
+  val statusLabel = when {
+    daysLeft == 0 -> "⚠️ Due Today"
+    daysLeft in 1..3 -> "⚠️ Due in $daysLeft ${if (daysLeft == 1) "day" else "days"}"
+    daysLeft < 0 -> "Day ${sub.dueDayOfMonth} of month"
+    else -> "Due in $daysLeft days"
+  }
+
+  val isUrgent = daysLeft in 0..3
+
+  // Check if paid this month
+  val isPaidThisMonth = remember(sub.lastPaidTimestamp) {
+    if (sub.lastPaidTimestamp <= 0L) false
+    else {
+      val nowCal = Calendar.getInstance()
+      val paidCal = Calendar.getInstance().apply { timeInMillis = sub.lastPaidTimestamp }
+      paidCal.get(Calendar.MONTH) == nowCal.get(Calendar.MONTH) &&
+          paidCal.get(Calendar.YEAR) == nowCal.get(Calendar.YEAR)
+    }
+  }
+
+  Card(
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    modifier = Modifier.fillMaxWidth()
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(14.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.weight(1f)
+        ) {
+          Box(
+            modifier = Modifier
+              .size(40.dp)
+              .clip(RoundedCornerShape(10.dp))
+              .background(Color(0xFF6366F1).copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              Icons.Default.Receipt,
+              contentDescription = null,
+              tint = Color(0xFF6366F1),
+              modifier = Modifier.size(20.dp)
+            )
+          }
+          Spacer(modifier = Modifier.width(10.dp))
+          Column(modifier = Modifier.weight(1f)) {
+            Text(
+              text = sub.name,
+              fontWeight = FontWeight.Bold,
+              fontSize = 14.sp,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+            Text(
+              text = "${sub.categoryName} • ${sub.billingCycle}",
+              fontSize = 11.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        }
+
+        Text(
+          text = CurrencyFormatter.format(sub.amount),
+          fontWeight = FontWeight.ExtraBold,
+          fontSize = 16.sp,
+          color = Color(0xFF4F46E5)
+        )
+      }
+
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = if (isPaidThisMonth) Color(0xFFD1FAE5) else if (isUrgent) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surfaceVariant
+          ) {
+            Text(
+              text = if (isPaidThisMonth) "✅ Paid this month" else statusLabel,
+              fontSize = 10.5.sp,
+              fontWeight = FontWeight.Bold,
+              color = if (isPaidThisMonth) Color(0xFF047857) else if (isUrgent) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+          }
+
+          if (sub.bankAccountName.isNotBlank()) {
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+              text = "via ${sub.bankAccountName}",
+              fontSize = 10.5.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          FilledTonalButton(
+            onClick = onMarkPaid,
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.height(28.dp)
+          ) {
+            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(13.dp))
+            Spacer(modifier = Modifier.width(3.dp))
+            Text("Mark Paid", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+          }
+
+          Spacer(modifier = Modifier.width(4.dp))
+          IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+          }
+        }
+      }
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// TRIP SPEEDOMETER & DAILY SPENDING RATE TRACKER
+// -------------------------------------------------------------
+@Composable
+private fun TripDailySpendingSpeedometer(
+  trip: TripRecord,
+  spent: Double
+) {
+  val totalDays = remember(trip.startDate, trip.endDate) {
+    calculateTripDays(trip.startDate, trip.endDate)
+  }
+  val dailyBudget = remember(trip.budget, totalDays) {
+    if (totalDays > 0) trip.budget / totalDays else trip.budget / 7.0
+  }
+  val elapsedDays = remember(trip.startDate) {
+    calculateElapsedDays(trip.startDate).coerceAtLeast(1)
+  }
+  val dailyRate = remember(spent, elapsedDays) {
+    spent / elapsedDays
+  }
+
+  val burnRatio = if (dailyBudget > 0) (dailyRate / dailyBudget).toFloat() else 0f
+  val isExceeding = burnRatio > 1.05f
+
+  Surface(
+    shape = RoundedCornerShape(14.dp),
+    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+    modifier = Modifier.fillMaxWidth()
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(12.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Text(
+            text = "Daily Burn Rate Tracker",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = if (isExceeding) Color(0xFFFEE2E2) else Color(0xFFCCFBF1)
+          ) {
+            Text(
+              text = if (isExceeding) "Exceeding Daily Rate" else "On Track",
+              fontSize = 9.sp,
+              fontWeight = FontWeight.Bold,
+              color = if (isExceeding) Color(0xFFB91C1C) else Color(0xFF0F766E),
+              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+          }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+          text = "You are spending ${CurrencyFormatter.format(dailyRate)}/day",
+          fontSize = 13.sp,
+          fontWeight = FontWeight.ExtraBold,
+          color = if (isExceeding) Color(0xFFEF4444) else Color(0xFF0D9488)
+        )
+        Text(
+          text = "(Target Budget: ${CurrencyFormatter.format(dailyBudget)}/day • Day $elapsedDays of $totalDays)",
+          fontSize = 10.5.sp,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+
+      // Visual Speedometer Gauge Canvas
+      Canvas(modifier = Modifier.size(76.dp, 44.dp)) {
+        val strokeW = 6.dp.toPx()
+        val arcSize = Size(size.width, size.height * 1.8f)
+        val topLeft = Offset(0f, 0f)
+
+        // Background arc
+        drawArc(
+          color = Color.LightGray.copy(alpha = 0.35f),
+          startAngle = 180f,
+          sweepAngle = 180f,
+          useCenter = false,
+          topLeft = topLeft,
+          size = arcSize,
+          style = Stroke(width = strokeW, cap = StrokeCap.Round)
+        )
+
+        // Burn Rate Arc
+        val activeSweep = (burnRatio.coerceIn(0f, 1.5f) / 1.5f * 180f)
+        val arcColor = when {
+          burnRatio > 1.05f -> Color(0xFFEF4444)
+          burnRatio > 0.8f -> Color(0xFFF59E0B)
+          else -> Color(0xFF10B981)
+        }
+        drawArc(
+          color = arcColor,
+          startAngle = 180f,
+          sweepAngle = activeSweep,
+          useCenter = false,
+          topLeft = topLeft,
+          size = arcSize,
+          style = Stroke(width = strokeW, cap = StrokeCap.Round)
+        )
+
+        // Needle pointer
+        val needleAngle = (180f + activeSweep) * (PI / 180f).toFloat()
+        val centerX = size.width / 2f
+        val centerY = size.height * 0.9f
+        val needleLen = size.width * 0.38f
+        val endX = centerX + needleLen * cos(needleAngle)
+        val endY = centerY + needleLen * sin(needleAngle)
+
+        drawLine(
+          color = Color(0xFF1E293B),
+          start = Offset(centerX, centerY),
+          end = Offset(endX, endY),
+          strokeWidth = 3.dp.toPx(),
+          cap = StrokeCap.Round
+        )
+        drawCircle(color = Color(0xFF1E293B), radius = 3.5.dp.toPx(), center = Offset(centerX, centerY))
+      }
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// TRIP CATEGORY BUDGET CAPS
+// -------------------------------------------------------------
+@Composable
+private fun TripCategoryCapsSection(
+  trip: TripRecord,
+  tripExpenses: List<ExpenseRecord>,
+  onSetCap: () -> Unit,
+  onRemoveCap: (String) -> Unit
+) {
+  val caps = remember(trip.categoryCapsJson) {
+    parseCategoryCaps(trip.categoryCapsJson)
+  }
+
+  Column(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(6.dp)
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Text(
+        text = "Category Budget Caps",
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface
+      )
+      TextButton(
+        onClick = onSetCap,
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+      ) {
+        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(2.dp))
+        Text("+ Set Sub-Budget", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+      }
+    }
+
+    if (caps.isEmpty()) {
+      Text(
+        text = "No sub-budgets set yet (e.g. Flights ₹20k, Hotels ₹15k, Food ₹10k)",
+        fontSize = 11.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    } else {
+      caps.forEach { (catName, capAmount) ->
+        val catSpent = remember(tripExpenses, catName) {
+          tripExpenses.filter { it.categoryName.equals(catName, ignoreCase = true) }.sumOf { it.amount }
+        }
+        val ratio = if (capAmount > 0) (catSpent / capAmount).toFloat() else 0f
+        val progress = ratio.coerceIn(0f, 1f)
+        val isOver = catSpent > capAmount
+
+        Card(
+          shape = RoundedCornerShape(12.dp),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+          ),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+          ) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text(catName, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                  text = "${CurrencyFormatter.format(catSpent)} / ${CurrencyFormatter.format(capAmount)}",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = if (isOver) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                  onClick = { onRemoveCap(catName) },
+                  modifier = Modifier.size(20.dp)
+                ) {
+                  Icon(Icons.Default.Close, contentDescription = "Remove cap", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+              }
+            }
+
+            LinearProgressIndicator(
+              progress = { progress },
+              modifier = Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+                .clip(RoundedCornerShape(3.dp)),
+              color = if (isOver) Color(0xFFEF4444) else Color(0xFF0D9488),
+              trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+          }
+        }
+      }
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// DIALOG: ADD SUBSCRIPTION
+// -------------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddSubscriptionDialog(
+  categories: List<ExpenseCategory>,
+  bankAccounts: List<BankAccount>,
+  onDismiss: () -> Unit,
+  onConfirm: (name: String, amount: Double, billingCycle: String, dueDayOfMonth: Int, categoryName: String, bankAccountId: Long?, bankAccountName: String, notes: String) -> Unit
+) {
+  var name by remember { mutableStateOf("") }
+  var amountStr by remember { mutableStateOf("") }
+  var cycle by remember { mutableStateOf("MONTHLY") }
+  var dueDay by remember { mutableIntStateOf(1) }
+  var selectedCategory by remember { mutableStateOf(categories.firstOrNull()?.name ?: "Bills & Utilities") }
+  var selectedBank by remember { mutableStateOf(bankAccounts.firstOrNull()) }
+  var notes by remember { mutableStateOf("") }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.EventRepeat, contentDescription = null, tint = Color(0xFF6366F1))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("Track Recurring Bill")
+      }
+    },
+    text = {
+      Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        OutlinedTextField(
+          value = name,
+          onValueChange = { name = it },
+          label = { Text("Bill / Service Name") },
+          placeholder = { Text("e.g. Netflix, Rent, Gym, SIP") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        NumberInputField(
+          value = amountStr,
+          onValueChange = { amountStr = it },
+          label = "Amount per Cycle",
+          prefix = "₹"
+        )
+
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          listOf("MONTHLY", "YEARLY", "WEEKLY").forEach { c ->
+            FilterChip(
+              selected = cycle == c,
+              onClick = { cycle = c },
+              label = { Text(c, fontSize = 11.sp) },
+              modifier = Modifier.weight(1f)
+            )
+          }
+        }
+
+        OutlinedTextField(
+          value = dueDay.toString(),
+          onValueChange = { str ->
+            val num = str.toIntOrNull()
+            if (num != null && num in 1..31) dueDay = num
+          },
+          label = { Text("Due Day of Month (1-31)") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        if (bankAccounts.isNotEmpty()) {
+          Text("Pay via Account:", style = MaterialTheme.typography.labelSmall)
+          LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(bankAccounts) { acc ->
+              FilterChip(
+                selected = selectedBank?.id == acc.id,
+                onClick = { selectedBank = acc },
+                label = { Text(acc.bankName, fontSize = 11.sp) }
+              )
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val amt = amountStr.toDoubleOrNull() ?: 0.0
+          if (name.isNotBlank() && amt > 0.0) {
+            onConfirm(name, amt, cycle, dueDay, selectedCategory, selectedBank?.id, selectedBank?.bankName ?: "", notes)
+          }
+        },
+        enabled = name.isNotBlank() && (amountStr.toDoubleOrNull() ?: 0.0) > 0.0
+      ) {
+        Text("Save Bill")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
+}
+
+// -------------------------------------------------------------
+// DIALOG: SET MONTHLY BUDGET
+// -------------------------------------------------------------
+@Composable
+private fun SetMonthlyBudgetDialog(
+  currentLimit: Double,
+  onDismiss: () -> Unit,
+  onConfirm: (Double) -> Unit
+) {
+  var limitStr by remember { mutableStateOf(if (currentLimit > 0) currentLimit.toLong().toString() else "50000") }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("Monthly Expense Target")
+      }
+    },
+    text = {
+      Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text(
+          text = "Set your total monthly spending target limit. OmniCalc will track your daily burn and warn you when you cross 80% and 100%.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        NumberInputField(
+          value = limitStr,
+          onValueChange = { limitStr = it },
+          label = "Target Monthly Budget",
+          prefix = "₹"
+        )
+
+        // Quick Preset Chips
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          listOf(25000L, 50000L, 75000L, 100000L).forEach { preset ->
+            FilterChip(
+              selected = limitStr == preset.toString(),
+              onClick = { limitStr = preset.toString() },
+              label = { Text("₹${preset / 1000}k", fontSize = 11.sp) },
+              modifier = Modifier.weight(1f)
+            )
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val lim = limitStr.toDoubleOrNull() ?: 0.0
+          if (lim > 0) onConfirm(lim)
+        },
+        enabled = (limitStr.toDoubleOrNull() ?: 0.0) > 0.0
+      ) {
+        Text("Save Target")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
+}
+
+// -------------------------------------------------------------
+// DIALOG: SET TRIP CATEGORY SUB-BUDGET CAP
+// -------------------------------------------------------------
+@Composable
+private fun SetTripCategoryCapDialog(
+  trip: TripRecord,
+  categories: List<ExpenseCategory>,
+  onDismiss: () -> Unit,
+  onConfirm: (categoryName: String, capAmount: Double) -> Unit
+) {
+  var selectedCategory by remember { mutableStateOf(categories.firstOrNull()?.name ?: "Flights & Transport") }
+  var capStr by remember { mutableStateOf("") }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.Sell, contentDescription = null, tint = Color(0xFF0D9488))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("Set Sub-Budget Cap")
+      }
+    },
+    text = {
+      Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text(
+          text = "Set a specific category budget ceiling inside '${trip.tripName}' (e.g. Flights ₹20,000, Hotels ₹15,000, Food ₹10,000).",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Text("Select Category:", style = MaterialTheme.typography.labelSmall)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+          items(categories) { cat ->
+            FilterChip(
+              selected = selectedCategory == cat.name,
+              onClick = { selectedCategory = cat.name },
+              label = { Text(cat.name, fontSize = 11.sp) }
+            )
+          }
+        }
+
+        NumberInputField(
+          value = capStr,
+          onValueChange = { capStr = it },
+          label = "Sub-Budget Ceiling",
+          prefix = "₹"
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val amt = capStr.toDoubleOrNull() ?: 0.0
+          if (selectedCategory.isNotBlank() && amt > 0.0) {
+            onConfirm(selectedCategory, amt)
+          }
+        },
+        enabled = (capStr.toDoubleOrNull() ?: 0.0) > 0.0
+      ) {
+        Text("Set Cap")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
+}
+
+// -------------------------------------------------------------
+// HELPER FUNCTIONS
+// -------------------------------------------------------------
+private fun calculateTripDays(startDateStr: String, endDateStr: String): Int {
+  return try {
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val start = sdf.parse(startDateStr.trim())
+    val end = sdf.parse(endDateStr.trim())
+    if (start != null && end != null) {
+      val diffMs = end.time - start.time
+      val days = (diffMs / (1000 * 60 * 60 * 24)).toInt() + 1
+      days.coerceAtLeast(1)
+    } else 7
+  } catch (e: Exception) {
+    7
+  }
+}
+
+private fun calculateElapsedDays(startDateStr: String): Int {
+  return try {
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val start = sdf.parse(startDateStr.trim())
+    if (start != null) {
+      val now = System.currentTimeMillis()
+      val diffMs = now - start.time
+      val days = (diffMs / (1000 * 60 * 60 * 24)).toInt() + 1
+      days.coerceAtLeast(1)
+    } else 1
+  } catch (e: Exception) {
+    1
+  }
+}
+
+private fun parseCategoryCaps(jsonStr: String): Map<String, Double> {
+  if (jsonStr.isBlank() || jsonStr == "{}") return emptyMap()
+  return try {
+    val json = JSONObject(jsonStr)
+    val map = mutableMapOf<String, Double>()
+    val keys = json.keys()
+    while (keys.hasNext()) {
+      val k = keys.next()
+      map[k] = json.optDouble(k, 0.0)
+    }
+    map
+  } catch (e: Exception) {
+    emptyMap()
+  }
 }
 

@@ -50,6 +50,7 @@ import com.example.ui.screens.investment.InvestmentViewModel
 import com.example.ui.screens.utility.UtilityScreen
 import com.example.ui.screens.utility.UtilityTab
 import com.example.ui.screens.utility.UtilityViewModel
+import com.example.ui.screens.home.HomeScreen
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyRow
@@ -64,11 +65,12 @@ enum class MainDestination(
   val icon: ImageVector,
   val isBottomTab: Boolean = true
 ) {
+  HOME("Home", Icons.Default.Dashboard),
   EMI("EMI", Icons.Default.AccountBalance),
-  INVESTMENTS("Invest", Icons.AutoMirrored.Filled.TrendingUp),
   FINANCE("Finance", Icons.Default.Savings),
-  CALCULATOR("Calc", Icons.Default.Calculate),
+  INVESTMENTS("Invest", Icons.AutoMirrored.Filled.TrendingUp),
   UTILITIES("Utility", Icons.Default.Widgets),
+  CALCULATOR("Calc", Icons.Default.Calculate, isBottomTab = false),
   INTEREST("Interest", Icons.Default.Percent, isBottomTab = false),
   AGE_CALENDAR("Age & Date", Icons.Default.CalendarMonth, isBottomTab = false)
 }
@@ -86,7 +88,7 @@ data class CalculatorHubItem(
 fun MainScreen(
   modifier: Modifier = Modifier
 ) {
-  var currentDestination by remember { mutableStateOf(MainDestination.EMI) }
+  var currentDestination by remember { mutableStateOf(MainDestination.HOME) }
   var showHistorySheet by remember { mutableStateOf(false) }
   var showFavoritesSheet by remember { mutableStateOf(false) }
   var showHubSheet by remember { mutableStateOf(false) }
@@ -104,9 +106,9 @@ fun MainScreen(
 
   val haptic = LocalHapticFeedback.current
 
-  // BackHandler: If user is not on EMI tab, back key navigates to EMI tab
-  BackHandler(enabled = currentDestination != MainDestination.EMI) {
-    currentDestination = MainDestination.EMI
+  // BackHandler: If user is not on HOME tab, back key navigates to HOME
+  BackHandler(enabled = currentDestination != MainDestination.HOME) {
+    currentDestination = MainDestination.HOME
   }
 
   if (showThemeSheet) {
@@ -316,6 +318,37 @@ fun MainScreen(
         .padding(paddingValues)
     ) { destination ->
       when (destination) {
+        MainDestination.HOME -> HomeScreen(
+          financeViewModel = financeViewModel,
+          emiViewModel = emiViewModel,
+          utilityViewModel = utilityViewModel,
+          onNavigateToEmi = { currentDestination = MainDestination.EMI },
+          onNavigateToInvest = { currentDestination = MainDestination.INVESTMENTS },
+          onNavigateToFinance = { tab ->
+            currentDestination = MainDestination.FINANCE
+            financeViewModel.selectTab(tab)
+          },
+          onNavigateToCalc = { currentDestination = MainDestination.CALCULATOR },
+          onNavigateToUtility = { tab ->
+            currentDestination = MainDestination.UTILITIES
+            utilityViewModel.selectTab(tab)
+          },
+          onLogExpenseClick = {
+            currentDestination = MainDestination.FINANCE
+            financeViewModel.selectTab(FinanceTab.EXPENSES)
+            financeViewModel.setShowAddExpense(true)
+          },
+          onAddIncomeClick = {
+            currentDestination = MainDestination.FINANCE
+            financeViewModel.selectTab(FinanceTab.EXPENSES)
+            financeViewModel.setShowAddIncome(true)
+          },
+          onAddTripClick = {
+            currentDestination = MainDestination.FINANCE
+            financeViewModel.selectTab(FinanceTab.TRIPS)
+            financeViewModel.setShowAddTrip(true)
+          }
+        )
         MainDestination.EMI -> EmiScreen(viewModel = emiViewModel)
         MainDestination.INVESTMENTS -> InvestmentScreen(viewModel = investmentViewModel)
         MainDestination.FINANCE -> FinanceHubScreen(viewModel = financeViewModel)

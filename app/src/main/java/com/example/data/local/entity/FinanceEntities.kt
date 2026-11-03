@@ -51,5 +51,21 @@ data class TripRecord(
   val budget: Double,
   val startDate: String,
   val endDate: String,
+  val notes: String = "",
+  val categoryCapsJson: String = "{}"
+)
+
+@Entity(tableName = "subscriptions")
+data class SubscriptionRecord(
+  @PrimaryKey(autoGenerate = true)
+  val id: Long = 0,
+  val name: String,
+  val amount: Double,
+  val billingCycle: String = "MONTHLY", // MONTHLY, YEARLY, WEEKLY
+  val dueDayOfMonth: Int = 1, // 1-31
+  val categoryName: String = "Bills & Utilities",
+  val bankAccountId: Long? = null,
+  val bankAccountName: String = "",
+  val lastPaidTimestamp: Long = 0L,
   val notes: String = ""
 )

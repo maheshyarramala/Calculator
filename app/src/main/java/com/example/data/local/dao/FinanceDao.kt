@@ -64,7 +64,6 @@ interface FinanceDao {
   @Query("DELETE FROM bank_accounts")
   suspend fun deleteAllBankAccounts()
 
-  // --- Trips ---
   @Query("SELECT * FROM trips ORDER BY id DESC")
   fun getAllTrips(): Flow<List<TripRecord>>
 
@@ -74,9 +73,28 @@ interface FinanceDao {
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertTrips(trips: List<TripRecord>)
 
+  @Update
+  suspend fun updateTrip(trip: TripRecord)
+
   @Delete
   suspend fun deleteTrip(trip: TripRecord)
 
   @Query("DELETE FROM trips")
   suspend fun deleteAllTrips()
+
+  // --- Subscriptions & Recurring Bills ---
+  @Query("SELECT * FROM subscriptions ORDER BY dueDayOfMonth ASC")
+  fun getAllSubscriptions(): Flow<List<com.example.data.local.entity.SubscriptionRecord>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertSubscription(sub: com.example.data.local.entity.SubscriptionRecord): Long
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertSubscriptions(subs: List<com.example.data.local.entity.SubscriptionRecord>)
+
+  @Delete
+  suspend fun deleteSubscription(sub: com.example.data.local.entity.SubscriptionRecord)
+
+  @Query("DELETE FROM subscriptions")
+  suspend fun deleteAllSubscriptions()
 }

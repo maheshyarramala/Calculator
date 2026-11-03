@@ -9,25 +9,18 @@ import kotlinx.coroutines.flow.update
 import java.util.UUID
 
 data class SplitBillUiState(
-  val billTitle: String = "Dinner with Friends",
+  val billTitle: String = "Split Bill",
   val currencyCode: String = "INR",
   val currencySymbol: String = "₹",
   val splitMode: SplitMode = SplitMode.ITEMIZED,
   val participants: List<Participant> = listOf(
-    Participant(id = "p1", name = "You (Me)", avatarColorHex = "#4F46E5", upiId = "you@upi", paidAmount = 4000.0),
-    Participant(id = "p2", name = "Alex", avatarColorHex = "#10B981", upiId = "alex@okaxis"),
-    Participant(id = "p3", name = "Sam", avatarColorHex = "#F59E0B", upiId = "sam@ybl")
+    Participant(id = "p1", name = "You (Me)", avatarColorHex = "#4F46E5", paidAmount = 0.0)
   ),
-  val items: List<ReceiptItem> = listOf(
-    ReceiptItem(id = "i1", title = "Truffle Pasta", price = 1100.0, quantity = 2, claimedParticipantIds = listOf("p1", "p2")),
-    ReceiptItem(id = "i2", title = "Margherita Pizza", price = 550.0, quantity = 1, claimedParticipantIds = listOf("p1", "p2", "p3")),
-    ReceiptItem(id = "i3", title = "Craft Beer", price = 600.0, quantity = 2, isAlcoholOrSpecial = true, claimedParticipantIds = listOf("p2", "p3")),
-    ReceiptItem(id = "i4", title = "Tiramisu", price = 320.0, quantity = 1, claimedParticipantIds = listOf("p1", "p3"))
-  ),
-  val manualBillTotal: Double = 3500.0,
-  val taxAmount: Double = 180.0,
-  val tipAmount: Double = 300.0,
-  val discountAmount: Double = 150.0,
+  val items: List<ReceiptItem> = emptyList(),
+  val manualBillTotal: Double = 0.0,
+  val taxAmount: Double = 0.0,
+  val tipAmount: Double = 0.0,
+  val discountAmount: Double = 0.0,
   val simplifyDebtsEnabled: Boolean = true,
   val showOcrDialog: Boolean = false,
   val showAddParticipantDialog: Boolean = false,

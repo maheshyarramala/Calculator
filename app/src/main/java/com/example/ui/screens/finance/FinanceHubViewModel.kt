@@ -17,10 +17,14 @@ import kotlinx.coroutines.launch
 import com.example.domain.backup.BackupParseResult
 import com.example.domain.backup.FinanceBackupManager
 import com.example.domain.backup.FinanceBackupPayload
+import com.example.data.local.entity.SubscriptionRecord
+import org.json.JSONObject
+import java.util.Calendar
 import android.net.Uri
 
 enum class FinanceTab(val title: String) {
   EXPENSES("Expenses & Accounts"),
+  SUBSCRIPTIONS("Recurring & Bills"),
   TRIPS("Trip Manager")
 }
 
@@ -46,6 +50,9 @@ data class FinanceUiState(
   val showAddIncomeDialog: Boolean = false,
   val showAddBankDialog: Boolean = false,
   val showAddTripDialog: Boolean = false,
+  val showAddSubscriptionDialog: Boolean = false,
+  val showSetBudgetDialog: Boolean = false,
+  val selectedTripForCategoryCap: TripRecord? = null,
   val selectedAccountFilterId: Long? = null,
   val showBackupModal: Boolean = false,
   val showPasteJsonDialog: Boolean = false,
@@ -71,6 +78,13 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   val trips: StateFlow<List<TripRecord>> = dao.getAllTrips()
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  val subscriptions: StateFlow<List<SubscriptionRecord>> = dao.getAllSubscriptions()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  private val prefs = application.getSharedPreferences("omni_calc_finance_prefs", Context.MODE_PRIVATE)
+  private val _monthlyBudgetLimit = MutableStateFlow(prefs.getFloat("monthly_budget_limit", 50000f).toDouble())
+  val monthlyBudgetLimit: StateFlow<Double> = _monthlyBudgetLimit.asStateFlow()
 
   // Computed accounts with live balances based on opening balance, income, and expenses
   val accountsWithBalances: StateFlow<List<AccountWithBalance>> = combine(bankAccounts, expenses) { accs, exps ->
@@ -98,6 +112,17 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   val totalExpense: StateFlow<Double> = expenses.map { list ->
     list.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+  val currentMonthExpenses: StateFlow<Double> = expenses.map { list ->
+    val cal = Calendar.getInstance()
+    val currMonth = cal.get(Calendar.MONTH)
+    val currYear = cal.get(Calendar.YEAR)
+    list.filter { item ->
+      if (item.type != "EXPENSE") return@filter false
+      val itemCal = Calendar.getInstance().apply { timeInMillis = item.dateTimestamp }
+      itemCal.get(Calendar.MONTH) == currMonth && itemCal.get(Calendar.YEAR) == currYear
+    }.sumOf { it.amount }
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
   // Ensure default categories exist if empty
@@ -146,6 +171,26 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   fun setShowAddTrip(show: Boolean) {
     _uiState.update { it.copy(showAddTripDialog = show) }
+  }
+
+  fun setShowAddSubscription(show: Boolean) {
+    _uiState.update { it.copy(showAddSubscriptionDialog = show) }
+  }
+
+  fun setShowSetBudget(show: Boolean) {
+    _uiState.update { it.copy(showSetBudgetDialog = show) }
+  }
+
+  fun setSelectedTripForCategoryCap(trip: TripRecord?) {
+    _uiState.update { it.copy(selectedTripForCategoryCap = trip) }
+  }
+
+  fun setMonthlyBudgetLimit(limit: Double) {
+    if (limit > 0) {
+      prefs.edit().putFloat("monthly_budget_limit", limit.toFloat()).apply()
+      _monthlyBudgetLimit.value = limit
+      _uiState.update { it.copy(showSetBudgetDialog = false, toastMessage = "Monthly budget set to ₹${limit.toLong()}") }
+    }
   }
 
   fun clearToast() {
@@ -322,6 +367,109 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     viewModelScope.launch {
       dao.deleteTrip(trip)
       _uiState.update { it.copy(toastMessage = "Trip removed") }
+    }
+  }
+
+  // --- Subscriptions & Bills Actions ---
+  fun addSubscription(
+    name: String,
+    amount: Double,
+    billingCycle: String,
+    dueDayOfMonth: Int,
+    categoryName: String,
+    bankAccountId: Long?,
+    bankAccountName: String,
+    notes: String
+  ) {
+    if (name.isBlank() || amount <= 0.0) return
+    viewModelScope.launch {
+      dao.insertSubscription(
+        SubscriptionRecord(
+          name = name.trim(),
+          amount = amount,
+          billingCycle = billingCycle,
+          dueDayOfMonth = dueDayOfMonth.coerceIn(1, 31),
+          categoryName = categoryName,
+          bankAccountId = bankAccountId,
+          bankAccountName = bankAccountName,
+          notes = notes
+        )
+      )
+      _uiState.update { it.copy(showAddSubscriptionDialog = false, toastMessage = "Subscription '$name' added!") }
+    }
+  }
+
+  fun deleteSubscription(sub: SubscriptionRecord) {
+    viewModelScope.launch {
+      dao.deleteSubscription(sub)
+      _uiState.update { it.copy(toastMessage = "Subscription '${sub.name}' removed") }
+    }
+  }
+
+  fun markSubscriptionPaid(sub: SubscriptionRecord) {
+    viewModelScope.launch {
+      dao.insertExpense(
+        ExpenseRecord(
+          title = "${sub.name} Bill",
+          amount = sub.amount,
+          categoryName = sub.categoryName,
+          type = "EXPENSE",
+          bankAccountId = sub.bankAccountId,
+          bankAccountName = sub.bankAccountName,
+          dateTimestamp = System.currentTimeMillis(),
+          notes = "Auto-logged from recurring subscription"
+        )
+      )
+      dao.insertSubscription(sub.copy(lastPaidTimestamp = System.currentTimeMillis()))
+      _uiState.update { it.copy(toastMessage = "Paid ₹${sub.amount.toLong()} for ${sub.name} & recorded in ledger!") }
+    }
+  }
+
+  // --- Trip Category Caps Actions ---
+  fun updateTripCategoryCap(trip: TripRecord, categoryName: String, capAmount: Double) {
+    viewModelScope.launch {
+      val json = try {
+        if (trip.categoryCapsJson.isNotBlank()) JSONObject(trip.categoryCapsJson) else JSONObject()
+      } catch (e: Exception) {
+        JSONObject()
+      }
+      json.put(categoryName, capAmount)
+      dao.updateTrip(trip.copy(categoryCapsJson = json.toString()))
+      _uiState.update { it.copy(selectedTripForCategoryCap = null, toastMessage = "Sub-budget set: $categoryName → ₹${capAmount.toLong()}") }
+    }
+  }
+
+  fun removeTripCategoryCap(trip: TripRecord, categoryName: String) {
+    viewModelScope.launch {
+      val json = try {
+        if (trip.categoryCapsJson.isNotBlank()) JSONObject(trip.categoryCapsJson) else JSONObject()
+      } catch (e: Exception) {
+        JSONObject()
+      }
+      json.remove(categoryName)
+      dao.updateTrip(trip.copy(categoryCapsJson = json.toString()))
+      _uiState.update { it.copy(toastMessage = "Removed cap for $categoryName") }
+    }
+  }
+
+  // --- Swipe-to-Delete with Undo ---
+  var lastDeletedExpense: ExpenseRecord? = null
+    private set
+
+  fun deleteExpenseWithUndo(expense: ExpenseRecord, onUndoPrompt: () -> Unit) {
+    lastDeletedExpense = expense
+    viewModelScope.launch {
+      dao.deleteExpense(expense)
+      onUndoPrompt()
+    }
+  }
+
+  fun restoreLastDeletedExpense() {
+    val exp = lastDeletedExpense ?: return
+    viewModelScope.launch {
+      dao.insertExpense(exp)
+      lastDeletedExpense = null
+      _uiState.update { it.copy(toastMessage = "Restored '${exp.title}'") }
     }
   }
 

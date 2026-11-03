@@ -22,9 +22,10 @@ import kotlinx.coroutines.launch
     ExpenseCategory::class,
     ExpenseRecord::class,
     BankAccount::class,
-    TripRecord::class
+    TripRecord::class,
+    com.example.data.local.entity.SubscriptionRecord::class
   ],
-  version = 3,
+  version = 4,
   exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

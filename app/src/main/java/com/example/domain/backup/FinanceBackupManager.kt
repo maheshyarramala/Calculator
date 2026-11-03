@@ -84,6 +84,7 @@ object FinanceBackupManager {
       obj.put("startDate", trip.startDate)
       obj.put("endDate", trip.endDate)
       obj.put("notes", trip.notes)
+      obj.put("categoryCapsJson", trip.categoryCapsJson)
       tripArray.put(obj)
     }
     root.put("trips", tripArray)
@@ -176,7 +177,8 @@ object FinanceBackupManager {
                 budget = obj.optDouble("budget", 0.0),
                 startDate = obj.optString("startDate", ""),
                 endDate = obj.optString("endDate", ""),
-                notes = obj.optString("notes", "")
+                notes = obj.optString("notes", ""),
+                categoryCapsJson = obj.optString("categoryCapsJson", "{}")
               )
             )
           }

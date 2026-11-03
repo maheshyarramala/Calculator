@@ -209,12 +209,13 @@ fun SplitBillScreen(
 
     Spacer(modifier = Modifier.height(10.dp))
 
-    // Grand Total Overview Card
+    // Grand Total Overview Card (High Contrast & Clear Visibility)
     Card(
       shape = RoundedCornerShape(18.dp),
       colors = CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
       ),
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
       modifier = Modifier.fillMaxWidth()
     ) {
       Column(modifier = Modifier.padding(16.dp)) {
@@ -226,12 +227,12 @@ fun SplitBillScreen(
           Column {
             Text(
               text = "Total Group Bill",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
+              style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+              color = MaterialTheme.colorScheme.onSurface
             )
             Text(
               text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", totalBill)}",
-              style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+              style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
               color = MaterialTheme.colorScheme.primary
             )
           }
@@ -242,9 +243,9 @@ fun SplitBillScreen(
             FilledTonalButton(
               onClick = { showCurrencyMenu = true },
               shape = RoundedCornerShape(10.dp),
-              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+              contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
             ) {
-              Text("${state.currencyCode} (${state.currencySymbol})", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+              Text("${state.currencyCode} (${state.currencySymbol})", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
               Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
             }
             DropdownMenu(expanded = showCurrencyMenu, onDismissRequest = { showCurrencyMenu = false }) {
@@ -253,7 +254,7 @@ fun SplitBillScreen(
                 "AED" to "د.إ", "CAD" to "$", "AUD" to "$", "JPY" to "¥"
               ).forEach { (code, sym) ->
                 DropdownMenuItem(
-                  text = { Text("$code ($sym)") },
+                  text = { Text("$code ($sym)", fontWeight = FontWeight.Medium) },
                   onClick = {
                     viewModel.setCurrency(code, sym)
                     showCurrencyMenu = false
@@ -264,24 +265,24 @@ fun SplitBillScreen(
           }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Subtotal, Tax, Tip, Discount Pills
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text("Tax: ${state.currencySymbol}${String.format(Locale.US, "%.1f", state.taxAmount)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text("Tip: ${state.currencySymbol}${String.format(Locale.US, "%.1f", state.tipAmount)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("Tax: ${state.currencySymbol}${String.format(Locale.US, "%.1f", state.taxAmount)}", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+          Text("Tip: ${state.currencySymbol}${String.format(Locale.US, "%.1f", state.tipAmount)}", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
           if (state.discountAmount > 0) {
-            Text("Discount: -${state.currencySymbol}${String.format(Locale.US, "%.1f", state.discountAmount)}", fontSize = 11.sp, color = Color(0xFF10B981))
+            Text("Discount: -${state.currencySymbol}${String.format(Locale.US, "%.1f", state.discountAmount)}", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
           }
           val diff = totalPaid - totalBill
           Text(
-            text = if (Math.abs(diff) < 0.1) "Fully Paid ✓" else if (diff < 0) "Owed: ${state.currencySymbol}${String.format(Locale.US, "%.1f", -diff)}" else "Overpaid",
-            fontSize = 11.sp,
+            text = if (totalBill <= 0.0) "No Items" else if (Math.abs(diff) < 0.1) "Fully Paid ✓" else if (diff < 0) "Owed: ${state.currencySymbol}${String.format(Locale.US, "%.1f", -diff)}" else "Overpaid",
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.Bold,
-            color = if (Math.abs(diff) < 0.1) Color(0xFF059669) else Color(0xFFDC2626)
+            color = if (totalBill <= 0.0) MaterialTheme.colorScheme.onSurfaceVariant else if (Math.abs(diff) < 0.1) Color(0xFF059669) else Color(0xFFDC2626)
           )
         }
       }
@@ -451,34 +452,94 @@ private fun ItemsAndBillTab(
       }
     }
 
+    // Empty state when no items exist
+    if (state.splitMode == SplitMode.ITEMIZED && state.items.isEmpty()) {
+      item {
+        Card(
+          shape = RoundedCornerShape(16.dp),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+          ),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
+            Icon(
+              Icons.Default.RestaurantMenu,
+              contentDescription = null,
+              modifier = Modifier.size(44.dp),
+              tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+              text = "No dishes added yet",
+              fontWeight = FontWeight.Bold,
+              fontSize = 16.sp,
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+              text = "Add dishes manually or scan your receipt to claim items",
+              fontSize = 12.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              textAlign = TextAlign.Center
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+              Button(
+                onClick = onAddItemClick,
+                shape = RoundedCornerShape(10.dp)
+              ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Add Dish")
+              }
+              OutlinedButton(
+                onClick = { viewModel.setShowOcrDialog(true) },
+                shape = RoundedCornerShape(10.dp)
+              ) {
+                Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Scan Receipt")
+              }
+            }
+          }
+        }
+      }
+    }
+
     // Itemized Line Items Cards
     items(state.items, key = { it.id }) { item ->
       val itemTotal = item.price * item.quantity
       Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth()
       ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(end = 8.dp)) {
               if (item.isAlcoholOrSpecial) {
                 Surface(
                   shape = RoundedCornerShape(6.dp),
                   color = Color(0xFFEF4444).copy(alpha = 0.15f),
                   modifier = Modifier.padding(end = 6.dp)
                 ) {
-                  Text("🍷 Drink", fontSize = 10.sp, color = Color(0xFFDC2626), modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                  Text("🍷 Drink", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626), modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
                 }
               }
               Text(
                 text = "${if (item.quantity > 1) "${item.quantity}x " else ""}${item.title}",
                 fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
+                fontSize = 14.5.sp,
+                color = MaterialTheme.colorScheme.onSurface
               )
             }
 
@@ -487,18 +548,18 @@ private fun ItemsAndBillTab(
                 text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", itemTotal)}",
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary,
-                fontSize = 14.sp
+                fontSize = 15.sp
               )
               IconButton(
                 onClick = { viewModel.removeItem(item.id) },
                 modifier = Modifier.size(28.dp).padding(start = 4.dp)
               ) {
-                Icon(Icons.Default.Close, contentDescription = "Delete item", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Close, contentDescription = "Delete item", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
               }
             }
           }
 
-          Spacer(modifier = Modifier.height(8.dp))
+          Spacer(modifier = Modifier.height(10.dp))
 
           // Avatar Claim Chips: Tap to toggle claim for each person
           Row(
@@ -506,19 +567,19 @@ private fun ItemsAndBillTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("Claimed by:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Claimed by:", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
               TextButton(
                 onClick = { viewModel.claimItemForAll(item.id) },
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
               ) {
-                Text("All Split", fontSize = 10.5.sp)
+                Text("All Split", fontSize = 11.sp, fontWeight = FontWeight.Bold)
               }
               TextButton(
                 onClick = { viewModel.clearItemClaims(item.id) },
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
               ) {
-                Text("Clear", fontSize = 10.5.sp, color = Color.Gray)
+                Text("Clear", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
               }
             }
           }
@@ -537,8 +598,8 @@ private fun ItemsAndBillTab(
 
               Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = if (isClaimed) color.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                border = if (isClaimed) BorderStroke(1.5.dp, color) else null,
+                color = if (isClaimed) color.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(1.5.dp, if (isClaimed) color else MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.clickable {
                   haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                   viewModel.toggleItemClaim(item.id, p.id)
@@ -552,14 +613,41 @@ private fun ItemsAndBillTab(
                     modifier = Modifier
                       .size(12.dp)
                       .clip(CircleShape)
-                      .background(if (isClaimed) color else Color.Gray)
+                      .background(if (isClaimed) color else MaterialTheme.colorScheme.onSurfaceVariant)
                   )
                   Spacer(modifier = Modifier.width(4.dp))
                   Text(
                     text = p.name,
                     fontSize = 11.sp,
-                    fontWeight = if (isClaimed) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isClaimed) MaterialTheme.colorScheme.onSurface else Color.Gray
+                    fontWeight = if (isClaimed) FontWeight.Bold else FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                }
+              }
+            }
+
+            // Quick Add Person Chip
+            item {
+              Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                modifier = Modifier.clickable {
+                  haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  viewModel.setShowAddParticipantDialog(true)
+                }
+              ) {
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                  Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                  Spacer(modifier = Modifier.width(3.dp))
+                  Text(
+                    text = "Add Person",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                   )
                 }
               }
@@ -618,6 +706,66 @@ private fun DinersAndClaimsTab(
       }
     }
 
+    // Inline Quick Add Person Input
+    item {
+      Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        var quickName by remember { mutableStateOf("") }
+        Row(
+          modifier = Modifier.fillMaxWidth().padding(10.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          OutlinedTextField(
+            value = quickName,
+            onValueChange = { quickName = it },
+            placeholder = { Text("Add diner name (e.g. Rahul, Priya)...", fontSize = 12.sp) },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(10.dp)
+          )
+          Button(
+            onClick = {
+              if (quickName.isNotBlank()) {
+                viewModel.addParticipant(quickName.trim(), "", "", 0.0)
+                quickName = ""
+              }
+            },
+            enabled = quickName.isNotBlank(),
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+          ) {
+            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+          }
+        }
+      }
+    }
+
+    if (breakdowns.isEmpty()) {
+      item {
+        Card(
+          shape = RoundedCornerShape(16.dp),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+            Text("No Diners Added", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text("Type a name above or tap '+ Diner' to add people to split this bill.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+          }
+        }
+      }
+    }
+
     items(breakdowns, key = { it.participant.id }) { b ->
       val p = b.participant
       val avatarColor = try {
@@ -629,6 +777,7 @@ private fun DinersAndClaimsTab(
       Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -637,10 +786,10 @@ private fun DinersAndClaimsTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(end = 8.dp)) {
               Box(
                 modifier = Modifier
-                  .size(36.dp)
+                  .size(38.dp)
                   .clip(CircleShape)
                   .background(avatarColor),
                 contentAlignment = Alignment.Center
@@ -654,21 +803,38 @@ private fun DinersAndClaimsTab(
               }
               Spacer(modifier = Modifier.width(10.dp))
               Column {
-                Text(p.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(p.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
                 if (p.upiId.isNotBlank()) {
-                  Text("UPI: ${p.upiId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  Text("UPI: ${p.upiId}", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
               }
             }
 
-            Column(horizontalAlignment = Alignment.End) {
-              Text(
-                text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.totalToPay)}",
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.primary
-              )
-              Text("Total Share", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Column(horizontalAlignment = Alignment.End) {
+                Text(
+                  text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.totalToPay)}",
+                  fontWeight = FontWeight.ExtraBold,
+                  fontSize = 16.sp,
+                  color = MaterialTheme.colorScheme.primary
+                )
+                Text("Total Share", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+              Spacer(modifier = Modifier.width(6.dp))
+              IconButton(
+                onClick = {
+                  haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                  viewModel.removeParticipant(p.id)
+                },
+                modifier = Modifier.size(32.dp)
+              ) {
+                Icon(
+                  Icons.Default.DeleteOutline,
+                  contentDescription = "Remove diner",
+                  tint = MaterialTheme.colorScheme.error,
+                  modifier = Modifier.size(18.dp)
+                )
+              }
             }
           }
 
@@ -679,9 +845,9 @@ private fun DinersAndClaimsTab(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Text("Food/Drink: ${state.currencySymbol}${String.format(Locale.US, "%.1f", b.subtotal)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Tax Share: ${state.currencySymbol}${String.format(Locale.US, "%.1f", b.taxShare)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Tip Share: ${state.currencySymbol}${String.format(Locale.US, "%.1f", b.tipShare)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Food/Drink: ${state.currencySymbol}${String.format(Locale.US, "%.1f", b.subtotal)}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text("Tax Share: ${state.currencySymbol}${String.format(Locale.US, "%.1f", b.taxShare)}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text("Tip Share: ${state.currencySymbol}${String.format(Locale.US, "%.1f", b.tipShare)}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface)
           }
 
           Spacer(modifier = Modifier.height(8.dp))
@@ -694,8 +860,9 @@ private fun DinersAndClaimsTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Column(modifier = Modifier.weight(1f)) {
-              Text("Amount Paid to Restaurant / Server:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+              Text("Amount Paid to Restaurant / Server:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
+              Spacer(modifier = Modifier.height(2.dp))
               if (b.netBalance > 0.01) {
                 Text(
                   text = "🟢 Gets back ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.netBalance)}",
@@ -711,7 +878,7 @@ private fun DinersAndClaimsTab(
                   color = Color(0xFFDC2626)
                 )
               } else {
-                Text("Settled (Exact)", fontSize = 11.sp, color = Color.Gray)
+                Text("Settled (Exact)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
               }
             }
 
@@ -722,7 +889,7 @@ private fun DinersAndClaimsTab(
               prefix = { Text(state.currencySymbol, fontSize = 11.sp) },
               singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-              modifier = Modifier.width(110.dp)
+              modifier = Modifier.width(115.dp)
             )
           }
         }
@@ -852,12 +1019,12 @@ private fun SettlementLedgerTab(
             ) {
               Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                  Text(transfer.fromParticipant.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                  Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(14.dp).padding(horizontal = 2.dp), tint = Color.Gray)
-                  Text(transfer.toParticipant.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                  Text(transfer.fromParticipant.name, fontWeight = FontWeight.Bold, fontSize = 14.5.sp, color = MaterialTheme.colorScheme.onSurface)
+                  Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(14.dp).padding(horizontal = 4.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                  Text(transfer.toParticipant.name, fontWeight = FontWeight.Bold, fontSize = 14.5.sp, color = MaterialTheme.colorScheme.onSurface)
                 }
                 if (transfer.toParticipant.upiId.isNotBlank()) {
-                  Text("UPI: ${transfer.toParticipant.upiId}", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  Text("UPI: ${transfer.toParticipant.upiId}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
               }
 
@@ -865,7 +1032,7 @@ private fun SettlementLedgerTab(
                 text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = if (isSettled) Color.Gray else MaterialTheme.colorScheme.primary
+                color = if (isSettled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
               )
             }
 
@@ -948,7 +1115,7 @@ private fun SettlementLedgerTab(
                 Icon(
                   if (isSettled) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                   contentDescription = "Mark Settled",
-                  tint = if (isSettled) Color(0xFF10B981) else Color.Gray
+                  tint = if (isSettled) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
               }
             }
