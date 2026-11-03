@@ -40,10 +40,10 @@ fun DonutChart(
   centerTitle: String? = null,
   centerSubtitle: String? = null
 ) {
-  val total = slices.sumOf { it.value }
+  val total = androidx.compose.runtime.remember(slices) { slices.sumOf { it.value } }
   val progress by animateFloatAsState(
     targetValue = 1f,
-    animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+    animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
     label = "donutProgress"
   )
 

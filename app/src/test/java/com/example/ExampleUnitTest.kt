@@ -111,4 +111,52 @@ class ExampleUnitTest {
     val eur = CurrencyCalculator.convertSingle(100.0, "USD", "EUR", rates)
     assertEquals(92.0, eur, 0.01)
   }
+
+  @Test
+  fun testInterestCalculatorMethods() {
+    // 1. Simple Interest: P = 1,00,000, R = 10%, T = 3 years
+    val si = InterestCalculator.calculateSimpleInterest(
+      100000.0,
+      10.0,
+      3.0,
+      InterestCalculator.TimeUnit.YEARS
+    )
+    assertEquals(30000.0, si.interestEarned, 0.01)
+    assertEquals(130000.0, si.totalAmount, 0.01)
+
+    // 2. Compound Interest: P = 1,00,000, R = 10%, T = 3 years, Annually
+    val ci = InterestCalculator.calculateCompoundInterest(
+      100000.0,
+      10.0,
+      3.0,
+      InterestCalculator.CompoundingFrequency.ANNUALLY
+    )
+    assertEquals(133100.0, ci.totalAmount, 0.01)
+    assertEquals(33100.0, ci.totalInterest, 0.01)
+
+    // 3. Rule of 72 / Doubling
+    val rule72 = InterestCalculator.calculateDoubling(8.0)
+    assertEquals(9.0, rule72.ruleOf72Years, 0.01)
+    assertTrue("Exact doubling years is close to 9", rule72.exactDoublingYears in 8.9..9.1)
+
+    // 4. Effective Annual Rate (EAR / APY)
+    val apy = InterestCalculator.calculateEffectiveRate(
+      12.0,
+      InterestCalculator.CompoundingFrequency.MONTHLY
+    )
+    assertTrue("Monthly 12% nominal gives APY ~12.68%", apy.effectiveRatePercent in 12.67..12.70)
+
+    // 5. Flat vs Reducing Comparison
+    val flatVsRed = InterestCalculator.compareFlatVsReducing(100000.0, 36, 10.0)
+    assertTrue("Flat interest > Reducing interest", flatVsRed.flatTotalInterest > flatVsRed.reducingTotalInterest)
+    assertTrue("Flat equivalent rate is higher", flatVsRed.equivalentReducingRate > 10.0)
+  }
+
+  @Test
+  fun testSplitBillNoTip() {
+    val split = UtilityCalculators.calculateSplit(1500.0, 3)
+    assertEquals(1500.0, split.billAmount, 0.01)
+    assertEquals(500.0, split.perPersonShare, 0.01)
+    assertEquals(3, split.numPersons)
+  }
 }

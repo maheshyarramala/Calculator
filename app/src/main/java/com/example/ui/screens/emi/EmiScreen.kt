@@ -119,6 +119,19 @@ fun EmiScreen(
                 FilledTonalIconButton(
                   onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val p = state.principalInput.toDoubleOrNull() ?: 1000000.0
+                    val r = state.interestRateInput.toDoubleOrNull() ?: 8.5
+                    val t = state.emiResult.tenureMonths
+                    val pdf = com.example.domain.report.PdfReportGenerator.generateEmiReport(context, p, r, t, state.emiResult)
+                    com.example.domain.report.PdfReportGenerator.sharePdf(context, pdf)
+                  },
+                  modifier = Modifier.testTag("export_emi_pdf_button")
+                ) {
+                  Icon(Icons.Default.PictureAsPdf, contentDescription = "Export PDF Statement")
+                }
+                FilledTonalIconButton(
+                  onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     viewModel.saveCalculation(context)
                   },
                   modifier = Modifier.testTag("save_emi_button")
@@ -159,7 +172,7 @@ fun EmiScreen(
               testTag = "principal_input"
             )
 
-            // Interest Rate
+            // Interest Rate with Quick Slabs
             NumberInputField(
               value = state.interestRateInput,
               onValueChange = { viewModel.updateInterestRate(it) },
@@ -168,6 +181,16 @@ fun EmiScreen(
               sliderValue = (state.interestRateInput.toFloatOrNull() ?: 8.5f).coerceIn(1f, 30f),
               sliderRange = 1f..30f,
               onSliderChange = { viewModel.updateInterestRate(String.format(java.util.Locale.US, "%.1f", it)) },
+              presets = listOf(
+                "7.0%" to 7.0,
+                "8.5%" to 8.5,
+                "10.0%" to 10.0,
+                "12.0%" to 12.0
+              ),
+              onPresetClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                viewModel.updateInterestRate(String.format(java.util.Locale.US, "%.1f", it))
+              },
               testTag = "interest_rate_input"
             )
 
@@ -537,6 +560,11 @@ private fun AmortizationRow(item: AmortizationMonth) {
     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
   }
 
+  val openingStr = remember(item.openingBalance) { CurrencyFormatter.formatWhole(item.openingBalance, "") }
+  val principalStr = remember(item.principalPaid) { CurrencyFormatter.formatWhole(item.principalPaid, "") }
+  val interestStr = remember(item.interestPaid) { CurrencyFormatter.formatWhole(item.interestPaid, "") }
+  val closingStr = remember(item.closingBalance) { CurrencyFormatter.formatWhole(item.closingBalance, "") }
+
   Column(
     modifier = Modifier
       .fillMaxWidth()
@@ -556,26 +584,26 @@ private fun AmortizationRow(item: AmortizationMonth) {
         )
       }
       Text(
-        text = CurrencyFormatter.formatWhole(item.openingBalance, ""),
+        text = openingStr,
         fontSize = 11.sp,
         modifier = Modifier.weight(1.3f)
       )
       Text(
-        text = CurrencyFormatter.formatWhole(item.principalPaid, ""),
+        text = principalStr,
         fontSize = 11.sp,
         color = ChartPrincipal,
         fontWeight = FontWeight.Medium,
         modifier = Modifier.weight(1.1f)
       )
       Text(
-        text = CurrencyFormatter.formatWhole(item.interestPaid, ""),
+        text = interestStr,
         fontSize = 11.sp,
         color = ChartInterest,
         fontWeight = FontWeight.Medium,
         modifier = Modifier.weight(1.1f)
       )
       Text(
-        text = CurrencyFormatter.formatWhole(item.closingBalance, ""),
+        text = closingStr,
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.weight(1.3f)

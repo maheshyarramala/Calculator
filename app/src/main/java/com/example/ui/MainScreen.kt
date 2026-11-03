@@ -34,8 +34,13 @@ import com.example.ui.screens.calculator.CalculatorScreen
 import com.example.ui.screens.calculator.CalculatorViewModel
 import com.example.ui.screens.emi.EmiScreen
 import com.example.ui.screens.emi.EmiViewModel
+import com.example.ui.screens.finance.FinanceHubScreen
+import com.example.ui.screens.finance.FinanceHubViewModel
+import com.example.ui.screens.finance.FinanceTab
 import com.example.ui.screens.history.HistoryBottomSheet
 import com.example.ui.screens.history.HistoryViewModel
+import com.example.ui.screens.interest.InterestCalculatorScreen
+import com.example.ui.screens.interest.InterestCalculatorViewModel
 import com.example.ui.screens.investment.InvestmentScreen
 import com.example.ui.screens.investment.InvestmentTab
 import com.example.ui.screens.investment.InvestmentViewModel
@@ -43,15 +48,26 @@ import com.example.ui.screens.utility.UtilityScreen
 import com.example.ui.screens.utility.UtilityTab
 import com.example.ui.screens.utility.UtilityViewModel
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.LazyRow
+import com.example.ui.components.CurrencyFormatter
+import com.example.ui.theme.AccentTheme
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.HapticStrength
+import com.example.ui.theme.ThemeManager
+
 enum class MainDestination(
   val label: String,
-  val icon: ImageVector
+  val icon: ImageVector,
+  val isBottomTab: Boolean = true
 ) {
   EMI("EMI", Icons.Default.AccountBalance),
-  INVESTMENTS("Wealth", Icons.AutoMirrored.Filled.TrendingUp),
+  INVESTMENTS("Invest", Icons.AutoMirrored.Filled.TrendingUp),
+  FINANCE("Finance", Icons.Default.Savings),
   CALCULATOR("Calculator", Icons.Default.Calculate),
-  AGE_CALENDAR("Age & Date", Icons.Default.CalendarMonth),
-  UTILITIES("Utility", Icons.Default.Widgets)
+  UTILITIES("Utility", Icons.Default.Widgets),
+  INTEREST("Interest", Icons.Default.Percent, isBottomTab = false),
+  AGE_CALENDAR("Age & Date", Icons.Default.CalendarMonth, isBottomTab = false)
 }
 
 data class CalculatorHubItem(
@@ -70,9 +86,13 @@ fun MainScreen(
   var currentDestination by remember { mutableStateOf(MainDestination.EMI) }
   var showHistorySheet by remember { mutableStateOf(false) }
   var showHubSheet by remember { mutableStateOf(false) }
+  var showThemeSheet by remember { mutableStateOf(false) }
+  var isPrivacyMode by remember { mutableStateOf(CurrencyFormatter.isPrivacyModeEnabled) }
 
   val emiViewModel: EmiViewModel = viewModel()
   val investmentViewModel: InvestmentViewModel = viewModel()
+  val financeViewModel: FinanceHubViewModel = viewModel()
+  val interestViewModel: InterestCalculatorViewModel = viewModel()
   val calculatorViewModel: CalculatorViewModel = viewModel()
   val ageCalendarViewModel: AgeCalendarViewModel = viewModel()
   val utilityViewModel: UtilityViewModel = viewModel()
@@ -83,6 +103,12 @@ fun MainScreen(
   // BackHandler: If user is not on EMI tab, back key navigates to EMI tab
   BackHandler(enabled = currentDestination != MainDestination.EMI) {
     currentDestination = MainDestination.EMI
+  }
+
+  if (showThemeSheet) {
+    ThemeSettingsBottomSheet(
+      onDismiss = { showThemeSheet = false }
+    )
   }
 
   if (showHistorySheet) {
@@ -100,6 +126,10 @@ fun MainScreen(
           currentDestination = MainDestination.EMI
           showHubSheet = false
         },
+        CalculatorHubItem("Interest Calc", "All 5 Interest Methods", Icons.Default.Percent, Color(0xFF8B5CF6)) {
+          currentDestination = MainDestination.INTEREST
+          showHubSheet = false
+        },
         CalculatorHubItem("SIP & Growth", "Wealth compounding", Icons.AutoMirrored.Filled.TrendingUp, Color(0xFF10B981)) {
           currentDestination = MainDestination.INVESTMENTS
           investmentViewModel.selectTab(InvestmentTab.SIP)
@@ -110,8 +140,19 @@ fun MainScreen(
           investmentViewModel.selectTab(InvestmentTab.LUMPSUM)
           showHubSheet = false
         },
-        CalculatorHubItem("Calculator", "Scientific & Basic", Icons.Default.Calculate, Color(0xFF8B5CF6)) {
-          currentDestination = MainDestination.CALCULATOR
+        CalculatorHubItem("Expense Tracker", "Custom categories & slabs", Icons.Default.ReceiptLong, Color(0xFFEF4444)) {
+          currentDestination = MainDestination.FINANCE
+          financeViewModel.selectTab(FinanceTab.EXPENSES)
+          showHubSheet = false
+        },
+        CalculatorHubItem("Bank Vault", "Account & card storage", Icons.Default.CreditCard, Color(0xFF1E3A8A)) {
+          currentDestination = MainDestination.FINANCE
+          financeViewModel.selectTab(FinanceTab.BANK_ACCOUNTS)
+          showHubSheet = false
+        },
+        CalculatorHubItem("Trip Manager", "Vacation budgets & caps", Icons.Default.FlightTakeoff, Color(0xFF0D9488)) {
+          currentDestination = MainDestination.FINANCE
+          financeViewModel.selectTab(FinanceTab.TRIPS)
           showHubSheet = false
         },
         CalculatorHubItem("Age Calculator", "Exact age & birthday", Icons.Default.Cake, Color(0xFFF43F5E)) {
@@ -124,9 +165,18 @@ fun MainScreen(
           ageCalendarViewModel.selectTab(AgeCalendarTab.DATE_DIFF)
           showHubSheet = false
         },
+        CalculatorHubItem("Calculator", "Scientific & Basic", Icons.Default.Calculate, Color(0xFF7C3AED)) {
+          currentDestination = MainDestination.CALCULATOR
+          showHubSheet = false
+        },
         CalculatorHubItem("Currency", "Accurate Live Rates", Icons.Default.CurrencyExchange, Color(0xFFD97706)) {
           currentDestination = MainDestination.UTILITIES
           utilityViewModel.selectTab(UtilityTab.CURRENCY)
+          showHubSheet = false
+        },
+        CalculatorHubItem("Split Bill", "Group expense share", Icons.Default.Group, Color(0xFFEC4899)) {
+          currentDestination = MainDestination.UTILITIES
+          utilityViewModel.selectTab(UtilityTab.TIP_SPLIT)
           showHubSheet = false
         },
         CalculatorHubItem("Unit Converter", "Length, weight, temp", Icons.Default.Straighten, Color(0xFF059669)) {
@@ -137,11 +187,6 @@ fun MainScreen(
         CalculatorHubItem("GST & Tax", "Inclusive & exclusive", Icons.Default.ReceiptLong, Color(0xFF6366F1)) {
           currentDestination = MainDestination.UTILITIES
           utilityViewModel.selectTab(UtilityTab.GST_TAX)
-          showHubSheet = false
-        },
-        CalculatorHubItem("Tip & Split", "Per person share", Icons.Default.Restaurant, Color(0xFFEC4899)) {
-          currentDestination = MainDestination.UTILITIES
-          utilityViewModel.selectTab(UtilityTab.TIP_SPLIT)
           showHubSheet = false
         }
       )
@@ -175,6 +220,35 @@ fun MainScreen(
           }
         },
         actions = {
+          // Privacy Mode Masking Toggle (Eye icon)
+          FilledTonalIconButton(
+            onClick = {
+              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              val newState = !isPrivacyMode
+              CurrencyFormatter.isPrivacyModeEnabled = newState
+              isPrivacyMode = newState
+            },
+            modifier = Modifier.testTag("privacy_mode_toggle_btn")
+          ) {
+            Icon(
+              if (isPrivacyMode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+              contentDescription = if (isPrivacyMode) "Disable Privacy Masking" else "Enable Privacy Masking",
+              tint = if (isPrivacyMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+          }
+
+          // Theme Settings Button
+          FilledTonalIconButton(
+            onClick = {
+              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              showThemeSheet = true
+            },
+            modifier = Modifier.testTag("theme_settings_top_btn")
+          ) {
+            Icon(Icons.Default.Palette, contentDescription = "Theme and Customization")
+          }
+
+          // Hub Button
           FilledTonalIconButton(
             onClick = {
               haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -184,6 +258,8 @@ fun MainScreen(
           ) {
             Icon(Icons.Default.GridView, contentDescription = "Choose calculator by icon")
           }
+
+          // History Button
           FilledTonalIconButton(
             onClick = {
               haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -204,7 +280,7 @@ fun MainScreen(
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier.testTag("bottom_nav_bar")
       ) {
-        MainDestination.values().forEach { destination ->
+        MainDestination.values().filter { it.isBottomTab }.forEach { destination ->
           NavigationBarItem(
             selected = currentDestination == destination,
             onClick = {
@@ -238,9 +314,11 @@ fun MainScreen(
       when (destination) {
         MainDestination.EMI -> EmiScreen(viewModel = emiViewModel)
         MainDestination.INVESTMENTS -> InvestmentScreen(viewModel = investmentViewModel)
+        MainDestination.FINANCE -> FinanceHubScreen(viewModel = financeViewModel)
         MainDestination.CALCULATOR -> CalculatorScreen(viewModel = calculatorViewModel)
-        MainDestination.AGE_CALENDAR -> AgeCalendarScreen(viewModel = ageCalendarViewModel)
         MainDestination.UTILITIES -> UtilityScreen(viewModel = utilityViewModel)
+        MainDestination.INTEREST -> InterestCalculatorScreen(viewModel = interestViewModel)
+        MainDestination.AGE_CALENDAR -> AgeCalendarScreen(viewModel = ageCalendarViewModel)
       }
     }
   }
@@ -253,6 +331,15 @@ private fun AllCalculatorsHubSheet(
   onDismiss: () -> Unit
 ) {
   val haptic = LocalHapticFeedback.current
+  var searchQuery by remember { mutableStateOf("") }
+
+  val filteredItems = remember(items, searchQuery) {
+    if (searchQuery.isBlank()) items
+    else items.filter {
+      it.title.contains(searchQuery, ignoreCase = true) ||
+          it.subtitle.contains(searchQuery, ignoreCase = true)
+    }
+  }
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -285,60 +372,99 @@ private fun AllCalculatorsHubSheet(
         }
       }
 
-      Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(12.dp))
 
-      LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        items(items) { item ->
-          Card(
-            onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-              item.onClick()
-            },
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-              containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            ),
-            modifier = Modifier.fillMaxWidth()
-          ) {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-              verticalAlignment = Alignment.CenterVertically
+      // Search bar
+      OutlinedTextField(
+        value = searchQuery,
+        onValueChange = { searchQuery = it },
+        placeholder = { Text("Search by name (tax, car, currency, age...)", fontSize = 13.sp) },
+        leadingIcon = {
+          Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        },
+        trailingIcon = {
+          if (searchQuery.isNotBlank()) {
+            IconButton(onClick = { searchQuery = "" }) {
+              Icon(Icons.Default.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
+            }
+          }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("hub_search_input")
+      )
+
+      Spacer(modifier = Modifier.height(14.dp))
+
+      if (filteredItems.isEmpty()) {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            text = "No calculator matching \"$searchQuery\"",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 14.sp
+          )
+        }
+      } else {
+        LazyVerticalGrid(
+          columns = GridCells.Fixed(2),
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          items(filteredItems) { item ->
+            Card(
+              onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                item.onClick()
+              },
+              shape = RoundedCornerShape(16.dp),
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+              ),
+              modifier = Modifier.fillMaxWidth()
             ) {
-              Box(
+              Row(
                 modifier = Modifier
-                  .size(44.dp)
-                  .clip(CircleShape)
-                  .background(item.iconBgColor),
-                contentAlignment = Alignment.Center
+                  .fillMaxWidth()
+                  .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
               ) {
-                Icon(
-                  item.icon,
-                  contentDescription = item.title,
-                  tint = Color.White,
-                  modifier = Modifier.size(22.dp)
-                )
-              }
-              Spacer(modifier = Modifier.width(10.dp))
-              Column {
-                Text(
-                  text = item.title,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 13.sp,
-                  color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                  text = item.subtitle,
-                  fontSize = 10.sp,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  maxLines = 1
-                )
+                Box(
+                  modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(item.iconBgColor),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Icon(
+                    item.icon,
+                    contentDescription = item.title,
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                  )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                  Text(
+                    text = item.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                  Text(
+                    text = item.subtitle,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                  )
+                }
               }
             }
           }
@@ -347,3 +473,160 @@ private fun AllCalculatorsHubSheet(
     }
   }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThemeSettingsBottomSheet(
+  onDismiss: () -> Unit
+) {
+  val themeState by ThemeManager.state.collectAsState()
+  val haptic = LocalHapticFeedback.current
+
+  ModalBottomSheet(
+    onDismissRequest = onDismiss,
+    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 20.dp)
+        .padding(bottom = 36.dp),
+      verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Column {
+          Text(
+            text = "Personalize Experience",
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+          )
+          Text(
+            text = "Dark modes, accent colors & tactile tuning",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+        IconButton(onClick = onDismiss) {
+          Icon(Icons.Default.Close, contentDescription = "Close")
+        }
+      }
+
+      // 1. Dark Mode Options
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Theme Mode", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          AppThemeMode.values().forEach { mode ->
+            val isSelected = themeState.themeMode == mode
+            FilterChip(
+              selected = isSelected,
+              onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                ThemeManager.setThemeMode(mode)
+              },
+              label = {
+                Text(
+                  when (mode) {
+                    AppThemeMode.SYSTEM -> "System"
+                    AppThemeMode.LIGHT -> "Light"
+                    AppThemeMode.DARK -> "Dark"
+                    AppThemeMode.AMOLED -> "AMOLED"
+                  },
+                  fontSize = 12.sp,
+                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                )
+              },
+              leadingIcon = if (mode == AppThemeMode.AMOLED) {
+                { Icon(Icons.Default.DarkMode, contentDescription = null, modifier = Modifier.size(14.dp)) }
+              } else null,
+              modifier = Modifier.weight(1f)
+            )
+          }
+        }
+      }
+
+      // 2. Accent Palette
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Accent Palette", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        LazyRow(
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          items(AccentTheme.values().toList()) { accent ->
+            val isSelected = themeState.accentTheme == accent
+            Card(
+              onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                ThemeManager.setAccentTheme(accent)
+              },
+              shape = RoundedCornerShape(14.dp),
+              colors = CardDefaults.cardColors(
+                containerColor = if (isSelected) accent.primaryLight.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+              ),
+              modifier = Modifier
+                .width(100.dp)
+                .then(
+                  if (isSelected) Modifier.border(2.dp, accent.primaryLight, RoundedCornerShape(14.dp))
+                  else Modifier
+                )
+            ) {
+              Column(
+                modifier = Modifier.padding(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(accent.primaryLight)
+                )
+                Text(
+                  text = accent.title.replace(" ", "\n"),
+                  fontSize = 10.sp,
+                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                  color = MaterialTheme.colorScheme.onSurface,
+                  lineHeight = 12.sp
+                )
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Tactile Vibration Haptics
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Keypad Haptic Feedback", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          HapticStrength.values().forEach { strength ->
+            val isSelected = themeState.hapticStrength == strength
+            FilterChip(
+              selected = isSelected,
+              onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                ThemeManager.setHapticStrength(strength)
+              },
+              label = {
+                Text(
+                  strength.title,
+                  fontSize = 12.sp,
+                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                )
+              },
+              modifier = Modifier.weight(1f)
+            )
+          }
+        }
+      }
+    }
+  }
+}
+

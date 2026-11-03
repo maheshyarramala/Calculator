@@ -86,7 +86,7 @@ fun UtilityScreen(
             val icon = when (tab) {
               UtilityTab.CURRENCY -> Icons.Default.CurrencyExchange
               UtilityTab.UNIT_CONVERTER -> Icons.Default.Straighten
-              UtilityTab.TIP_SPLIT -> Icons.Default.Restaurant
+              UtilityTab.TIP_SPLIT -> Icons.Default.Group
               UtilityTab.GST_TAX -> Icons.Default.ReceiptLong
             }
             Tab(
@@ -236,8 +236,43 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
           testTag = "currency_amount_input"
         )
 
+        // Pinned Favorite Currencies (1-tap switching)
+        Text("Pinned Favorite Currencies (Tap to set target):", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val favorites = listOf(
+          Triple("USD", "$", "🇺🇸"),
+          Triple("INR", "₹", "🇮🇳"),
+          Triple("EUR", "€", "🇪🇺"),
+          Triple("GBP", "£", "🇬🇧"),
+          Triple("AED", "د.إ", "🇦🇪"),
+          Triple("CAD", "C$", "🇨🇦"),
+          Triple("JPY", "¥", "🇯🇵"),
+          Triple("AUD", "A$", "🇦🇺"),
+          Triple("SGD", "S$", "🇸🇬")
+        )
+        LazyRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          items(favorites) { (code, symbol, flag) ->
+            val isSelected = state.currencyTargetCode == code
+            FilterChip(
+              selected = isSelected,
+              onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                if (state.currencyBaseCode == code) {
+                  viewModel.swapCurrencies()
+                } else {
+                  viewModel.updateCurrencyTarget(code)
+                }
+              },
+              leadingIcon = { Text(flag, fontSize = 14.sp) },
+              label = { Text("$code ($symbol)", fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
+            )
+          }
+        }
+
         // Visual Currency Selection Cards (Instead of cramped side-by-side dropdowns)
-        Text("Choose Currencies (Tap icon to switch)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Choose Currencies (Tap card to change)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         // "From" Currency Card
         Card(
@@ -791,7 +826,10 @@ private fun TipSplitSection(viewModel: UtilityViewModel) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Text("Tip & Split Bill", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+        Column {
+          Text("Split Bill & Group Share", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+          Text("Divide group dinner, rent, or outing expenses", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         FilledTonalIconButton(
           onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -806,27 +844,27 @@ private fun TipSplitSection(viewModel: UtilityViewModel) {
       NumberInputField(
         value = state.billAmount,
         onValueChange = { viewModel.updateBillAmount(it) },
-        label = "Total Bill Amount",
+        label = "Total Bill / Expense Amount",
         prefix = "₹",
         testTag = "tip_bill_input"
       )
 
       Column {
-        Text("Tip Percentage (${state.tipPercent.toInt()}%)", style = MaterialTheme.typography.bodySmall)
+        Text("Quick Split By People", style = MaterialTheme.typography.bodySmall)
         Row(
           modifier = Modifier
             .fillMaxWidth()
             .padding(top = 6.dp),
           horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-          listOf(5.0, 10.0, 15.0, 20.0).forEach { tip ->
+          listOf(2, 3, 4, 5, 6, 8).forEach { count ->
             FilterChip(
-              selected = state.tipPercent == tip,
+              selected = state.numPersons == count,
               onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                viewModel.updateTipPercent(tip)
+                viewModel.updateNumPersons(count)
               },
-              label = { Text("${tip.toInt()}%") },
+              label = { Text("$count", fontWeight = FontWeight.SemiBold) },
               modifier = Modifier.weight(1f)
             )
           }
@@ -874,7 +912,7 @@ private fun TipSplitSection(viewModel: UtilityViewModel) {
       Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+          containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
         ),
         modifier = Modifier.fillMaxWidth()
       ) {
@@ -897,22 +935,22 @@ private fun TipSplitSection(viewModel: UtilityViewModel) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Text("Tip per person:", style = MaterialTheme.typography.bodySmall)
-            Text(CurrencyFormatter.format(state.tipResult.perPersonTip), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+            Text("Total Bill:", style = MaterialTheme.typography.bodySmall)
+            Text(CurrencyFormatter.format(state.tipResult.billAmount), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
           }
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Text("Total Tip:", style = MaterialTheme.typography.bodySmall)
-            Text(CurrencyFormatter.format(state.tipResult.tipAmount), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+            Text("Number of People:", style = MaterialTheme.typography.bodySmall)
+            Text("${state.numPersons} people", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
           }
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Text("Grand Total:", style = MaterialTheme.typography.bodySmall)
-            Text(CurrencyFormatter.format(state.tipResult.totalAmount), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+            Text("Equal Share per Person:", style = MaterialTheme.typography.bodySmall)
+            Text(CurrencyFormatter.format(state.tipResult.perPersonTotal), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
           }
         }
       }

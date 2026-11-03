@@ -15,19 +15,24 @@ object CurrencyFormatter {
     maximumFractionDigits = 0
   }
 
+  var isPrivacyModeEnabled: Boolean = false
+
   fun format(amount: Double, prefix: String = "₹"): String {
+    if (isPrivacyModeEnabled) return "••••••"
     if (amount.isNaN() || amount.isInfinite()) return if (prefix.isEmpty()) "0" else "$prefix 0"
     val formatted = numberFormat.format(amount)
     return if (prefix.isEmpty()) formatted else "$prefix $formatted"
   }
 
   fun formatWhole(amount: Double, prefix: String = "₹"): String {
+    if (isPrivacyModeEnabled) return "••••••"
     if (amount.isNaN() || amount.isInfinite()) return if (prefix.isEmpty()) "0" else "$prefix 0"
     val formatted = wholeNumberFormat.format(amount)
     return if (prefix.isEmpty()) formatted else "$prefix $formatted"
   }
 
   fun formatPlain(amount: Double): String {
+    if (isPrivacyModeEnabled) return "••••••"
     if (amount.isNaN() || amount.isInfinite()) return "0"
     return numberFormat.format(amount)
   }

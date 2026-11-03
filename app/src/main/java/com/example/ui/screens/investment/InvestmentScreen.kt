@@ -154,6 +154,8 @@ fun InvestmentScreen(
                   sliderValue = (state.sipRate.toFloatOrNull() ?: 12f).coerceIn(1f, 30f),
                   sliderRange = 1f..30f,
                   onSliderChange = { viewModel.updateSip(rate = String.format(java.util.Locale.US, "%.1f", it)) },
+                  presets = listOf("10.0%" to 10.0, "12.0%" to 12.0, "15.0%" to 15.0, "18.0%" to 18.0),
+                  onPresetClick = { viewModel.updateSip(rate = String.format(java.util.Locale.US, "%.1f", it)) },
                   testTag = "sip_rate_input"
                 )
 
@@ -196,6 +198,8 @@ fun InvestmentScreen(
                   sliderValue = (state.lumpRate.toFloatOrNull() ?: 12f).coerceIn(1f, 30f),
                   sliderRange = 1f..30f,
                   onSliderChange = { viewModel.updateLump(rate = String.format(java.util.Locale.US, "%.1f", it)) },
+                  presets = listOf("10.0%" to 10.0, "12.0%" to 12.0, "15.0%" to 15.0, "18.0%" to 18.0),
+                  onPresetClick = { viewModel.updateLump(rate = String.format(java.util.Locale.US, "%.1f", it)) },
                   testTag = "lump_rate_input"
                 )
 

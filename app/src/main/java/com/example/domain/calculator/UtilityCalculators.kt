@@ -2,6 +2,29 @@ package com.example.domain.calculator
 
 object UtilityCalculators {
 
+  data class BillSplitResult(
+    val billAmount: Double,
+    val numPersons: Int,
+    val perPersonShare: Double
+  )
+
+  fun calculateSplit(
+    billAmount: Double,
+    numPersons: Int
+  ): BillSplitResult {
+    val persons = numPersons.coerceAtLeast(1)
+    if (billAmount <= 0.0) {
+      return BillSplitResult(0.0, persons, 0.0)
+    }
+    val perPerson = billAmount / persons
+    return BillSplitResult(
+      billAmount = billAmount,
+      numPersons = persons,
+      perPersonShare = perPerson
+    )
+  }
+
+  // Deprecated compatibility wrapper for existing tests
   data class TipResult(
     val billAmount: Double,
     val tipPercent: Double,
@@ -14,28 +37,18 @@ object UtilityCalculators {
 
   fun calculateTip(
     billAmount: Double,
-    tipPercent: Double,
-    numPersons: Int
+    tipPercent: Double = 0.0,
+    numPersons: Int = 1
   ): TipResult {
     val persons = numPersons.coerceAtLeast(1)
     if (billAmount <= 0.0) {
       return TipResult(0.0, tipPercent, persons, 0.0, 0.0, 0.0, 0.0)
     }
-
     val tipAmount = billAmount * (tipPercent / 100.0)
     val totalAmount = billAmount + tipAmount
     val perPersonTip = tipAmount / persons
     val perPersonTotal = totalAmount / persons
-
-    return TipResult(
-      billAmount = billAmount,
-      tipPercent = tipPercent,
-      numPersons = persons,
-      tipAmount = tipAmount,
-      totalAmount = totalAmount,
-      perPersonTip = perPersonTip,
-      perPersonTotal = perPersonTotal
-    )
+    return TipResult(billAmount, tipPercent, persons, tipAmount, totalAmount, perPersonTip, perPersonTotal)
   }
 
   data class GstResult(

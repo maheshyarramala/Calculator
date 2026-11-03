@@ -86,11 +86,13 @@ jobs:
             Download and install `OmniCalc.apk` below on any Android device to test the app!
 
             #### Included Features:
-            - **EMI & Loan Calculator**: Interactive amortization schedules with prepayment savings simulations and sharing.
+            - **EMI & Loan Calculator**: Interactive amortization schedules with prepayment savings simulations.
+            - **Interest Calculator**: All 5 methods (Simple Interest, Compound Interest, Rule of 72 / Doubling time, Effective APY/EAR, Flat vs Reducing balance comparison).
             - **Wealth & Investment**: SIP growth projections, Lump Sum, Compound Interest, PPF, and Fixed Deposit.
+            - **Finance Hub**: Expense Tracker with custom categories & color tags, Bank Details Vault with one-tap copy, and Trip / Vacation budget manager.
             - **Scientific Calculator**: Standard & full scientific keypad with trigonometry and logarithms.
             - **Age & Calendar**: Exact age breakdowns, next birthday countdowns, date difference, and date arithmetic.
-            - **Currency & Utilities**: Real-time accurate multi-currency converter, customizable rates, Unit Converter, Tip & Split, and GST Calculator.
+            - **Currency & Utilities**: Real-time accurate multi-currency converter, customizable rates, Unit Converter, Split Bill & Group Share, and GST Calculator.
           files: |
             release-artifacts/OmniCalc.apk
           draft: false

@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 enum class UtilityTab(val title: String) {
   CURRENCY("Currency"),
   UNIT_CONVERTER("Units"),
-  TIP_SPLIT("Tip & Split"),
+  TIP_SPLIT("Split Bill"),
   GST_TAX("GST / Tax")
 }
 
@@ -44,11 +44,11 @@ data class UtilityUiState(
   val toUnit: UnitConverter.UnitItem = UnitConverter.lengthUnits[1],
   val unitInput: String = "1",
   val unitOutput: Double = 0.001,
-  // Tip & Split
+  // Split Bill (No Tip)
   val billAmount: String = "1500",
-  val tipPercent: Double = 10.0,
+  val tipPercent: Double = 0.0,
   val numPersons: Int = 3,
-  val tipResult: UtilityCalculators.TipResult = UtilityCalculators.calculateTip(1500.0, 10.0, 3),
+  val tipResult: UtilityCalculators.TipResult = UtilityCalculators.calculateTip(1500.0, 0.0, 3),
   // GST / Tax
   val gstAmount: String = "1000",
   val gstRate: Double = 18.0,

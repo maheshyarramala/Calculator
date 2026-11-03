@@ -2,15 +2,14 @@ package com.example.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme =
+private val BaseDarkColorScheme =
   darkColorScheme(
     primary = IndigoPrimaryDark,
     onPrimary = IndigoOnPrimaryDark,
@@ -33,12 +32,12 @@ private val DarkColorScheme =
     outline = OutlineDark,
   )
 
-private val LightColorScheme =
+private val BaseLightColorScheme =
   lightColorScheme(
     primary = IndigoPrimaryLight,
     onPrimary = IndigoOnPrimaryLight,
     primaryContainer = IndigoPrimaryContainerLight,
-    onPrimaryContainer = IndigoOnPrimaryContainerLight,
+    onPrimaryContainer = IndigoPrimaryContainerLight,
     secondary = EmeraldSecondaryLight,
     onSecondary = EmeraldOnSecondaryLight,
     secondaryContainer = EmeraldSecondaryContainerLight,
@@ -58,19 +57,38 @@ private val LightColorScheme =
 
 @Composable
 fun OmniCalcTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
-    }
+  val themeState by ThemeManager.state.collectAsState()
+  val isSystemDark = isSystemInDarkTheme()
+
+  val isDark = when (themeState.themeMode) {
+    AppThemeMode.SYSTEM -> isSystemDark
+    AppThemeMode.LIGHT -> false
+    AppThemeMode.DARK, AppThemeMode.AMOLED -> true
+  }
+
+  val baseScheme = if (isDark) BaseDarkColorScheme else BaseLightColorScheme
+
+  val primaryColor = if (isDark) themeState.accentTheme.primaryDark else themeState.accentTheme.primaryLight
+  val primaryContainerColor = primaryColor.copy(alpha = if (isDark) 0.25f else 0.15f)
+
+  val colorScheme = if (themeState.themeMode == AppThemeMode.AMOLED) {
+    baseScheme.copy(
+      primary = primaryColor,
+      primaryContainer = primaryContainerColor,
+      background = Color(0xFF000000),
+      surface = Color(0xFF000000),
+      surfaceVariant = Color(0xFF121212),
+      onBackground = Color(0xFFFFFFFF),
+      onSurface = Color(0xFFFFFFFF)
+    )
+  } else {
+    baseScheme.copy(
+      primary = primaryColor,
+      primaryContainer = primaryContainerColor
+    )
+  }
 
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }
