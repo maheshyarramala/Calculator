@@ -1,4 +1,5 @@
 package com.example.ui.screens.calculator
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -62,7 +63,7 @@ fun CalculatorScreen(
           items(state.historyList) { (expr, res) ->
             SuggestionChip(
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.restoreFromHistory(expr)
               },
               label = {
@@ -125,7 +126,7 @@ fun CalculatorScreen(
         FilterChip(
           selected = state.isScientific,
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             viewModel.toggleScientific()
           },
           label = { Text("Scientific", fontSize = 12.sp) },
@@ -139,7 +140,7 @@ fun CalculatorScreen(
           FilterChip(
             selected = state.isRadians,
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.toggleAngleUnit()
             },
             label = { Text(if (state.isRadians) "RAD" else "DEG", fontSize = 12.sp) }
@@ -149,7 +150,7 @@ fun CalculatorScreen(
 
       IconButton(
         onClick = {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.backspace()
         },
         modifier = Modifier.testTag("backspace_button")
@@ -171,19 +172,19 @@ fun CalculatorScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
           ) {
             CalcButton(text = "sin", modifier = Modifier.weight(1f), isFunctional = true) {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.append("sin")
             }
             CalcButton(text = "cos", modifier = Modifier.weight(1f), isFunctional = true) {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.append("cos")
             }
             CalcButton(text = "tan", modifier = Modifier.weight(1f), isFunctional = true) {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.append("tan")
             }
             CalcButton(text = "π", modifier = Modifier.weight(1f), isFunctional = true) {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.append("π")
             }
           }
@@ -192,19 +193,19 @@ fun CalculatorScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
           ) {
             CalcButton(text = "log", modifier = Modifier.weight(1f), isFunctional = true) {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.append("log")
             }
             CalcButton(text = "ln", modifier = Modifier.weight(1f), isFunctional = true) {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.append("ln")
             }
             CalcButton(text = "√", modifier = Modifier.weight(1f), isFunctional = true) {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.append("sqrt")
             }
             CalcButton(text = "^", modifier = Modifier.weight(1f), isFunctional = true) {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.append("^")
             }
           }
@@ -214,95 +215,95 @@ fun CalculatorScreen(
       // Standard Keypad Rows
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         CalcButton(text = "AC", modifier = Modifier.weight(1f), isAction = true) {
-          haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
           viewModel.clear()
         }
         CalcButton(text = "(", modifier = Modifier.weight(1f), isFunctional = true) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("(")
         }
         CalcButton(text = ")", modifier = Modifier.weight(1f), isFunctional = true) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append(")")
         }
         CalcButton(text = "÷", modifier = Modifier.weight(1f), isOperator = true) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("÷")
         }
       }
 
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         CalcButton(text = "7", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("7")
         }
         CalcButton(text = "8", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("8")
         }
         CalcButton(text = "9", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("9")
         }
         CalcButton(text = "×", modifier = Modifier.weight(1f), isOperator = true) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("×")
         }
       }
 
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         CalcButton(text = "4", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("4")
         }
         CalcButton(text = "5", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("5")
         }
         CalcButton(text = "6", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("6")
         }
         CalcButton(text = "-", modifier = Modifier.weight(1f), isOperator = true) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("-")
         }
       }
 
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         CalcButton(text = "1", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("1")
         }
         CalcButton(text = "2", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("2")
         }
         CalcButton(text = "3", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("3")
         }
         CalcButton(text = "+", modifier = Modifier.weight(1f), isOperator = true) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("+")
         }
       }
 
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         CalcButton(text = "%", modifier = Modifier.weight(1f), isFunctional = true) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("%")
         }
         CalcButton(text = "0", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append("0")
         }
         CalcButton(text = ".", modifier = Modifier.weight(1f)) {
-          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
           viewModel.append(".")
         }
         CalcButton(text = "=", modifier = Modifier.weight(1f), isEqual = true) {
-          haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+          haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
           viewModel.equals(context)
         }
       }

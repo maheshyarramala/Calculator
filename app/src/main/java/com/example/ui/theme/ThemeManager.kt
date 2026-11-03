@@ -1,5 +1,6 @@
 package com.example.ui.theme
 
+import android.content.Context
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,18 +40,50 @@ data class AppThemeState(
 )
 
 object ThemeManager {
+  private const val PREFERENCES_NAME = "omni_calc_user_preferences"
+  private const val KEY_THEME_MODE = "theme_mode"
+  private const val KEY_ACCENT_THEME = "accent_theme"
+  private const val KEY_HAPTIC_STRENGTH = "haptic_strength"
+
   private val _state = MutableStateFlow(AppThemeState())
   val state: StateFlow<AppThemeState> = _state.asStateFlow()
 
+  fun initialize(context: Context) {
+    val savedPreferences = context.applicationContext
+      .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    preferences = savedPreferences
+    _state.value = AppThemeState(
+      themeMode = savedPreferences.getString(KEY_THEME_MODE, null)
+        ?.let { value -> AppThemeMode.values().firstOrNull { it.name == value } }
+        ?: AppThemeMode.SYSTEM,
+      accentTheme = savedPreferences.getString(KEY_ACCENT_THEME, null)
+        ?.let { value -> AccentTheme.values().firstOrNull { it.name == value } }
+        ?: AccentTheme.INDIGO,
+      hapticStrength = savedPreferences.getString(KEY_HAPTIC_STRENGTH, null)
+        ?.let { value -> HapticStrength.values().firstOrNull { it.name == value } }
+        ?: HapticStrength.CRISP
+    )
+  }
+
   fun setThemeMode(mode: AppThemeMode) {
     _state.update { it.copy(themeMode = mode) }
+    persist(KEY_THEME_MODE, mode.name)
   }
 
   fun setAccentTheme(accent: AccentTheme) {
     _state.update { it.copy(accentTheme = accent) }
+    persist(KEY_ACCENT_THEME, accent.name)
   }
 
   fun setHapticStrength(strength: HapticStrength) {
     _state.update { it.copy(hapticStrength = strength) }
+    persist(KEY_HAPTIC_STRENGTH, strength.name)
   }
+
+  private fun persist(key: String, value: String) {
+    preferences?.edit()?.putString(key, value)?.apply()
+  }
+
+  @Volatile
+  private var preferences: android.content.SharedPreferences? = null
 }

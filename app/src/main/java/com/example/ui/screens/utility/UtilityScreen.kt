@@ -1,4 +1,5 @@
 package com.example.ui.screens.utility
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -90,7 +91,7 @@ fun UtilityScreen(
           Tab(
             selected = state.selectedTab == tab,
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.selectTab(tab)
             },
             icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
@@ -231,7 +232,7 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
           Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilledTonalIconButton(
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.resetRatesToDefault()
               }
             ) {
@@ -239,7 +240,7 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
             }
             FilledTonalIconButton(
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.saveCalculation(context)
               },
               modifier = Modifier.testTag("save_currency_button")
@@ -280,7 +281,7 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
             FilterChip(
               selected = isSelected,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 if (state.currencyBaseCode == code) {
                   viewModel.swapCurrencies()
                 } else {
@@ -339,7 +340,7 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
         ) {
           FilledIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.swapCurrencies()
             },
             colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -396,7 +397,7 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
               FilterChip(
                 selected = state.currencyTargetCode == code,
                 onClick = {
-                  haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                   viewModel.updateCurrencyTarget(code)
                 },
                 leadingIcon = { Text(info.flag, fontSize = 14.sp) },
@@ -679,7 +680,7 @@ private fun UnitConverterSection(viewModel: UtilityViewModel) {
         Text("Unit Converter", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
         FilledTonalIconButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
             viewModel.saveCalculation(context)
           },
           modifier = Modifier.testTag("save_unit_button")
@@ -704,7 +705,7 @@ private fun UnitConverterSection(viewModel: UtilityViewModel) {
           FilterChip(
             selected = state.unitCategory == cat,
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.selectCategory(cat)
             },
             leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
@@ -738,7 +739,7 @@ private fun UnitConverterSection(viewModel: UtilityViewModel) {
 
         IconButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             viewModel.swapUnits()
           },
           modifier = Modifier.padding(horizontal = 4.dp)
@@ -856,7 +857,7 @@ private fun TipSplitSection(viewModel: UtilityViewModel) {
         }
         FilledTonalIconButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
             viewModel.saveCalculation(context)
           },
           modifier = Modifier.testTag("save_tip_button")
@@ -885,7 +886,7 @@ private fun TipSplitSection(viewModel: UtilityViewModel) {
             FilterChip(
               selected = state.numPersons == count,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.updateNumPersons(count)
               },
               label = { Text("$count", fontWeight = FontWeight.SemiBold) },
@@ -908,7 +909,7 @@ private fun TipSplitSection(viewModel: UtilityViewModel) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.updateNumPersons(state.numPersons - 1)
             },
             enabled = state.numPersons > 1
@@ -924,7 +925,7 @@ private fun TipSplitSection(viewModel: UtilityViewModel) {
 
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.updateNumPersons(state.numPersons + 1)
             }
           ) {
@@ -1006,7 +1007,7 @@ private fun GstTaxSection(viewModel: UtilityViewModel) {
         Text("GST & Tax Calculator", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
         FilledTonalIconButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
             viewModel.saveCalculation(context)
           },
           modifier = Modifier.testTag("save_gst_button")
@@ -1027,7 +1028,7 @@ private fun GstTaxSection(viewModel: UtilityViewModel) {
           icon = Icons.Default.AddCircle,
           isSelected = state.gstIsExclusive,
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             viewModel.updateGstExclusive(true)
           },
           modifier = Modifier.weight(1f)
@@ -1039,7 +1040,7 @@ private fun GstTaxSection(viewModel: UtilityViewModel) {
           icon = Icons.Default.RemoveCircle,
           isSelected = !state.gstIsExclusive,
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             viewModel.updateGstExclusive(false)
           },
           modifier = Modifier.weight(1f)
@@ -1066,7 +1067,7 @@ private fun GstTaxSection(viewModel: UtilityViewModel) {
             FilterChip(
               selected = state.gstRate == rate,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.updateGstRate(rate)
               },
               label = { Text("${rate.toInt()}%", fontSize = 11.sp) },

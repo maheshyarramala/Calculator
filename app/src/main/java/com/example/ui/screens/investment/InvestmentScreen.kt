@@ -1,4 +1,5 @@
 package com.example.ui.screens.investment
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -80,7 +81,7 @@ fun InvestmentScreen(
             Tab(
               selected = state.selectedTab == tab,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.selectTab(tab)
               },
               icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
@@ -119,7 +120,7 @@ fun InvestmentScreen(
               )
               FilledTonalIconButton(
                 onClick = {
-                  haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                   viewModel.saveCalculation(context)
                 },
                 modifier = Modifier.testTag("save_investment_button")
@@ -258,7 +259,7 @@ fun InvestmentScreen(
                     FilterChip(
                       selected = state.ciFrequency == freq,
                       onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                         viewModel.updateCi(freq = freq)
                       },
                       label = { Text(freq.title, fontSize = 11.sp) }

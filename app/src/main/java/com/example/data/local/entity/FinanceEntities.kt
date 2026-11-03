@@ -1,6 +1,7 @@
 package com.example.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "expense_categories")
@@ -63,6 +64,10 @@ data class SubscriptionRecord(
   val amount: Double,
   val billingCycle: String = "MONTHLY", // MONTHLY, YEARLY, WEEKLY
   val dueDayOfMonth: Int = 1, // 1-31
+  @ColumnInfo(defaultValue = "1")
+  val dueMonth: Int = 1, // 1-12, used for yearly billing
+  @ColumnInfo(defaultValue = "1")
+  val dueDayOfWeek: Int = 1, // 1-7, Monday-Sunday, used for weekly billing
   val categoryName: String = "Bills & Utilities",
   val bankAccountId: Long? = null,
   val bankAccountName: String = "",

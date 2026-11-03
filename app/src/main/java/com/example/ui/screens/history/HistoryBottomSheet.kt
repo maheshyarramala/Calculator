@@ -1,4 +1,5 @@
 package com.example.ui.screens.history
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -124,7 +125,7 @@ fun HistoryBottomSheet(
           FilterChip(
             selected = selectedFilter == key,
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.setFilter(key)
             },
             label = { Text(label, fontSize = 12.sp) }

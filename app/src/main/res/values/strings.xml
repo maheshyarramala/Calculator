@@ -1,3 +1,32 @@
 <resources>
     <string name="app_name">OmniCalc</string>
+    <string name="navigation_home">Home</string>
+    <string name="navigation_emi">EMI</string>
+    <string name="navigation_finance">Finance</string>
+    <string name="navigation_investments">Invest</string>
+    <string name="navigation_utility">Utility</string>
+    <string name="navigation_calculator">Calc</string>
+    <string name="navigation_interest">Interest</string>
+    <string name="navigation_age_date">Age &amp; Date</string>
+    <string name="home_quick_log_expense">Log Expense</string>
+    <string name="home_quick_add_income">Add Income</string>
+    <string name="home_quick_split_bill">Split Bill</string>
+    <string name="theme_settings_title">Personalize Experience</string>
+    <string name="theme_settings_description">Dark modes, accent colors &amp; tactile tuning</string>
+    <string name="theme_mode_label">Theme Mode</string>
+    <string name="theme_accent_label">Accent Palette</string>
+    <string name="theme_haptics_label">Keypad Haptic Feedback</string>
+    <string name="theme_mode_system">System</string>
+    <string name="theme_mode_light">Light</string>
+    <string name="theme_mode_dark">Dark</string>
+    <string name="theme_mode_amoled">AMOLED</string>
+    <string name="haptic_crisp">Crisp (Default)</string>
+    <string name="haptic_subtle">Subtle</string>
+    <string name="haptic_off">Off</string>
+    <string name="subscription_due_today">Due Today</string>
+    <string name="subscription_due_in_days">Due in %1$d days</string>
+    <string name="subscription_due_in_one_day">Due in 1 day</string>
+    <string name="subscription_paid_this_cycle">Paid this cycle</string>
+    <string name="subscription_due_month">Due month</string>
+    <string name="subscription_due_weekday">Due weekday</string>
 </resources>

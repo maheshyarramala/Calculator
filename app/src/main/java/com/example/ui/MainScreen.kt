@@ -1,5 +1,7 @@
 package com.example.ui
 
+import com.example.ui.theme.performConfiguredHapticFeedback
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
@@ -17,6 +19,9 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,7 +34,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.R
 import com.example.ui.screens.agecalendar.AgeCalendarScreen
 import com.example.ui.screens.agecalendar.AgeCalendarTab
 import com.example.ui.screens.agecalendar.AgeCalendarViewModel
@@ -61,19 +68,26 @@ import com.example.ui.theme.HapticStrength
 import com.example.ui.theme.ThemeManager
 
 enum class MainDestination(
-  val label: String,
+  val labelRes: Int,
   val icon: ImageVector,
   val isBottomTab: Boolean = true
 ) {
-  HOME("Home", Icons.Default.Dashboard),
-  EMI("EMI", Icons.Default.AccountBalance),
-  FINANCE("Finance", Icons.Default.Savings),
-  INVESTMENTS("Invest", Icons.AutoMirrored.Filled.TrendingUp),
-  UTILITIES("Utility", Icons.Default.Widgets),
-  CALCULATOR("Calc", Icons.Default.Calculate, isBottomTab = false),
-  INTEREST("Interest", Icons.Default.Percent, isBottomTab = false),
-  AGE_CALENDAR("Age & Date", Icons.Default.CalendarMonth, isBottomTab = false)
+  HOME(R.string.navigation_home, Icons.Default.Dashboard),
+  EMI(R.string.navigation_emi, Icons.Default.AccountBalance),
+  FINANCE(R.string.navigation_finance, Icons.Default.Savings),
+  INVESTMENTS(R.string.navigation_investments, Icons.AutoMirrored.Filled.TrendingUp),
+  UTILITIES(R.string.navigation_utility, Icons.Default.Widgets),
+  CALCULATOR(R.string.navigation_calculator, Icons.Default.Calculate, isBottomTab = false),
+  INTEREST(R.string.navigation_interest, Icons.Default.Percent, isBottomTab = false),
+  AGE_CALENDAR(R.string.navigation_age_date, Icons.Default.CalendarMonth, isBottomTab = false)
 }
+
+private val mainDestinationSaver = Saver<MainDestination, String>(
+  save = { it.name },
+  restore = { savedName ->
+    MainDestination.values().firstOrNull { it.name == savedName } ?: MainDestination.HOME
+  }
+)
 
 data class CalculatorHubItem(
   val title: String,
@@ -88,12 +102,13 @@ data class CalculatorHubItem(
 fun MainScreen(
   modifier: Modifier = Modifier
 ) {
-  var currentDestination by remember { mutableStateOf(MainDestination.HOME) }
-  var showHistorySheet by remember { mutableStateOf(false) }
-  var showFavoritesSheet by remember { mutableStateOf(false) }
-  var showHubSheet by remember { mutableStateOf(false) }
-  var showThemeSheet by remember { mutableStateOf(false) }
+  var currentDestination by rememberSaveable(stateSaver = mainDestinationSaver) { mutableStateOf(MainDestination.HOME) }
+  var showHistorySheet by rememberSaveable { mutableStateOf(false) }
+  var showFavoritesSheet by rememberSaveable { mutableStateOf(false) }
+  var showHubSheet by rememberSaveable { mutableStateOf(false) }
+  var showThemeSheet by rememberSaveable { mutableStateOf(false) }
   var isPrivacyMode by remember { mutableStateOf(CurrencyFormatter.isPrivacyModeEnabled) }
+  val saveableStateHolder = rememberSaveableStateHolder()
 
   val emiViewModel: EmiViewModel = viewModel()
   val investmentViewModel: InvestmentViewModel = viewModel()
@@ -235,7 +250,7 @@ fun MainScreen(
           // Favorites Button (Dedicated section)
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               showFavoritesSheet = true
             },
             modifier = Modifier.testTag("favorites_top_button")
@@ -246,7 +261,7 @@ fun MainScreen(
           // History Button (Dedicated section)
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               showHistorySheet = true
             },
             modifier = Modifier.testTag("history_top_button")
@@ -257,7 +272,7 @@ fun MainScreen(
           // Theme Settings Button
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               showThemeSheet = true
             },
             modifier = Modifier.testTag("theme_settings_top_btn")
@@ -268,7 +283,7 @@ fun MainScreen(
           // Hub Button
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               showHubSheet = true
             },
             modifier = Modifier.testTag("hub_top_button")
@@ -290,15 +305,15 @@ fun MainScreen(
           NavigationBarItem(
             selected = currentDestination == destination,
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               currentDestination = destination
             },
             icon = {
-              Icon(destination.icon, contentDescription = destination.label)
+              Icon(destination.icon, contentDescription = stringResource(destination.labelRes))
             },
             label = {
               Text(
-                text = destination.label,
+                text = stringResource(destination.labelRes),
                 fontWeight = if (currentDestination == destination) FontWeight.Bold else FontWeight.Normal
               )
             },
@@ -317,7 +332,8 @@ fun MainScreen(
         .fillMaxSize()
         .padding(paddingValues)
     ) { destination ->
-      when (destination) {
+      saveableStateHolder.SaveableStateProvider(destination.name) {
+        when (destination) {
         MainDestination.HOME -> HomeScreen(
           financeViewModel = financeViewModel,
           emiViewModel = emiViewModel,
@@ -356,6 +372,7 @@ fun MainScreen(
         MainDestination.UTILITIES -> UtilityScreen(viewModel = utilityViewModel)
         MainDestination.INTEREST -> InterestCalculatorScreen(viewModel = interestViewModel)
         MainDestination.AGE_CALENDAR -> AgeCalendarScreen(viewModel = ageCalendarViewModel)
+        }
       }
     }
   }
@@ -368,7 +385,7 @@ private fun AllCalculatorsHubSheet(
   onDismiss: () -> Unit
 ) {
   val haptic = LocalHapticFeedback.current
-  var searchQuery by remember { mutableStateOf("") }
+  var searchQuery by rememberSaveable { mutableStateOf("") }
 
   val filteredItems = remember(items, searchQuery) {
     if (searchQuery.isBlank()) items
@@ -458,7 +475,7 @@ private fun AllCalculatorsHubSheet(
           items(filteredItems) { item ->
             Card(
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 item.onClick()
               },
               shape = RoundedCornerShape(16.dp),
@@ -537,11 +554,11 @@ private fun ThemeSettingsBottomSheet(
       ) {
         Column {
           Text(
-            text = "Personalize Experience",
+            text = stringResource(R.string.theme_settings_title),
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
           )
           Text(
-            text = "Dark modes, accent colors & tactile tuning",
+            text = stringResource(R.string.theme_settings_description),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -554,7 +571,7 @@ private fun ThemeSettingsBottomSheet(
       // 1. Dark Mode Options
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-          text = "Theme Mode",
+          text = stringResource(R.string.theme_mode_label),
           fontWeight = FontWeight.Bold,
           style = MaterialTheme.typography.titleMedium,
           maxLines = 1,
@@ -570,16 +587,16 @@ private fun ThemeSettingsBottomSheet(
             FilterChip(
               selected = isSelected,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 ThemeManager.setThemeMode(mode)
               },
               label = {
                 Text(
                   when (mode) {
-                    AppThemeMode.SYSTEM -> "System"
-                    AppThemeMode.LIGHT -> "Light"
-                    AppThemeMode.DARK -> "Dark"
-                    AppThemeMode.AMOLED -> "AMOLED"
+                    AppThemeMode.SYSTEM -> stringResource(R.string.theme_mode_system)
+                    AppThemeMode.LIGHT -> stringResource(R.string.theme_mode_light)
+                    AppThemeMode.DARK -> stringResource(R.string.theme_mode_dark)
+                    AppThemeMode.AMOLED -> stringResource(R.string.theme_mode_amoled)
                   },
                   fontSize = 12.sp,
                   fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
@@ -597,7 +614,7 @@ private fun ThemeSettingsBottomSheet(
       // 2. Accent Palette
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-          text = "Accent Palette",
+          text = stringResource(R.string.theme_accent_label),
           fontWeight = FontWeight.Bold,
           style = MaterialTheme.typography.titleMedium,
           maxLines = 1,
@@ -612,7 +629,7 @@ private fun ThemeSettingsBottomSheet(
             val isSelected = themeState.accentTheme == accent
             Card(
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 ThemeManager.setAccentTheme(accent)
               },
               shape = RoundedCornerShape(14.dp),
@@ -653,7 +670,7 @@ private fun ThemeSettingsBottomSheet(
       // 3. Tactile Vibration Haptics
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-          text = "Keypad Haptic Feedback",
+          text = stringResource(R.string.theme_haptics_label),
           fontWeight = FontWeight.Bold,
           style = MaterialTheme.typography.titleMedium,
           maxLines = 1,
@@ -669,17 +686,23 @@ private fun ThemeSettingsBottomSheet(
             FilterChip(
               selected = isSelected,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                 ThemeManager.setHapticStrength(strength)
               },
               label = {
                 Text(
-                  strength.title,
+                  when (strength) {
+                    HapticStrength.CRISP -> stringResource(R.string.haptic_crisp)
+                    HapticStrength.SUBTLE -> stringResource(R.string.haptic_subtle)
+                    HapticStrength.OFF -> stringResource(R.string.haptic_off)
+                  },
                   fontSize = 12.sp,
                   fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                 )
               },
-              modifier = Modifier.weight(1f)
+              modifier = Modifier
+                .weight(1f)
+                .testTag("haptic_strength_${strength.name.lowercase()}")
             )
           }
         }
@@ -687,4 +710,3 @@ private fun ThemeSettingsBottomSheet(
     }
   }
 }
-

@@ -1,4 +1,5 @@
 package com.example.ui.screens.interest
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -83,7 +84,7 @@ fun InterestCalculatorScreen(
             Tab(
               selected = state.selectedMethod == method,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.selectMethod(method)
               },
               icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
@@ -148,7 +149,7 @@ private fun SimpleInterestSection(viewModel: InterestCalculatorViewModel) {
           Text("Simple Interest (SI)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.saveCalculation(context)
             }
           ) {
@@ -194,7 +195,7 @@ private fun SimpleInterestSection(viewModel: InterestCalculatorViewModel) {
                 FilterChip(
                   selected = state.siTimeUnit == unit,
                   onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                     viewModel.updateSi(unit = unit)
                   },
                   label = { Text(unit.title.take(2), fontSize = 11.sp) }
@@ -258,7 +259,7 @@ private fun CompoundInterestSection(viewModel: InterestCalculatorViewModel) {
           Text("Compound Interest (CI)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.saveCalculation(context)
             }
           ) {
@@ -293,7 +294,7 @@ private fun CompoundInterestSection(viewModel: InterestCalculatorViewModel) {
             FilterChip(
               selected = state.ciFrequency == freq,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.updateCi(freq = freq)
               },
               label = { Text(freq.title.split(" ").first(), fontSize = 11.sp) }
@@ -352,7 +353,7 @@ private fun DoublingPeriodSection(viewModel: InterestCalculatorViewModel) {
           Text("Rule of 72 & Doubling Time", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.saveCalculation(context)
             }
           ) {
@@ -427,7 +428,7 @@ private fun EffectiveRateSection(viewModel: InterestCalculatorViewModel) {
           Text("Effective Annual Rate (APY)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.saveCalculation(context)
             }
           ) {
@@ -448,7 +449,7 @@ private fun EffectiveRateSection(viewModel: InterestCalculatorViewModel) {
             FilterChip(
               selected = state.earFrequency == freq,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.updateEar(freq = freq)
               },
               label = { Text(freq.title.split(" ").first(), fontSize = 11.sp) }
@@ -503,7 +504,7 @@ private fun FlatVsReducingSection(viewModel: InterestCalculatorViewModel) {
           Text("Flat vs Reducing Balance Rate", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.saveCalculation(context)
             }
           ) {

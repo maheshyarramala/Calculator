@@ -1,4 +1,5 @@
 package com.example.ui.screens.finance
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -33,6 +34,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -45,10 +47,13 @@ import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.TripRecord
 import com.example.data.local.entity.SubscriptionRecord
+import com.example.domain.calculator.SubscriptionDueDateCalculator
 import org.json.JSONObject
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import java.util.Calendar
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -213,8 +218,8 @@ fun FinanceHubScreen(
       categories = categories,
       bankAccounts = bankAccounts,
       onDismiss = { viewModel.setShowAddSubscription(false) },
-      onConfirm = { name, amount, cycle, day, cat, accId, accName, notes ->
-        viewModel.addSubscription(name, amount, cycle, day, cat, accId, accName, notes)
+      onConfirm = { name, amount, cycle, day, month, weekday, cat, accId, accName, notes ->
+        viewModel.addSubscription(name, amount, cycle, day, month, weekday, cat, accId, accName, notes)
       }
     )
   }
@@ -249,7 +254,7 @@ fun FinanceHubScreen(
         FinanceTab.EXPENSES -> {
           FloatingActionButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.setShowAddExpense(true)
             },
             containerColor = MaterialTheme.colorScheme.primary,
@@ -262,7 +267,7 @@ fun FinanceHubScreen(
         FinanceTab.SUBSCRIPTIONS -> {
           FloatingActionButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.setShowAddSubscription(true)
             },
             containerColor = Color(0xFF6366F1),
@@ -275,7 +280,7 @@ fun FinanceHubScreen(
         FinanceTab.TRIPS -> {
           FloatingActionButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.setShowAddTrip(true)
             },
             containerColor = Color(0xFF0D9488),
@@ -321,7 +326,7 @@ fun FinanceHubScreen(
 
         FilledTonalButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             viewModel.setShowBackupModal(true)
           },
           shape = RoundedCornerShape(12.dp),
@@ -355,7 +360,7 @@ fun FinanceHubScreen(
           Tab(
             selected = uiState.selectedTab == tab,
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.selectTab(tab)
             },
             icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
@@ -599,7 +604,7 @@ private fun ExpensesSection(
         }
         FilledTonalButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             onAddAccountClick()
           },
           shape = RoundedCornerShape(10.dp),
@@ -632,7 +637,7 @@ private fun ExpensesSection(
             modifier = Modifier
               .width(200.dp)
               .clickable {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onSelectAccountFilter(if (isSelected) null else accWithBal.account.id)
               }
           ) {
@@ -768,7 +773,7 @@ private fun ExpensesSection(
       ) {
         FilledTonalButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
             onAddExpenseClick()
           },
           colors = ButtonDefaults.filledTonalButtonColors(
@@ -786,7 +791,7 @@ private fun ExpensesSection(
 
         FilledTonalButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
             onAddIncomeClick()
           },
           colors = ButtonDefaults.filledTonalButtonColors(
@@ -804,7 +809,7 @@ private fun ExpensesSection(
 
         OutlinedButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             onAddCategoryClick()
           },
           shape = RoundedCornerShape(12.dp),
@@ -1703,7 +1708,7 @@ private fun BankVaultLockScreen(
               "Del" -> {
                 FilledTonalIconButton(
                   onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onBackspace()
                   },
                   modifier = Modifier.size(64.dp)
@@ -1714,7 +1719,7 @@ private fun BankVaultLockScreen(
               else -> {
                 FilledTonalButton(
                   onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onDigitClick(key)
                   },
                   shape = CircleShape,
@@ -2914,7 +2919,7 @@ private fun BackupRestoreBottomSheet(
 
           Button(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               onExportToFile()
             },
             shape = RoundedCornerShape(10.dp),
@@ -2933,7 +2938,7 @@ private fun BackupRestoreBottomSheet(
           ) {
             OutlinedButton(
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onShareBackup()
               },
               shape = RoundedCornerShape(10.dp),
@@ -2948,7 +2953,7 @@ private fun BackupRestoreBottomSheet(
 
             OutlinedButton(
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onCopyJson()
               },
               shape = RoundedCornerShape(10.dp),
@@ -3010,7 +3015,7 @@ private fun BackupRestoreBottomSheet(
 
           Button(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               onImportFromFile()
             },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
@@ -3026,7 +3031,7 @@ private fun BackupRestoreBottomSheet(
 
           OutlinedButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               onPasteJsonClick()
             },
             shape = RoundedCornerShape(10.dp),
@@ -3304,9 +3309,15 @@ private fun SubscriptionsSection(
   onDeleteSubscription: (SubscriptionRecord) -> Unit
 ) {
   val haptic = LocalHapticFeedback.current
-  val todayDay = remember { Calendar.getInstance().get(Calendar.DAY_OF_MONTH) }
+  val today = LocalDate.now()
   val totalMonthlyBills = remember(subscriptions) {
-    subscriptions.sumOf { it.amount }
+    subscriptions.sumOf { subscription ->
+      when (subscription.billingCycle.uppercase()) {
+        "WEEKLY" -> subscription.amount * 52.0 / 12.0
+        "YEARLY" -> subscription.amount / 12.0
+        else -> subscription.amount
+      }
+    }
   }
 
   LazyColumn(
@@ -3461,7 +3472,7 @@ private fun SubscriptionsSection(
         ) {
           SubscriptionItemCard(
             sub = sub,
-            todayDay = todayDay,
+            today = today,
             onMarkPaid = { onMarkPaid(sub) },
             onDelete = { onDeleteSubscription(sub) }
           )
@@ -3474,30 +3485,23 @@ private fun SubscriptionsSection(
 @Composable
 private fun SubscriptionItemCard(
   sub: SubscriptionRecord,
-  todayDay: Int,
+  today: LocalDate,
   onMarkPaid: () -> Unit,
   onDelete: () -> Unit
 ) {
-  val daysLeft = sub.dueDayOfMonth - todayDay
+  val daysLeft = ChronoUnit.DAYS.between(
+    today,
+    SubscriptionDueDateCalculator.nextDueDate(sub, today)
+  ).toInt()
   val statusLabel = when {
-    daysLeft == 0 -> "⚠️ Due Today"
-    daysLeft in 1..3 -> "⚠️ Due in $daysLeft ${if (daysLeft == 1) "day" else "days"}"
-    daysLeft < 0 -> "Day ${sub.dueDayOfMonth} of month"
-    else -> "Due in $daysLeft days"
+    daysLeft == 0 -> stringResource(com.example.R.string.subscription_due_today)
+    daysLeft == 1 -> stringResource(com.example.R.string.subscription_due_in_one_day)
+    else -> stringResource(com.example.R.string.subscription_due_in_days, daysLeft)
   }
 
   val isUrgent = daysLeft in 0..3
 
-  // Check if paid this month
-  val isPaidThisMonth = remember(sub.lastPaidTimestamp) {
-    if (sub.lastPaidTimestamp <= 0L) false
-    else {
-      val nowCal = Calendar.getInstance()
-      val paidCal = Calendar.getInstance().apply { timeInMillis = sub.lastPaidTimestamp }
-      paidCal.get(Calendar.MONTH) == nowCal.get(Calendar.MONTH) &&
-          paidCal.get(Calendar.YEAR) == nowCal.get(Calendar.YEAR)
-    }
-  }
+  val isPaidThisCycle = SubscriptionDueDateCalculator.isPaidInCurrentCycle(sub, today)
 
   Card(
     shape = RoundedCornerShape(16.dp),
@@ -3569,13 +3573,13 @@ private fun SubscriptionItemCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
           Surface(
             shape = RoundedCornerShape(8.dp),
-            color = if (isPaidThisMonth) Color(0xFFD1FAE5) else if (isUrgent) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surfaceVariant
+            color = if (isPaidThisCycle) Color(0xFFD1FAE5) else if (isUrgent) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surfaceVariant
           ) {
             Text(
-              text = if (isPaidThisMonth) "✅ Paid this month" else statusLabel,
+              text = if (isPaidThisCycle) stringResource(com.example.R.string.subscription_paid_this_cycle) else statusLabel,
               fontSize = 10.5.sp,
               fontWeight = FontWeight.Bold,
-              color = if (isPaidThisMonth) Color(0xFF047857) else if (isUrgent) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurfaceVariant,
+              color = if (isPaidThisCycle) Color(0xFF047857) else if (isUrgent) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
             )
           }
@@ -3593,13 +3597,14 @@ private fun SubscriptionItemCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
           FilledTonalButton(
             onClick = onMarkPaid,
+            enabled = !isPaidThisCycle,
             shape = RoundedCornerShape(8.dp),
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
             modifier = Modifier.height(28.dp)
           ) {
             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(13.dp))
             Spacer(modifier = Modifier.width(3.dp))
-            Text("Mark Paid", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(if (isPaidThisCycle) "Paid" else "Mark Paid", fontSize = 11.sp, fontWeight = FontWeight.Bold)
           }
 
           Spacer(modifier = Modifier.width(4.dp))
@@ -3854,12 +3859,16 @@ private fun AddSubscriptionDialog(
   categories: List<ExpenseCategory>,
   bankAccounts: List<BankAccount>,
   onDismiss: () -> Unit,
-  onConfirm: (name: String, amount: Double, billingCycle: String, dueDayOfMonth: Int, categoryName: String, bankAccountId: Long?, bankAccountName: String, notes: String) -> Unit
+  onConfirm: (name: String, amount: Double, billingCycle: String, dueDayOfMonth: Int, dueMonth: Int, dueDayOfWeek: Int, categoryName: String, bankAccountId: Long?, bankAccountName: String, notes: String) -> Unit
 ) {
   var name by remember { mutableStateOf("") }
   var amountStr by remember { mutableStateOf("") }
   var cycle by remember { mutableStateOf("MONTHLY") }
   var dueDay by remember { mutableIntStateOf(1) }
+  var dueMonth by remember { mutableIntStateOf(LocalDate.now().monthValue) }
+  var dueDayOfWeek by remember { mutableIntStateOf(LocalDate.now().dayOfWeek.value) }
+  var isDueMonthMenuExpanded by remember { mutableStateOf(false) }
+  var isDueWeekdayMenuExpanded by remember { mutableStateOf(false) }
   var selectedCategory by remember { mutableStateOf(categories.firstOrNull()?.name ?: "Bills & Utilities") }
   var selectedBank by remember { mutableStateOf(bankAccounts.firstOrNull()) }
   var notes by remember { mutableStateOf("") }
@@ -3908,17 +3917,89 @@ private fun AddSubscriptionDialog(
           }
         }
 
-        OutlinedTextField(
-          value = dueDay.toString(),
-          onValueChange = { str ->
-            val num = str.toIntOrNull()
-            if (num != null && num in 1..31) dueDay = num
-          },
-          label = { Text("Due Day of Month (1-31)") },
-          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth()
-        )
+        if (cycle == "WEEKLY") {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text(stringResource(com.example.R.string.subscription_due_weekday))
+            Box {
+              TextButton(onClick = { isDueWeekdayMenuExpanded = true }) {
+                Text(
+                  java.time.DayOfWeek.of(dueDayOfWeek).getDisplayName(
+                    java.time.format.TextStyle.FULL,
+                    Locale.getDefault()
+                  )
+                )
+              }
+              DropdownMenu(
+                expanded = isDueWeekdayMenuExpanded,
+                onDismissRequest = { isDueWeekdayMenuExpanded = false }
+              ) {
+                java.time.DayOfWeek.values().forEach { day ->
+                  DropdownMenuItem(
+                    text = {
+                      Text(day.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()))
+                    },
+                    onClick = {
+                      dueDayOfWeek = day.value
+                      isDueWeekdayMenuExpanded = false
+                    }
+                  )
+                }
+              }
+            }
+          }
+        } else {
+          OutlinedTextField(
+            value = dueDay.toString(),
+            onValueChange = { str ->
+              val num = str.toIntOrNull()
+              if (num != null && num in 1..31) dueDay = num
+            },
+            label = { Text("Due Day of Month (1-31)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+        }
+
+        if (cycle == "YEARLY") {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text(stringResource(com.example.R.string.subscription_due_month))
+            Box {
+              TextButton(onClick = { isDueMonthMenuExpanded = true }) {
+                Text(
+                  java.time.Month.of(dueMonth).getDisplayName(
+                    java.time.format.TextStyle.FULL,
+                    Locale.getDefault()
+                  )
+                )
+              }
+              DropdownMenu(
+                expanded = isDueMonthMenuExpanded,
+                onDismissRequest = { isDueMonthMenuExpanded = false }
+              ) {
+                java.time.Month.values().forEach { month ->
+                  DropdownMenuItem(
+                    text = {
+                      Text(month.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()))
+                    },
+                    onClick = {
+                      dueMonth = month.value
+                      isDueMonthMenuExpanded = false
+                    }
+                  )
+                }
+              }
+            }
+          }
+        }
 
         if (bankAccounts.isNotEmpty()) {
           Text("Pay via Account:", style = MaterialTheme.typography.labelSmall)
@@ -3939,7 +4020,7 @@ private fun AddSubscriptionDialog(
         onClick = {
           val amt = amountStr.toDoubleOrNull() ?: 0.0
           if (name.isNotBlank() && amt > 0.0) {
-            onConfirm(name, amt, cycle, dueDay, selectedCategory, selectedBank?.id, selectedBank?.bankName ?: "", notes)
+            onConfirm(name, amt, cycle, dueDay, dueMonth, dueDayOfWeek, selectedCategory, selectedBank?.id, selectedBank?.bankName ?: "", notes)
           }
         },
         enabled = name.isNotBlank() && (amountStr.toDoubleOrNull() ?: 0.0) > 0.0
@@ -4143,4 +4224,3 @@ private fun parseCategoryCaps(jsonStr: String): Map<String, Double> {
     emptyMap()
   }
 }
-

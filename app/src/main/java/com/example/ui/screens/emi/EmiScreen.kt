@@ -1,4 +1,5 @@
 package com.example.ui.screens.emi
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -61,7 +62,7 @@ fun EmiScreen(
       totalMonths = state.emiResult.originalTenureMonths,
       onDismiss = { viewModel.setShowPrepaymentDialog(false) },
       onConfirm = { month, amount ->
-        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
         viewModel.addPrepayment(month, amount)
       }
     )
@@ -118,7 +119,7 @@ fun EmiScreen(
               Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalIconButton(
                   onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                     try {
                       val p = state.principalInput.toDoubleOrNull() ?: 1000000.0
                       val r = state.interestRateInput.toDoubleOrNull() ?: 8.5
@@ -135,7 +136,7 @@ fun EmiScreen(
                 }
                 FilledTonalIconButton(
                   onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                     viewModel.saveCalculation(context)
                   },
                   modifier = Modifier.testTag("save_emi_button")
@@ -144,7 +145,7 @@ fun EmiScreen(
                 }
                 FilledTonalIconButton(
                   onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                     viewModel.shareAmortization(context)
                   },
                   modifier = Modifier.testTag("share_emi_button")
@@ -170,7 +171,7 @@ fun EmiScreen(
                 "+1,000,000" to 1000000.0
               ),
               onPresetClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.addPrincipalPreset(it)
               },
               testTag = "principal_input"
@@ -192,7 +193,7 @@ fun EmiScreen(
                 "12.0%" to 12.0
               ),
               onPresetClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.updateInterestRate(String.format(java.util.Locale.US, "%.1f", it))
               },
               testTag = "interest_rate_input"
@@ -213,7 +214,7 @@ fun EmiScreen(
                 FilterChip(
                   selected = true,
                   onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                     viewModel.toggleTenureUnit()
                   },
                   label = {
@@ -245,7 +246,7 @@ fun EmiScreen(
                   listOf("60 Months" to 60.0, "120 Months" to 120.0, "180 Months" to 180.0, "240 Months" to 240.0)
                 },
                 onPresetClick = {
-                  haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                   viewModel.updateTenure(it.toInt().toString())
                 },
                 testTag = "tenure_input"
@@ -417,7 +418,7 @@ fun EmiScreen(
                   )
                   IconButton(
                     onClick = {
-                      haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                      haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                       viewModel.removePrepayment(p.id)
                     },
                     modifier = Modifier.size(28.dp)

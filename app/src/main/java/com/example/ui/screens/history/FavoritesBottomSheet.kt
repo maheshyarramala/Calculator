@@ -1,4 +1,5 @@
 package com.example.ui.screens.history
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -91,7 +92,7 @@ fun FavoritesBottomSheet(
         ).forEach { (key, label) ->
           AssistChip(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               onOpenTool(key)
               onDismiss()
             },
@@ -199,7 +200,7 @@ fun FavoritesBottomSheet(
                 ) {
                   IconButton(
                     onClick = {
-                      haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                      haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                       viewModel.toggleFavorite(item)
                     },
                     modifier = Modifier.size(32.dp)

@@ -1,4 +1,5 @@
 package com.example.ui.screens.agecalendar
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import android.app.DatePickerDialog
 import androidx.compose.animation.AnimatedVisibility
@@ -80,7 +81,7 @@ fun AgeCalendarScreen(
             Tab(
               selected = state.selectedTab == tab,
               onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                 viewModel.selectTab(tab)
               },
               icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
@@ -149,7 +150,7 @@ private fun AgeCalculatorSection(viewModel: AgeCalendarViewModel) {
           )
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.saveCalculation(context)
             },
             modifier = Modifier.testTag("save_age_button")
@@ -377,7 +378,7 @@ private fun DateDifferenceSection(viewModel: AgeCalendarViewModel) {
           )
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.saveCalculation(context)
             },
             modifier = Modifier.testTag("save_date_diff_button")
@@ -503,7 +504,7 @@ private fun DateAddSubtractSection(viewModel: AgeCalendarViewModel) {
           )
           FilledTonalIconButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.saveCalculation(context)
             },
             modifier = Modifier.testTag("save_date_adjust_button")
@@ -527,7 +528,7 @@ private fun DateAddSubtractSection(viewModel: AgeCalendarViewModel) {
         ) {
           Card(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.toggleAdjOperation(true)
             },
             shape = RoundedCornerShape(14.dp),
@@ -561,7 +562,7 @@ private fun DateAddSubtractSection(viewModel: AgeCalendarViewModel) {
 
           Card(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.toggleAdjOperation(false)
             },
             shape = RoundedCornerShape(14.dp),

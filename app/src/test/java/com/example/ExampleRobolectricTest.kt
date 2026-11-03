@@ -4,7 +4,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import com.example.ui.theme.AccentTheme
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.HapticStrength
+import com.example.ui.theme.ThemeManager
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -78,5 +83,26 @@ class ExampleRobolectricTest {
     // Test invalid JSON handling
     val invalidResult = com.example.domain.backup.FinanceBackupManager.parseFromJson("not valid json")
     org.junit.Assert.assertTrue("Invalid JSON returns Error", invalidResult is com.example.domain.backup.BackupParseResult.Error)
+  }
+
+  @Test
+  fun `theme and haptic preferences persist across initialization`() {
+    val context = RuntimeEnvironment.getApplication<android.app.Application>()
+    ThemeManager.initialize(context)
+
+    try {
+      ThemeManager.setThemeMode(AppThemeMode.DARK)
+      ThemeManager.setAccentTheme(AccentTheme.EMERALD)
+      ThemeManager.setHapticStrength(HapticStrength.OFF)
+      ThemeManager.initialize(context)
+
+      assertEquals(AppThemeMode.DARK, ThemeManager.state.value.themeMode)
+      assertEquals(AccentTheme.EMERALD, ThemeManager.state.value.accentTheme)
+      assertEquals(HapticStrength.OFF, ThemeManager.state.value.hapticStrength)
+    } finally {
+      ThemeManager.setThemeMode(AppThemeMode.SYSTEM)
+      ThemeManager.setAccentTheme(AccentTheme.INDIGO)
+      ThemeManager.setHapticStrength(HapticStrength.CRISP)
+    }
   }
 }

@@ -1,5 +1,7 @@
 package com.example.ui.screens.home
 
+import com.example.ui.theme.performConfiguredHapticFeedback
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,6 +30,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,12 +38,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.TripRecord
 import com.example.ui.components.CurrencyFormatter
+import com.example.domain.calculator.SubscriptionDueDateCalculator
+import com.example.R
 import com.example.ui.screens.emi.EmiViewModel
 import com.example.ui.screens.finance.FinanceHubViewModel
 import com.example.ui.screens.finance.FinanceTab
 import com.example.ui.screens.utility.UtilityTab
 import com.example.ui.screens.utility.UtilityViewModel
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -87,12 +94,9 @@ fun HomeScreen(
   val activeTripSpent = remember(activeTripExpenses) { activeTripExpenses.sumOf { it.amount } }
 
   // Upcoming subscription
-  val upcomingSub = remember(subscriptions) {
-    val todayDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-    subscriptions.sortedBy {
-      val diff = it.dueDayOfMonth - todayDay
-      if (diff >= 0) diff else diff + 31
-    }.firstOrNull()
+  val today = LocalDate.now()
+  val upcomingSub = remember(subscriptions, today) {
+    subscriptions.minByOrNull { SubscriptionDueDateCalculator.nextDueDate(it, today) }
   }
 
   LazyVerticalGrid(
@@ -154,7 +158,7 @@ fun HomeScreen(
         ) {
           FilledTonalButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               onLogExpenseClick()
             },
             shape = RoundedCornerShape(12.dp),
@@ -165,12 +169,12 @@ fun HomeScreen(
           ) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Log Expense", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(stringResource(R.string.home_quick_log_expense), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
           }
 
           FilledTonalButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               onAddIncomeClick()
             },
             shape = RoundedCornerShape(12.dp),
@@ -181,12 +185,12 @@ fun HomeScreen(
           ) {
             Icon(Icons.Default.TrendingUp, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Add Income", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(stringResource(R.string.home_quick_add_income), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
           }
 
           FilledTonalButton(
             onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               onNavigateToUtility(UtilityTab.TIP_SPLIT)
             },
             shape = RoundedCornerShape(12.dp),
@@ -197,7 +201,7 @@ fun HomeScreen(
           ) {
             Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Split Bill", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(stringResource(R.string.home_quick_split_bill), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
           }
         }
       }
@@ -237,6 +241,7 @@ fun HomeScreen(
     item {
       HomeSubscriptionsWidget(
         upcomingSub = upcomingSub,
+        today = today,
         totalCount = subscriptions.size,
         onMarkPaid = { sub -> financeViewModel.markSubscriptionPaid(sub) },
         onClick = { onNavigateToFinance(FinanceTab.SUBSCRIPTIONS) }
@@ -681,12 +686,11 @@ private fun HomeTripSpeedometerWidget(
 @Composable
 private fun HomeSubscriptionsWidget(
   upcomingSub: com.example.data.local.entity.SubscriptionRecord?,
+  today: LocalDate,
   totalCount: Int,
   onMarkPaid: (com.example.data.local.entity.SubscriptionRecord) -> Unit,
   onClick: () -> Unit
 ) {
-  val todayDay = remember { Calendar.getInstance().get(Calendar.DAY_OF_MONTH) }
-
   Card(
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(
@@ -733,12 +737,13 @@ private fun HomeSubscriptionsWidget(
           Text("+ Add Subscription", fontSize = 11.sp, color = Color(0xFF6366F1), fontWeight = FontWeight.Bold)
         }
       } else {
-        val daysLeft = upcomingSub.dueDayOfMonth - todayDay
+        val nextDueDate = SubscriptionDueDateCalculator.nextDueDate(upcomingSub, today)
+        val daysLeft = ChronoUnit.DAYS.between(today, nextDueDate).toInt()
+        val isPaidThisCycle = SubscriptionDueDateCalculator.isPaidInCurrentCycle(upcomingSub, today)
         val statusText = when {
-          daysLeft == 0 -> "Due Today"
-          daysLeft in 1..3 -> "Due in $daysLeft ${if (daysLeft == 1) "day" else "days"}"
-          daysLeft < 0 -> "Day ${upcomingSub.dueDayOfMonth} of mo"
-          else -> "In $daysLeft days"
+          daysLeft == 0 -> stringResource(R.string.subscription_due_today)
+          daysLeft == 1 -> stringResource(R.string.subscription_due_in_one_day)
+          else -> stringResource(R.string.subscription_due_in_days, daysLeft)
         }
 
         Column {
@@ -765,24 +770,25 @@ private fun HomeSubscriptionsWidget(
         ) {
           Surface(
             shape = RoundedCornerShape(6.dp),
-            color = if (daysLeft in 0..2) Color(0xFFFEF3C7) else Color(0xFFEEF2FF)
+            color = if (isPaidThisCycle) Color(0xFFD1FAE5) else if (daysLeft in 0..2) Color(0xFFFEF3C7) else Color(0xFFEEF2FF)
           ) {
             Text(
-              text = statusText,
+              text = if (isPaidThisCycle) "${stringResource(R.string.subscription_paid_this_cycle)} · $statusText" else statusText,
               fontSize = 9.sp,
               fontWeight = FontWeight.Bold,
-              color = if (daysLeft in 0..2) Color(0xFFB45309) else Color(0xFF4F46E5),
+              color = if (isPaidThisCycle) Color(0xFF047857) else if (daysLeft in 0..2) Color(0xFFB45309) else Color(0xFF4F46E5),
               modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
             )
           }
 
           FilledTonalButton(
             onClick = { onMarkPaid(upcomingSub) },
+            enabled = !isPaidThisCycle,
             shape = RoundedCornerShape(8.dp),
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
             modifier = Modifier.height(26.dp)
           ) {
-            Text("Pay", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(if (isPaidThisCycle) "Paid" else "Pay", fontSize = 10.sp, fontWeight = FontWeight.Bold)
           }
         }
       }

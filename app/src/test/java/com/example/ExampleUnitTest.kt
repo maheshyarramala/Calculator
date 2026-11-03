@@ -2,9 +2,13 @@ package com.example
 
 import com.example.data.model.PrepaymentEntry
 import com.example.domain.calculator.*
+import com.example.data.local.entity.SubscriptionRecord
+import com.example.ui.components.CurrencyFormatter
 import org.junit.Assert.*
 import org.junit.Test
 import java.time.LocalDate
+import java.time.ZoneId
+import java.util.Locale
 
 class ExampleUnitTest {
 
@@ -158,5 +162,101 @@ class ExampleUnitTest {
     assertEquals(1500.0, split.billAmount, 0.01)
     assertEquals(500.0, split.perPersonShare, 0.01)
     assertEquals(3, split.numPersons)
+  }
+
+  @Test
+  fun subscriptionDueDatesRespectMonthLengthAndCycle() {
+    val februaryDue = SubscriptionDueDateCalculator.nextDueDate(
+      SubscriptionRecord(name = "Rent", amount = 1000.0, dueDayOfMonth = 31),
+      LocalDate.of(2025, 2, 20)
+    )
+    assertEquals(LocalDate.of(2025, 2, 28), februaryDue)
+
+    val leapYearDue = SubscriptionDueDateCalculator.nextDueDate(
+      SubscriptionRecord(name = "Rent", amount = 1000.0, dueDayOfMonth = 31),
+      LocalDate.of(2024, 2, 20)
+    )
+    assertEquals(LocalDate.of(2024, 2, 29), leapYearDue)
+
+    val weeklyDue = SubscriptionDueDateCalculator.nextDueDate(
+      SubscriptionRecord(
+        name = "Service",
+        amount = 100.0,
+        billingCycle = "WEEKLY",
+        dueDayOfWeek = 3
+      ),
+      LocalDate.of(2025, 1, 10)
+    )
+    assertEquals(LocalDate.of(2025, 1, 15), weeklyDue)
+
+    val weeklyPaidDue = SubscriptionDueDateCalculator.nextDueDate(
+      SubscriptionRecord(
+        name = "Service",
+        amount = 100.0,
+        billingCycle = "WEEKLY",
+        dueDayOfWeek = 1,
+        lastPaidTimestamp = LocalDate.of(2025, 1, 6)
+          .atStartOfDay(ZoneId.systemDefault())
+          .toInstant()
+          .toEpochMilli()
+      ),
+      LocalDate.of(2025, 1, 6)
+    )
+    assertEquals(LocalDate.of(2025, 1, 13), weeklyPaidDue)
+
+    val yearlyDue = SubscriptionDueDateCalculator.nextDueDate(
+      SubscriptionRecord(
+        name = "Membership",
+        amount = 100.0,
+        billingCycle = "YEARLY",
+        dueDayOfMonth = 20,
+        dueMonth = 2
+      ),
+      LocalDate.of(2025, 2, 1)
+    )
+    assertEquals(LocalDate.of(2025, 2, 20), yearlyDue)
+
+    val nextYearlyDue = SubscriptionDueDateCalculator.nextDueDate(
+      SubscriptionRecord(
+        name = "Membership",
+        amount = 100.0,
+        billingCycle = "YEARLY",
+        dueDayOfMonth = 20,
+        dueMonth = 2
+      ),
+      LocalDate.of(2025, 3, 1)
+    )
+    assertEquals(LocalDate.of(2026, 2, 20), nextYearlyDue)
+  }
+
+  @Test
+  fun currencyFormattingUsesCurrentLocaleGrouping() {
+    val originalLocale = Locale.getDefault()
+    val originalPrivacyMode = CurrencyFormatter.isPrivacyModeEnabled
+    try {
+      Locale.setDefault(Locale("en", "IN"))
+      CurrencyFormatter.isPrivacyModeEnabled = false
+      assertEquals("₹ 1,23,45,678", CurrencyFormatter.format(12345678.0))
+    } finally {
+      Locale.setDefault(originalLocale)
+      CurrencyFormatter.isPrivacyModeEnabled = originalPrivacyMode
+    }
+  }
+
+  @Test
+  fun subscriptionPaymentTimestampDeterminesPaidCycle() {
+    val paidDate = LocalDate.of(2025, 2, 10)
+      .atStartOfDay(ZoneId.systemDefault())
+      .toInstant()
+      .toEpochMilli()
+    val monthlySub = SubscriptionRecord(
+      name = "Internet",
+      amount = 100.0,
+      billingCycle = "MONTHLY",
+      lastPaidTimestamp = paidDate
+    )
+
+    assertTrue(SubscriptionDueDateCalculator.isPaidInCurrentCycle(monthlySub, LocalDate.of(2025, 2, 28)))
+    assertFalse(SubscriptionDueDateCalculator.isPaidInCurrentCycle(monthlySub, LocalDate.of(2025, 3, 1)))
   }
 }

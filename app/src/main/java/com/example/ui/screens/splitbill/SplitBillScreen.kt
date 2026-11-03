@@ -1,4 +1,5 @@
 package com.example.ui.screens.splitbill
+import com.example.ui.theme.performConfiguredHapticFeedback
 
 import android.net.Uri
 import android.widget.Toast
@@ -162,7 +163,7 @@ fun SplitBillScreen(
         // AI Receipt Scan / OCR Button
         FilledTonalButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
             viewModel.setShowOcrDialog(true)
           },
           shape = RoundedCornerShape(12.dp),
@@ -198,7 +199,7 @@ fun SplitBillScreen(
         FilterChip(
           selected = state.splitMode == mode,
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             viewModel.setSplitMode(mode)
           },
           leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
@@ -439,7 +440,7 @@ private fun ItemsAndBillTab(
 
         FilledTonalButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             onAddItemClick()
           },
           shape = RoundedCornerShape(10.dp),
@@ -601,7 +602,7 @@ private fun ItemsAndBillTab(
                 color = if (isClaimed) color.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(1.5.dp, if (isClaimed) color else MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.clickable {
-                  haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                   viewModel.toggleItemClaim(item.id, p.id)
                 }
               ) {
@@ -633,7 +634,7 @@ private fun ItemsAndBillTab(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
                 modifier = Modifier.clickable {
-                  haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                   viewModel.setShowAddParticipantDialog(true)
                 }
               ) {
@@ -693,7 +694,7 @@ private fun DinersAndClaimsTab(
 
         FilledTonalButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
             onAddDinerClick()
           },
           shape = RoundedCornerShape(10.dp),
@@ -823,7 +824,7 @@ private fun DinersAndClaimsTab(
               Spacer(modifier = Modifier.width(6.dp))
               IconButton(
                 onClick = {
-                  haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                   viewModel.removeParticipant(p.id)
                 },
                 modifier = Modifier.size(32.dp)
@@ -956,7 +957,7 @@ private fun SettlementLedgerTab(
         // WhatsApp Share Button
         FilledTonalButton(
           onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
             PaymentDeepLinkHelper.shareBreakdown(
               context = context,
               billTitle = state.billTitle,
@@ -1107,7 +1108,7 @@ private fun SettlementLedgerTab(
               // Mark as Settled Toggle
               IconButton(
                 onClick = {
-                  haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
                   viewModel.toggleSettledTransfer(transferKey)
                 },
                 modifier = Modifier.size(32.dp)

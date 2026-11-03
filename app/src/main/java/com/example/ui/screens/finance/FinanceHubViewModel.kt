@@ -376,6 +376,8 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     amount: Double,
     billingCycle: String,
     dueDayOfMonth: Int,
+    dueMonth: Int,
+    dueDayOfWeek: Int,
     categoryName: String,
     bankAccountId: Long?,
     bankAccountName: String,
@@ -389,6 +391,8 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
           amount = amount,
           billingCycle = billingCycle,
           dueDayOfMonth = dueDayOfMonth.coerceIn(1, 31),
+          dueMonth = dueMonth.coerceIn(1, 12),
+          dueDayOfWeek = dueDayOfWeek.coerceIn(1, 7),
           categoryName = categoryName,
           bankAccountId = bankAccountId,
           bankAccountName = bankAccountName,
@@ -408,6 +412,7 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   fun markSubscriptionPaid(sub: SubscriptionRecord) {
     viewModelScope.launch {
+      val paidAt = System.currentTimeMillis()
       dao.insertExpense(
         ExpenseRecord(
           title = "${sub.name} Bill",
@@ -416,11 +421,11 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
           type = "EXPENSE",
           bankAccountId = sub.bankAccountId,
           bankAccountName = sub.bankAccountName,
-          dateTimestamp = System.currentTimeMillis(),
+          dateTimestamp = paidAt,
           notes = "Auto-logged from recurring subscription"
         )
       )
-      dao.insertSubscription(sub.copy(lastPaidTimestamp = System.currentTimeMillis()))
+      dao.insertSubscription(sub.copy(lastPaidTimestamp = paidAt))
       _uiState.update { it.copy(toastMessage = "Paid ₹${sub.amount.toLong()} for ${sub.name} & recorded in ledger!") }
     }
   }
