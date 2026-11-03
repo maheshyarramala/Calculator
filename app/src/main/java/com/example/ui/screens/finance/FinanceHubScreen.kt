@@ -1,6 +1,7 @@
 package com.example.ui.screens.finance
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -61,11 +62,16 @@ fun FinanceHubScreen(
   val categories by viewModel.categories.collectAsState()
   val expenses by viewModel.expenses.collectAsState()
   val bankAccounts by viewModel.bankAccounts.collectAsState()
+  val accountsWithBalances by viewModel.accountsWithBalances.collectAsState()
+  val totalNetBalance by viewModel.totalNetBalance.collectAsState()
+  val totalIncome by viewModel.totalIncome.collectAsState()
+  val totalExpense by viewModel.totalExpense.collectAsState()
   val trips by viewModel.trips.collectAsState()
 
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
   var preselectedTripIdForExpense by remember { mutableStateOf<Long?>(null) }
+  var editingAccountForOpeningBalance by remember { mutableStateOf<BankAccount?>(null) }
 
   // Storage Access Framework (SAF) Launchers for JSON Export & Import
   val exportFileLauncher = rememberLauncherForActivityResult(
@@ -127,24 +133,46 @@ fun FinanceHubScreen(
   if (uiState.showAddExpenseDialog) {
     AddExpenseDialog(
       categories = categories,
+      bankAccounts = bankAccounts,
       trips = trips,
       initialTripId = preselectedTripIdForExpense,
       onDismiss = {
         viewModel.setShowAddExpense(false)
         preselectedTripIdForExpense = null
       },
-      onConfirm = { title, amount, category, notes, tripId ->
-        viewModel.addExpense(title, amount, category, notes, tripId)
+      onConfirm = { title, amount, category, accountId, accountName, notes, tripId ->
+        viewModel.addExpense(title, amount, category, accountId, accountName, notes, tripId)
         preselectedTripIdForExpense = null
       }
     )
   }
 
+  if (uiState.showAddIncomeDialog) {
+    AddIncomeDialog(
+      bankAccounts = bankAccounts,
+      onDismiss = { viewModel.setShowAddIncome(false) },
+      onConfirm = { title, amount, category, accountId, accountName, notes ->
+        viewModel.addIncome(title, amount, category, accountId, accountName, notes)
+      }
+    )
+  }
+
   if (uiState.showAddBankDialog) {
-    AddBankDialog(
+    AddAccountDialog(
       onDismiss = { viewModel.setShowAddBank(false) },
-      onConfirm = { name, type, num, ifsc, holder, bal, notes ->
-        viewModel.addBankAccount(name, type, num, ifsc, holder, bal, notes)
+      onConfirm = { name, type, openingBal, num, ifsc, holder, notes ->
+        viewModel.addBankAccount(name, type, openingBal, num, ifsc, holder, notes)
+      }
+    )
+  }
+
+  editingAccountForOpeningBalance?.let { account ->
+    EditOpeningBalanceDialog(
+      account = account,
+      onDismiss = { editingAccountForOpeningBalance = null },
+      onConfirm = { newBal ->
+        viewModel.updateAccountOpeningBalance(account, newBal)
+        editingAccountForOpeningBalance = null
       }
     )
   }
@@ -176,29 +204,17 @@ fun FinanceHubScreen(
     floatingActionButton = {
       when (uiState.selectedTab) {
         FinanceTab.EXPENSES -> {
-          FloatingActionButton(
+          ExtendedFloatingActionButton(
             onClick = {
               haptic.performHapticFeedback(HapticFeedbackType.LongPress)
               viewModel.setShowAddExpense(true)
             },
             containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            icon = { Icon(Icons.Default.Add, contentDescription = null) },
+            text = { Text("Log Expense") },
             modifier = Modifier.testTag("add_expense_fab")
-          ) {
-            Icon(Icons.Default.Add, contentDescription = "Add Expense")
-          }
-        }
-        FinanceTab.BANK_ACCOUNTS -> {
-          FloatingActionButton(
-            onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-              viewModel.setShowAddBank(true)
-            },
-            containerColor = Color(0xFF1E3A8A),
-            contentColor = Color.White,
-            modifier = Modifier.testTag("add_bank_fab")
-          ) {
-            Icon(Icons.Default.AddCard, contentDescription = "Add Bank Account")
-          }
+          )
         }
         FinanceTab.TRIPS -> {
           FloatingActionButton(
@@ -237,7 +253,7 @@ fun FinanceHubScreen(
             color = MaterialTheme.colorScheme.onSurface
           )
           Text(
-            text = "Custom categories, bank cards & trips",
+            text = "Custom categories, bank accounts & trips",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -258,7 +274,7 @@ fun FinanceHubScreen(
         }
       }
 
-      // Modern Tab Bar
+      // Modern Tab Bar (Expenses & Accounts, Trip Manager)
       TabRow(
         selectedTabIndex = uiState.selectedTab.ordinal,
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -267,7 +283,6 @@ fun FinanceHubScreen(
         FinanceTab.values().forEach { tab ->
           val icon = when (tab) {
             FinanceTab.EXPENSES -> Icons.AutoMirrored.Filled.ReceiptLong
-            FinanceTab.BANK_ACCOUNTS -> Icons.Default.AccountBalance
             FinanceTab.TRIPS -> Icons.Default.FlightTakeoff
           }
           Tab(
@@ -287,14 +302,20 @@ fun FinanceHubScreen(
         FinanceTab.EXPENSES -> ExpensesSection(
           expenses = expenses,
           categories = categories,
+          accountsWithBalances = accountsWithBalances,
+          totalNetBalance = totalNetBalance,
+          totalIncome = totalIncome,
+          totalExpense = totalExpense,
+          selectedAccountFilterId = uiState.selectedAccountFilterId,
+          onSelectAccountFilter = { viewModel.setSelectedAccountFilter(it) },
+          onAddAccountClick = { viewModel.setShowAddBank(true) },
+          onEditOpeningBalance = { editingAccountForOpeningBalance = it },
+          onDeleteAccount = { viewModel.deleteBankAccount(it) },
+          onAddExpenseClick = { viewModel.setShowAddExpense(true) },
+          onAddIncomeClick = { viewModel.setShowAddIncome(true) },
           onAddCategoryClick = { viewModel.setShowAddCategory(true) },
           onDeleteCategory = { viewModel.deleteCategory(it) },
           onDeleteExpense = { viewModel.deleteExpense(it) }
-        )
-        FinanceTab.BANK_ACCOUNTS -> BankAccountsSection(
-          bankAccounts = bankAccounts,
-          onCopyDetails = { viewModel.copyBankDetails(context, it) },
-          onDeleteAccount = { viewModel.deleteBankAccount(it) }
         )
         FinanceTab.TRIPS -> TripsSection(
           trips = trips,
@@ -325,104 +346,378 @@ fun FinanceHubScreen(
 private fun ExpensesSection(
   expenses: List<ExpenseRecord>,
   categories: List<ExpenseCategory>,
+  accountsWithBalances: List<AccountWithBalance>,
+  totalNetBalance: Double,
+  totalIncome: Double,
+  totalExpense: Double,
+  selectedAccountFilterId: Long?,
+  onSelectAccountFilter: (Long?) -> Unit,
+  onAddAccountClick: () -> Unit,
+  onEditOpeningBalance: (BankAccount) -> Unit,
+  onDeleteAccount: (BankAccount) -> Unit,
+  onAddExpenseClick: () -> Unit,
+  onAddIncomeClick: () -> Unit,
   onAddCategoryClick: () -> Unit,
   onDeleteCategory: (ExpenseCategory) -> Unit,
   onDeleteExpense: (ExpenseRecord) -> Unit
 ) {
-  val totalSpent = remember(expenses) { expenses.sumOf { it.amount } }
   val haptic = LocalHapticFeedback.current
+
+  // Filter transactions by selected bank account if filter is active
+  val displayedExpenses = remember(expenses, selectedAccountFilterId) {
+    if (selectedAccountFilterId == null) {
+      expenses
+    } else {
+      expenses.filter { it.bankAccountId == selectedAccountFilterId }
+    }
+  }
+
+  val totalSpentOnExpenses = remember(displayedExpenses) {
+    displayedExpenses.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+  }
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
-    // Total Spent Summary Card
-    item(key = "spending_summary") {
+    // Total Net Balance Dashboard Banner
+    item(key = "total_net_balance_card") {
       Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+          containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
         ),
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(
           modifier = Modifier.padding(20.dp)
         ) {
+          Text(
+            text = "Total Net Balance",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = CurrencyFormatter.format(totalNetBalance),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.primary
+          )
+
+          Spacer(modifier = Modifier.height(14.dp))
+
+          // Income and Expense Stat Chips
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
           ) {
-            Column {
-              Text("Total Expenses Logged", style = MaterialTheme.typography.labelMedium)
-              Text(
-                text = CurrencyFormatter.format(totalSpent),
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary
-              )
-            }
-            Box(
-              modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-              contentAlignment = Alignment.Center
+            Surface(
+              shape = RoundedCornerShape(12.dp),
+              color = Color(0xFF10B981).copy(alpha = 0.15f),
+              modifier = Modifier.weight(1f)
             ) {
-              Icon(
-                Icons.AutoMirrored.Filled.TrendingUp,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-              )
+              Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Icon(
+                  Icons.Default.ArrowDownward,
+                  contentDescription = null,
+                  tint = Color(0xFF059669),
+                  modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Column {
+                  Text("Total Income", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  Text(
+                    text = "+${CurrencyFormatter.format(totalIncome)}",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF059669)
+                  )
+                }
+              }
+            }
+
+            Surface(
+              shape = RoundedCornerShape(12.dp),
+              color = Color(0xFFEF4444).copy(alpha = 0.15f),
+              modifier = Modifier.weight(1f)
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Icon(
+                  Icons.Default.ArrowUpward,
+                  contentDescription = null,
+                  tint = Color(0xFFDC2626),
+                  modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Column {
+                  Text("Total Expenses", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  Text(
+                    text = "-${CurrencyFormatter.format(totalExpense)}",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFDC2626)
+                  )
+                }
+              }
             }
           }
-          Text(
-            text = "${expenses.size} records • ${categories.size} categories",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp)
-          )
         }
       }
     }
 
-    // Spending Analytics Donut & Breakdown Card
-    if (totalSpent > 0 && expenses.isNotEmpty()) {
-      item(key = "spending_analytics") {
-        SpendingAnalyticsCard(
-          expenses = expenses,
-          categories = categories,
-          totalSpent = totalSpent
-        )
-      }
-    }
-
-    // Category Customization Bar
-    item(key = "categories_header") {
+    // Accounts & Balances Carousel
+    item(key = "accounts_carousel_header") {
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Text(
-          text = "Categories & Slabs",
-          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-        )
-        FilledTonalButton(
+        Column {
+          Text(
+            text = "My Bank & Cash Accounts",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+          )
+          Text(
+            text = "Track opening balance & live account funds",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+        TextButton(
           onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onAddCategoryClick()
-          },
-          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-          modifier = Modifier.testTag("add_custom_category_btn")
+            onAddAccountClick()
+          }
         ) {
-          Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
           Spacer(modifier = Modifier.width(4.dp))
-          Text("+ Add Category", fontSize = 12.sp)
+          Text("+ Add Account", fontSize = 12.sp)
         }
       }
     }
 
+    item(key = "accounts_carousel_list") {
+      LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        items(accountsWithBalances, key = { it.account.id }) { accWithBal ->
+          val isSelected = selectedAccountFilterId == accWithBal.account.id
+          Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+              } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+              }
+            ),
+            border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+            modifier = Modifier
+              .width(200.dp)
+              .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onSelectAccountFilter(if (isSelected) null else accWithBal.account.id)
+              }
+          ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Surface(
+                  shape = RoundedCornerShape(6.dp),
+                  color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                ) {
+                  Text(
+                    text = accWithBal.account.accountType,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                  )
+                }
+
+                Row {
+                  IconButton(
+                    onClick = { onEditOpeningBalance(accWithBal.account) },
+                    modifier = Modifier.size(24.dp)
+                  ) {
+                    Icon(
+                      Icons.Default.Edit,
+                      contentDescription = "Edit Opening Balance",
+                      modifier = Modifier.size(14.dp),
+                      tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                  }
+                  IconButton(
+                    onClick = { onDeleteAccount(accWithBal.account) },
+                    modifier = Modifier.size(24.dp)
+                  ) {
+                    Icon(
+                      Icons.Default.Close,
+                      contentDescription = "Remove Account",
+                      modifier = Modifier.size(14.dp),
+                      tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                  }
+                }
+              }
+
+              Spacer(modifier = Modifier.height(6.dp))
+
+              Text(
+                text = accWithBal.account.bankName,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+
+              Spacer(modifier = Modifier.height(4.dp))
+
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                  text = "Opening: ",
+                  fontSize = 10.5.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                  text = CurrencyFormatter.formatWhole(accWithBal.openingBalance),
+                  fontSize = 10.5.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  color = MaterialTheme.colorScheme.onSurface
+                )
+              }
+
+              Spacer(modifier = Modifier.height(6.dp))
+
+              Text(
+                text = "Current Balance",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Text(
+                text = CurrencyFormatter.format(accWithBal.currentBalance),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (accWithBal.currentBalance >= 0) Color(0xFF059669) else Color(0xFFDC2626)
+              )
+            }
+          }
+        }
+
+        // Add Account Card
+        item(key = "add_account_card") {
+          Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier
+              .width(130.dp)
+              .height(130.dp)
+              .clickable { onAddAccountClick() }
+          ) {
+            Column(
+              modifier = Modifier.fillMaxSize(),
+              verticalArrangement = Arrangement.Center,
+              horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+              Icon(
+                Icons.Default.AddCard,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
+              )
+              Spacer(modifier = Modifier.height(6.dp))
+              Text(
+                text = "+ Add Account",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+        }
+      }
+    }
+
+    // Quick Action Buttons (+ Expense, + Income, + Category)
+    item(key = "quick_actions_bar") {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        FilledTonalButton(
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onAddExpenseClick()
+          },
+          colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = Color(0xFFEF4444).copy(alpha = 0.15f),
+            contentColor = Color(0xFFDC2626)
+          ),
+          shape = RoundedCornerShape(12.dp),
+          modifier = Modifier.weight(1f)
+        ) {
+          Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("- Expense", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        }
+
+        FilledTonalButton(
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onAddIncomeClick()
+          },
+          colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = Color(0xFF10B981).copy(alpha = 0.15f),
+            contentColor = Color(0xFF059669)
+          ),
+          shape = RoundedCornerShape(12.dp),
+          modifier = Modifier.weight(1f)
+        ) {
+          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("+ Income", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        }
+
+        OutlinedButton(
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onAddCategoryClick()
+          },
+          shape = RoundedCornerShape(12.dp),
+          modifier = Modifier.weight(1f)
+        ) {
+          Icon(Icons.Default.Sell, contentDescription = null, modifier = Modifier.size(14.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("Category", fontSize = 11.5.sp)
+        }
+      }
+    }
+
+    // Spending Analytics Donut & Breakdown Card (for expenses)
+    if (totalSpentOnExpenses > 0 && displayedExpenses.any { it.type == "EXPENSE" }) {
+      item(key = "spending_analytics") {
+        SpendingAnalyticsCard(
+          expenses = displayedExpenses.filter { it.type == "EXPENSE" },
+          categories = categories,
+          totalSpent = totalSpentOnExpenses
+        )
+      }
+    }
+
+    // Category Chips Bar
     item(key = "categories_list") {
       LazyRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -439,7 +734,6 @@ private fun ExpensesSection(
           Surface(
             shape = RoundedCornerShape(12.dp),
             color = color.copy(alpha = 0.12f),
-            border = null,
             modifier = Modifier.padding(vertical = 2.dp)
           ) {
             Row(
@@ -476,16 +770,31 @@ private fun ExpensesSection(
       }
     }
 
-    // Expense History List
+    // Recent Transactions Title and Filter indicator
     item(key = "expenses_title") {
-      Text(
-        text = "Recent Transactions",
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-        modifier = Modifier.padding(top = 8.dp)
-      )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = if (selectedAccountFilterId != null) {
+            val accName = accountsWithBalances.find { it.account.id == selectedAccountFilterId }?.account?.bankName ?: "Account"
+            "Transactions: $accName"
+          } else {
+            "Recent Transactions"
+          },
+          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+        )
+        if (selectedAccountFilterId != null) {
+          TextButton(onClick = { onSelectAccountFilter(null) }) {
+            Text("Show All Accounts", fontSize = 12.sp)
+          }
+        }
+      }
     }
 
-    if (expenses.isEmpty()) {
+    if (displayedExpenses.isEmpty()) {
       item(key = "empty_expenses") {
         Card(
           shape = RoundedCornerShape(16.dp),
@@ -508,12 +817,12 @@ private fun ExpensesSection(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-              text = "No expenses logged yet",
+              text = "No transactions logged yet",
               fontWeight = FontWeight.Medium,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-              text = "Tap the + button below to record your first expense",
+              text = "Tap '+ Expense' or '+ Income' above to record transactions",
               fontSize = 12.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -521,7 +830,7 @@ private fun ExpensesSection(
         }
       }
     } else {
-      items(expenses, key = { it.id }) { expense ->
+      items(displayedExpenses, key = { it.id }) { expense ->
         ExpenseItemCard(
           expense = expense,
           categories = categories,
@@ -551,6 +860,7 @@ private fun ExpenseItemCard(
   val dateFormatted = remember(expense.dateTimestamp) {
     SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(expense.dateTimestamp))
   }
+  val isIncome = expense.type == "INCOME"
 
   Card(
     shape = RoundedCornerShape(16.dp),
@@ -575,13 +885,15 @@ private fun ExpenseItemCard(
           modifier = Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(catColor.copy(alpha = 0.15f)),
+            .background(
+              if (isIncome) Color(0xFF10B981).copy(alpha = 0.15f) else catColor.copy(alpha = 0.15f)
+            ),
           contentAlignment = Alignment.Center
         ) {
           Icon(
-            Icons.Default.Sell,
+            imageVector = if (isIncome) Icons.Default.ArrowDownward else Icons.Default.Sell,
             contentDescription = null,
-            tint = catColor,
+            tint = if (isIncome) Color(0xFF059669) else catColor,
             modifier = Modifier.size(20.dp)
           )
         }
@@ -592,7 +904,10 @@ private fun ExpenseItemCard(
             fontWeight = FontWeight.SemiBold,
             fontSize = 14.sp
           )
-          Row(verticalAlignment = Alignment.CenterVertically) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+          ) {
             Surface(
               shape = RoundedCornerShape(6.dp),
               color = catColor.copy(alpha = 0.15f)
@@ -605,7 +920,20 @@ private fun ExpenseItemCard(
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
               )
             }
-            Spacer(modifier = Modifier.width(6.dp))
+            if (expense.bankAccountName.isNotBlank()) {
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+              ) {
+                Text(
+                  text = expense.bankAccountName,
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.Medium,
+                  color = MaterialTheme.colorScheme.onSecondaryContainer,
+                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+              }
+            }
             Text(
               text = dateFormatted,
               fontSize = 11.sp,
@@ -624,10 +952,10 @@ private fun ExpenseItemCard(
 
       Column(horizontalAlignment = Alignment.End) {
         Text(
-          text = "- ${CurrencyFormatter.format(expense.amount)}",
+          text = if (isIncome) "+ ${CurrencyFormatter.format(expense.amount)}" else "- ${CurrencyFormatter.format(expense.amount)}",
           fontWeight = FontWeight.Bold,
           fontSize = 14.sp,
-          color = Color(0xFFDC2626)
+          color = if (isIncome) Color(0xFF059669) else Color(0xFFDC2626)
         )
         IconButton(
           onClick = onDelete,
@@ -635,7 +963,7 @@ private fun ExpenseItemCard(
         ) {
           Icon(
             Icons.Default.DeleteOutline,
-            contentDescription = "Delete expense",
+            contentDescription = "Delete transaction",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(18.dp)
           )
@@ -847,207 +1175,46 @@ private fun SpendingAnalyticsCard(
 }
 
 // -------------------------------------------------------------
-// BANK DETAILS SECTION & PIN VAULT
+// ACCOUNT MANAGEMENT DIALOGS
 // -------------------------------------------------------------
 @Composable
-private fun BankAccountsSection(
-  bankAccounts: List<BankAccount>,
-  onCopyDetails: (BankAccount) -> Unit,
-  onDeleteAccount: (BankAccount) -> Unit
+private fun EditOpeningBalanceDialog(
+  account: BankAccount,
+  onDismiss: () -> Unit,
+  onConfirm: (Double) -> Unit
 ) {
-  val haptic = LocalHapticFeedback.current
-  var isVaultLocked by rememberSaveable { mutableStateOf(false) }
-  var vaultPin by rememberSaveable { mutableStateOf("") }
-  var enteredPin by remember { mutableStateOf("") }
-  var showPinSetupDialog by remember { mutableStateOf(false) }
-  var pinError by remember { mutableStateOf(false) }
+  var openingStr by remember { mutableStateOf(if (account.openingBalance > 0) account.openingBalance.toString() else "") }
 
-  if (showPinSetupDialog) {
-    SetVaultPinDialog(
-      currentPin = vaultPin,
-      onDismiss = { showPinSetupDialog = false },
-      onSavePin = { newPin ->
-        vaultPin = newPin
-        isVaultLocked = newPin.isNotEmpty()
-        enteredPin = ""
-        showPinSetupDialog = false
-      }
-    )
-  }
-
-  // If Vault is locked and PIN is configured, show Lock Screen
-  if (isVaultLocked && vaultPin.isNotEmpty()) {
-    BankVaultLockScreen(
-      enteredLength = enteredPin.length,
-      pinError = pinError,
-      onDigitClick = { digit ->
-        if (enteredPin.length < 4) {
-          val next = enteredPin + digit
-          enteredPin = next
-          pinError = false
-          if (next.length == 4) {
-            if (next == vaultPin) {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-              isVaultLocked = false
-              enteredPin = ""
-            } else {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-              pinError = true
-              enteredPin = ""
-            }
-          }
-        }
-      },
-      onBackspace = {
-        if (enteredPin.isNotEmpty()) {
-          enteredPin = enteredPin.dropLast(1)
-        }
-      },
-      onResetPin = {
-        showPinSetupDialog = true
-      }
-    )
-    return
-  }
-
-  LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp)
-  ) {
-    item(key = "bank_header") {
-      Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
-        ),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Column(
-          modifier = Modifier.padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.weight(1f)
-            ) {
-              Icon(
-                Icons.Default.Shield,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.size(32.dp)
-              )
-              Spacer(modifier = Modifier.width(12.dp))
-              Column {
-                Text(
-                  text = "Bank Details Vault",
-                  style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Text(
-                  text = if (vaultPin.isEmpty()) "Account & card storage" else "🔒 PIN Protected Vault",
-                  style = MaterialTheme.typography.bodySmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-              }
-            }
-
-            if (vaultPin.isNotEmpty()) {
-              FilledTonalButton(
-                onClick = {
-                  haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                  isVaultLocked = true
-                  enteredPin = ""
-                },
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                modifier = Modifier.testTag("lock_vault_btn")
-              ) {
-                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Lock Vault", fontSize = 11.sp)
-              }
-            } else {
-              OutlinedButton(
-                onClick = { showPinSetupDialog = true },
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                modifier = Modifier.testTag("set_vault_pin_btn")
-              ) {
-                Icon(Icons.Default.Pin, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Set PIN", fontSize = 11.sp)
-              }
-            }
-          }
-
-          if (vaultPin.isNotEmpty()) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.End
-            ) {
-              TextButton(
-                onClick = { showPinSetupDialog = true },
-                contentPadding = PaddingValues(0.dp)
-              ) {
-                Text("Change / Remove PIN", fontSize = 11.sp)
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (bankAccounts.isEmpty()) {
-      item(key = "empty_banks") {
-        Card(
-          shape = RoundedCornerShape(16.dp),
-          colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-          ),
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Edit Opening Balance") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Update opening funds for ${account.bankName}. Current balance will update automatically based on your income and expenses.")
+        OutlinedTextField(
+          value = openingStr,
+          onValueChange = { openingStr = it },
+          label = { Text("Opening Balance (₹)") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
           modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-          ) {
-            Icon(
-              Icons.Default.AccountBalance,
-              contentDescription = null,
-              modifier = Modifier.size(48.dp),
-              tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-              text = "No bank accounts added",
-              fontWeight = FontWeight.Medium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-              text = "Tap the + card button to safely save your bank details",
-              fontSize = 12.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
-          }
-        }
-      }
-    } else {
-      items(bankAccounts, key = { it.id }) { account ->
-        BankCardItem(
-          account = account,
-          onCopy = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            onCopyDetails(account)
-          },
-          onDelete = { onDeleteAccount(account) }
         )
       }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val bal = openingStr.toDoubleOrNull() ?: 0.0
+          onConfirm(bal)
+        }
+      ) {
+        Text("Save")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
     }
-  }
+  )
 }
 
 @Composable
@@ -1937,17 +2104,23 @@ private fun AddCategoryDialog(
 @Composable
 private fun AddExpenseDialog(
   categories: List<ExpenseCategory>,
+  bankAccounts: List<BankAccount>,
   trips: List<TripRecord>,
   initialTripId: Long? = null,
   onDismiss: () -> Unit,
-  onConfirm: (title: String, amount: Double, category: String, notes: String, tripId: Long?) -> Unit
+  onConfirm: (title: String, amount: Double, category: String, accountId: Long?, accountName: String, notes: String, tripId: Long?) -> Unit
 ) {
   var title by remember { mutableStateOf("") }
   var amountStr by remember { mutableStateOf("") }
   var selectedCategory by remember { mutableStateOf(categories.firstOrNull()?.name ?: "General") }
+  var selectedAccountId by remember { mutableStateOf(bankAccounts.firstOrNull()?.id) }
   var notes by remember { mutableStateOf("") }
   var selectedTripId by remember { mutableStateOf<Long?>(initialTripId) }
   var categoryDropdownExpanded by remember { mutableStateOf(false) }
+
+  val selectedAccountName = remember(selectedAccountId, bankAccounts) {
+    bankAccounts.find { it.id == selectedAccountId }?.bankName ?: ""
+  }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -1961,7 +2134,7 @@ private fun AddExpenseDialog(
           value = title,
           onValueChange = { title = it },
           label = { Text("Expense Title") },
-          placeholder = { Text("e.g. Grocery store, Uber") },
+          placeholder = { Text("e.g. Grocery store, Uber, Rent") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
@@ -1974,6 +2147,23 @@ private fun AddExpenseDialog(
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
+
+        // Select Paid From Bank Account
+        if (bankAccounts.isNotEmpty()) {
+          Column {
+            Text("Deduct from Account:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(4.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+              items(bankAccounts) { acc ->
+                FilterChip(
+                  selected = selectedAccountId == acc.id,
+                  onClick = { selectedAccountId = acc.id },
+                  label = { Text(acc.bankName, fontSize = 11.sp) }
+                )
+              }
+            }
+          }
+        }
 
         // Category dropdown
         ExposedDropdownMenuBox(
@@ -2040,11 +2230,11 @@ private fun AddExpenseDialog(
       Button(
         onClick = {
           val amt = amountStr.toDoubleOrNull() ?: 0.0
-          onConfirm(title, amt, selectedCategory, notes, selectedTripId)
+          onConfirm(title, amt, selectedCategory, selectedAccountId, selectedAccountName, notes, selectedTripId)
         },
         enabled = title.isNotBlank() && (amountStr.toDoubleOrNull() ?: 0.0) > 0.0
       ) {
-        Text("Save")
+        Text("Save Expense")
       }
     },
     dismissButton = {
@@ -2054,23 +2244,125 @@ private fun AddExpenseDialog(
 }
 
 @Composable
-private fun AddBankDialog(
+private fun AddIncomeDialog(
+  bankAccounts: List<BankAccount>,
   onDismiss: () -> Unit,
-  onConfirm: (name: String, type: String, num: String, ifsc: String, holder: String, bal: Double, notes: String) -> Unit
+  onConfirm: (title: String, amount: Double, category: String, accountId: Long?, accountName: String, notes: String) -> Unit
 ) {
-  var bankName by remember { mutableStateOf("") }
-  var accountType by remember { mutableStateOf("Savings") }
-  var accountNumber by remember { mutableStateOf("") }
-  var ifsc by remember { mutableStateOf("") }
-  var holderName by remember { mutableStateOf("") }
-  var balanceStr by remember { mutableStateOf("") }
+  var title by remember { mutableStateOf("") }
+  var amountStr by remember { mutableStateOf("") }
+  var selectedCategory by remember { mutableStateOf("Salary") }
+  var selectedAccountId by remember { mutableStateOf(bankAccounts.firstOrNull()?.id) }
   var notes by remember { mutableStateOf("") }
 
-  val types = listOf("Savings", "Current", "Salary", "Checking", "FD")
+  val incomeSources = listOf("Salary", "Freelance", "Business", "Investment", "Bonus", "Gift", "Other")
+
+  val selectedAccountName = remember(selectedAccountId, bankAccounts) {
+    bankAccounts.find { it.id == selectedAccountId }?.bankName ?: ""
+  }
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Save Bank Details") },
+    title = { Text("Add Income") },
+    text = {
+      Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        OutlinedTextField(
+          value = title,
+          onValueChange = { title = it },
+          label = { Text("Income Description") },
+          placeholder = { Text("e.g. Monthly Salary, Freelance project") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = amountStr,
+          onValueChange = { amountStr = it },
+          label = { Text("Income Amount (₹)") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        // Select Deposit Bank Account
+        if (bankAccounts.isNotEmpty()) {
+          Column {
+            Text("Deposit into Account:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(4.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+              items(bankAccounts) { acc ->
+                FilterChip(
+                  selected = selectedAccountId == acc.id,
+                  onClick = { selectedAccountId = acc.id },
+                  label = { Text(acc.bankName, fontSize = 11.sp) }
+                )
+              }
+            }
+          }
+        }
+
+        // Source Category
+        Column {
+          Text("Source Category:", style = MaterialTheme.typography.bodySmall)
+          Spacer(modifier = Modifier.height(4.dp))
+          LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(incomeSources) { src ->
+              FilterChip(
+                selected = selectedCategory == src,
+                onClick = { selectedCategory = src },
+                label = { Text(src, fontSize = 11.sp) }
+              )
+            }
+          }
+        }
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val amt = amountStr.toDoubleOrNull() ?: 0.0
+          onConfirm(title, amt, selectedCategory, selectedAccountId, selectedAccountName, notes)
+        },
+        enabled = title.isNotBlank() && (amountStr.toDoubleOrNull() ?: 0.0) > 0.0
+      ) {
+        Text("Save Income")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
+}
+
+@Composable
+private fun AddAccountDialog(
+  onDismiss: () -> Unit,
+  onConfirm: (name: String, type: String, openingBal: Double, num: String, ifsc: String, holder: String, notes: String) -> Unit
+) {
+  var bankName by remember { mutableStateOf("") }
+  var accountType by remember { mutableStateOf("Savings") }
+  var openingBalStr by remember { mutableStateOf("") }
+  var accountNumber by remember { mutableStateOf("") }
+  var ifsc by remember { mutableStateOf("") }
+  var holderName by remember { mutableStateOf("") }
+  var notes by remember { mutableStateOf("") }
+
+  val types = listOf("Savings", "Current", "Cash Wallet", "Checking", "Credit Card")
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Add Bank / Cash Account") },
     text = {
       Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -2079,34 +2371,18 @@ private fun AddBankDialog(
         OutlinedTextField(
           value = bankName,
           onValueChange = { bankName = it },
-          label = { Text("Bank Name") },
-          placeholder = { Text("e.g. HDFC, Chase, SBI") },
+          label = { Text("Account / Bank Name *") },
+          placeholder = { Text("e.g. HDFC Bank, SBI, Cash Wallet") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
 
         OutlinedTextField(
-          value = holderName,
-          onValueChange = { holderName = it },
-          label = { Text("Account Holder Name") },
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth()
-        )
-
-        OutlinedTextField(
-          value = accountNumber,
-          onValueChange = { accountNumber = it },
-          label = { Text("Account Number") },
-          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth()
-        )
-
-        OutlinedTextField(
-          value = ifsc,
-          onValueChange = { ifsc = it },
-          label = { Text("IFSC / Routing / SWIFT Code") },
-          keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+          value = openingBalStr,
+          onValueChange = { openingBalStr = it },
+          label = { Text("Opening Balance (₹) *") },
+          placeholder = { Text("Starting balance e.g. 50000") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
@@ -2126,10 +2402,18 @@ private fun AddBankDialog(
         }
 
         OutlinedTextField(
-          value = balanceStr,
-          onValueChange = { balanceStr = it },
-          label = { Text("Current Balance (Optional)") },
-          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          value = accountNumber,
+          onValueChange = { accountNumber = it },
+          label = { Text("Account Number (Optional)") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
@@ -2138,12 +2422,12 @@ private fun AddBankDialog(
     confirmButton = {
       Button(
         onClick = {
-          val bal = balanceStr.toDoubleOrNull() ?: 0.0
-          onConfirm(bankName, accountType, accountNumber, ifsc, holderName, bal, notes)
+          val bal = openingBalStr.toDoubleOrNull() ?: 0.0
+          onConfirm(bankName, accountType, bal, accountNumber, ifsc, holderName, notes)
         },
-        enabled = bankName.isNotBlank() && accountNumber.isNotBlank()
+        enabled = bankName.isNotBlank()
       ) {
-        Text("Save Details")
+        Text("Create Account")
       }
     },
     dismissButton = {

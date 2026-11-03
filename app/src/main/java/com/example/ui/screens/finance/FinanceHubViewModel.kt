@@ -20,10 +20,17 @@ import com.example.domain.backup.FinanceBackupPayload
 import android.net.Uri
 
 enum class FinanceTab(val title: String) {
-  EXPENSES("Expenses"),
-  BANK_ACCOUNTS("Bank Accounts"),
+  EXPENSES("Expenses & Accounts"),
   TRIPS("Trip Manager")
 }
+
+data class AccountWithBalance(
+  val account: BankAccount,
+  val openingBalance: Double,
+  val totalIncome: Double,
+  val totalExpense: Double,
+  val currentBalance: Double
+)
 
 data class CategorySpend(
   val categoryName: String,
@@ -36,8 +43,10 @@ data class FinanceUiState(
   val selectedTab: FinanceTab = FinanceTab.EXPENSES,
   val showAddCategoryDialog: Boolean = false,
   val showAddExpenseDialog: Boolean = false,
+  val showAddIncomeDialog: Boolean = false,
   val showAddBankDialog: Boolean = false,
   val showAddTripDialog: Boolean = false,
+  val selectedAccountFilterId: Long? = null,
   val showBackupModal: Boolean = false,
   val showPasteJsonDialog: Boolean = false,
   val replaceExistingOnImport: Boolean = false,
@@ -62,6 +71,34 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   val trips: StateFlow<List<TripRecord>> = dao.getAllTrips()
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  // Computed accounts with live balances based on opening balance, income, and expenses
+  val accountsWithBalances: StateFlow<List<AccountWithBalance>> = combine(bankAccounts, expenses) { accs, exps ->
+    accs.map { acc ->
+      val accExpenses = exps.filter { it.type == "EXPENSE" && it.bankAccountId == acc.id }.sumOf { it.amount }
+      val accIncome = exps.filter { it.type == "INCOME" && it.bankAccountId == acc.id }.sumOf { it.amount }
+      val current = acc.openingBalance + accIncome - accExpenses
+      AccountWithBalance(
+        account = acc,
+        openingBalance = acc.openingBalance,
+        totalIncome = accIncome,
+        totalExpense = accExpenses,
+        currentBalance = current
+      )
+    }
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  val totalNetBalance: StateFlow<Double> = accountsWithBalances.map { list ->
+    list.sumOf { it.currentBalance }
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+  val totalIncome: StateFlow<Double> = expenses.map { list ->
+    list.filter { it.type == "INCOME" }.sumOf { it.amount }
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+  val totalExpense: StateFlow<Double> = expenses.map { list ->
+    list.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
   // Ensure default categories exist if empty
   init {
@@ -93,6 +130,14 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   fun setShowAddExpense(show: Boolean) {
     _uiState.update { it.copy(showAddExpenseDialog = show) }
+  }
+
+  fun setShowAddIncome(show: Boolean) {
+    _uiState.update { it.copy(showAddIncomeDialog = show) }
+  }
+
+  fun setSelectedAccountFilter(id: Long?) {
+    _uiState.update { it.copy(selectedAccountFilterId = id) }
   }
 
   fun setShowAddBank(show: Boolean) {
@@ -134,8 +179,16 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
-  // --- Expense Actions ---
-  fun addExpense(title: String, amount: Double, category: String, notes: String, tripId: Long? = null) {
+  // --- Expense & Income Actions ---
+  fun addExpense(
+    title: String,
+    amount: Double,
+    category: String,
+    bankAccountId: Long?,
+    bankAccountName: String,
+    notes: String,
+    tripId: Long? = null
+  ) {
     if (title.isBlank() || amount <= 0.0) return
     viewModelScope.launch {
       dao.insertExpense(
@@ -143,6 +196,9 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
           title = title.trim(),
           amount = amount,
           categoryName = category,
+          type = "EXPENSE",
+          bankAccountId = bankAccountId,
+          bankAccountName = bankAccountName,
           notes = notes,
           tripId = tripId
         )
@@ -151,10 +207,35 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
+  fun addIncome(
+    title: String,
+    amount: Double,
+    category: String,
+    bankAccountId: Long?,
+    bankAccountName: String,
+    notes: String
+  ) {
+    if (title.isBlank() || amount <= 0.0) return
+    viewModelScope.launch {
+      dao.insertExpense(
+        ExpenseRecord(
+          title = title.trim(),
+          amount = amount,
+          categoryName = category.ifBlank { "Income" },
+          type = "INCOME",
+          bankAccountId = bankAccountId,
+          bankAccountName = bankAccountName,
+          notes = notes
+        )
+      )
+      _uiState.update { it.copy(showAddIncomeDialog = false, toastMessage = "Income added to $bankAccountName!") }
+    }
+  }
+
   fun deleteExpense(expense: ExpenseRecord) {
     viewModelScope.launch {
       dao.deleteExpense(expense)
-      _uiState.update { it.copy(toastMessage = "Expense deleted") }
+      _uiState.update { it.copy(toastMessage = "Transaction deleted") }
     }
   }
 
@@ -162,13 +243,13 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
   fun addBankAccount(
     bankName: String,
     accountType: String,
-    accountNumber: String,
-    ifscOrRouting: String,
-    holderName: String,
-    balance: Double,
-    notes: String
+    openingBalance: Double,
+    accountNumber: String = "",
+    ifscOrRouting: String = "",
+    holderName: String = "",
+    notes: String = ""
   ) {
-    if (bankName.isBlank() || accountNumber.isBlank()) return
+    if (bankName.isBlank()) return
     viewModelScope.launch {
       dao.insertBankAccount(
         BankAccount(
@@ -177,11 +258,19 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
           accountNumber = accountNumber.trim(),
           ifscOrRouting = ifscOrRouting.trim(),
           holderName = holderName.trim(),
-          balance = balance,
+          openingBalance = openingBalance,
+          balance = openingBalance,
           notes = notes
         )
       )
-      _uiState.update { it.copy(showAddBankDialog = false, toastMessage = "Bank details saved securely!") }
+      _uiState.update { it.copy(showAddBankDialog = false, toastMessage = "Account '$bankName' added!") }
+    }
+  }
+
+  fun updateAccountOpeningBalance(account: BankAccount, newOpening: Double) {
+    viewModelScope.launch {
+      dao.insertBankAccount(account.copy(openingBalance = newOpening))
+      _uiState.update { it.copy(toastMessage = "Opening balance updated!") }
     }
   }
 

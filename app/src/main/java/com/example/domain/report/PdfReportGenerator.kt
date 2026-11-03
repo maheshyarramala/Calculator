@@ -309,16 +309,28 @@ object PdfReportGenerator {
   }
 
   fun sharePdf(context: Context, pdfFile: File) {
-    val fileUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
-    val intent = Intent(Intent.ACTION_SEND).apply {
-      type = "application/pdf"
-      putExtra(Intent.EXTRA_STREAM, fileUri)
-      putExtra(Intent.EXTRA_SUBJECT, pdfFile.nameWithoutExtension)
-      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    try {
+      val fileUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
+      val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/pdf"
+        putExtra(Intent.EXTRA_STREAM, fileUri)
+        putExtra(Intent.EXTRA_SUBJECT, pdfFile.nameWithoutExtension)
+        clipData = android.content.ClipData.newRawUri(pdfFile.name, fileUri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      val chooser = Intent.createChooser(intent, "Share PDF Statement").apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      val resInfoList = context.packageManager.queryIntentActivities(chooser, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+      for (resolveInfo in resInfoList) {
+        val pkg = resolveInfo.activityInfo.packageName
+        context.grantUriPermission(pkg, fileUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      context.startActivity(chooser)
+    } catch (e: Exception) {
+      android.widget.Toast.makeText(context, "PDF Export: ${e.localizedMessage ?: "Failed to share"}", android.widget.Toast.LENGTH_LONG).show()
     }
-    val chooser = Intent.createChooser(intent, "Share PDF Statement")
-    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    context.startActivity(chooser)
   }
 
   fun savePdfToUri(context: Context, pdfFile: File, destinationUri: Uri): Boolean {

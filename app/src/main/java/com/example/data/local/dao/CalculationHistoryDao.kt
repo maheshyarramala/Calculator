@@ -16,6 +16,12 @@ interface CalculationHistoryDao {
   @Query("SELECT * FROM calculation_history WHERE category = :category ORDER BY timestamp DESC")
   fun getByCategory(category: String): Flow<List<CalculationRecord>>
 
+  @Query("SELECT * FROM calculation_history WHERE isFavorite = 1 ORDER BY timestamp DESC")
+  fun getFavorites(): Flow<List<CalculationRecord>>
+
+  @Query("UPDATE calculation_history SET isFavorite = :isFav WHERE id = :id")
+  suspend fun updateFavorite(id: Long, isFav: Boolean)
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insert(record: CalculationRecord): Long
 

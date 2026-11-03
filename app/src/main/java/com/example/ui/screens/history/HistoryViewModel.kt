@@ -28,8 +28,17 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+  val favoritesList: StateFlow<List<CalculationRecord>> = dao.getFavorites()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
   fun setFilter(filter: String) {
     _selectedFilter.value = filter
+  }
+
+  fun toggleFavorite(record: CalculationRecord) {
+    viewModelScope.launch {
+      dao.updateFavorite(record.id, !record.isFavorite)
+    }
   }
 
   fun delete(record: CalculationRecord) {

@@ -67,7 +67,7 @@ enum class MainDestination(
   EMI("EMI", Icons.Default.AccountBalance),
   INVESTMENTS("Invest", Icons.AutoMirrored.Filled.TrendingUp),
   FINANCE("Finance", Icons.Default.Savings),
-  CALCULATOR("Calculator", Icons.Default.Calculate),
+  CALCULATOR("Calc", Icons.Default.Calculate),
   UTILITIES("Utility", Icons.Default.Widgets),
   INTEREST("Interest", Icons.Default.Percent, isBottomTab = false),
   AGE_CALENDAR("Age & Date", Icons.Default.CalendarMonth, isBottomTab = false)
@@ -88,6 +88,7 @@ fun MainScreen(
 ) {
   var currentDestination by remember { mutableStateOf(MainDestination.EMI) }
   var showHistorySheet by remember { mutableStateOf(false) }
+  var showFavoritesSheet by remember { mutableStateOf(false) }
   var showHubSheet by remember { mutableStateOf(false) }
   var showThemeSheet by remember { mutableStateOf(false) }
   var isPrivacyMode by remember { mutableStateOf(CurrencyFormatter.isPrivacyModeEnabled) }
@@ -111,6 +112,21 @@ fun MainScreen(
   if (showThemeSheet) {
     ThemeSettingsBottomSheet(
       onDismiss = { showThemeSheet = false }
+    )
+  }
+
+  if (showFavoritesSheet) {
+    com.example.ui.screens.history.FavoritesBottomSheet(
+      viewModel = historyViewModel,
+      onOpenTool = { key ->
+        when (key) {
+          "EMI" -> currentDestination = MainDestination.EMI
+          "INVEST" -> currentDestination = MainDestination.INVESTMENTS
+          "EXPENSE" -> currentDestination = MainDestination.FINANCE
+          "CALC" -> currentDestination = MainDestination.CALCULATOR
+        }
+      },
+      onDismiss = { showFavoritesSheet = false }
     )
   }
 
@@ -143,14 +159,9 @@ fun MainScreen(
           investmentViewModel.selectTab(InvestmentTab.LUMPSUM)
           showHubSheet = false
         },
-        CalculatorHubItem("Expense Tracker", "Custom categories & slabs", Icons.AutoMirrored.Filled.ReceiptLong, Color(0xFFEF4444)) {
+        CalculatorHubItem("Expenses & Accounts", "Budget & bank balances", Icons.Default.Savings, Color(0xFF10B981)) {
           currentDestination = MainDestination.FINANCE
           financeViewModel.selectTab(FinanceTab.EXPENSES)
-          showHubSheet = false
-        },
-        CalculatorHubItem("Bank Vault", "Account & card storage", Icons.Default.CreditCard, Color(0xFF1E3A8A)) {
-          currentDestination = MainDestination.FINANCE
-          financeViewModel.selectTab(FinanceTab.BANK_ACCOUNTS)
           showHubSheet = false
         },
         CalculatorHubItem("Trip Manager", "Vacation budgets & caps", Icons.Default.FlightTakeoff, Color(0xFF0D9488)) {
@@ -207,37 +218,38 @@ fun MainScreen(
             Text(
               text = "Omni",
               fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.primary
+              color = MaterialTheme.colorScheme.primary,
+              fontSize = 20.sp
             )
             Text(
               text = "Calc",
               fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(
-              Icons.Default.ArrowDropDown,
-              contentDescription = "Open calculator hub",
-              tint = MaterialTheme.colorScheme.primary
+              color = MaterialTheme.colorScheme.onSurface,
+              fontSize = 20.sp
             )
           }
         },
         actions = {
-          // Privacy Mode Masking Toggle (Eye icon)
+          // Favorites Button (Dedicated section)
           FilledTonalIconButton(
             onClick = {
               haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-              val newState = !isPrivacyMode
-              CurrencyFormatter.isPrivacyModeEnabled = newState
-              isPrivacyMode = newState
+              showFavoritesSheet = true
             },
-            modifier = Modifier.testTag("privacy_mode_toggle_btn")
+            modifier = Modifier.testTag("favorites_top_button")
           ) {
-            Icon(
-              if (isPrivacyMode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-              contentDescription = if (isPrivacyMode) "Disable Privacy Masking" else "Enable Privacy Masking",
-              tint = if (isPrivacyMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-            )
+            Icon(Icons.Default.Star, contentDescription = "Favorites and Pinned")
+          }
+
+          // History Button (Dedicated section)
+          FilledTonalIconButton(
+            onClick = {
+              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+              showHistorySheet = true
+            },
+            modifier = Modifier.testTag("history_top_button")
+          ) {
+            Icon(Icons.Default.History, contentDescription = "Saved history")
           }
 
           // Theme Settings Button
@@ -260,17 +272,6 @@ fun MainScreen(
             modifier = Modifier.testTag("hub_top_button")
           ) {
             Icon(Icons.Default.GridView, contentDescription = "Choose calculator by icon")
-          }
-
-          // History Button
-          FilledTonalIconButton(
-            onClick = {
-              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-              showHistorySheet = true
-            },
-            modifier = Modifier.testTag("history_top_button")
-          ) {
-            Icon(Icons.Default.History, contentDescription = "Saved history")
           }
         },
         colors = TopAppBarDefaults.topAppBarColors(

@@ -11,5 +11,6 @@ data class CalculationRecord(
   val title: String,
   val summary: String,
   val detailsText: String,
-  val timestamp: Long = System.currentTimeMillis()
+  val timestamp: Long = System.currentTimeMillis(),
+  val isFavorite: Boolean = false
 )

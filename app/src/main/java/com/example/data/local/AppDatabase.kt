@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
     BankAccount::class,
     TripRecord::class
   ],
-  version = 2,
+  version = 3,
   exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -59,6 +59,12 @@ abstract class AppDatabase : RoomDatabase() {
                     ExpenseCategory(name = "Investments", colorHex = "#4F46E5", iconName = "trending_up")
                   )
                   database.financeDao().insertDefaultCategories(defaultCategories)
+
+                  val defaultAccounts = listOf(
+                    BankAccount(bankName = "Primary Bank", accountType = "Savings", openingBalance = 0.0),
+                    BankAccount(bankName = "Cash Wallet", accountType = "Cash", openingBalance = 0.0)
+                  )
+                  database.financeDao().insertBankAccounts(defaultAccounts)
                 }
               }
             }

@@ -119,11 +119,15 @@ fun EmiScreen(
                 FilledTonalIconButton(
                   onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    val p = state.principalInput.toDoubleOrNull() ?: 1000000.0
-                    val r = state.interestRateInput.toDoubleOrNull() ?: 8.5
-                    val t = state.emiResult.tenureMonths
-                    val pdf = com.example.domain.report.PdfReportGenerator.generateEmiReport(context, p, r, t, state.emiResult)
-                    com.example.domain.report.PdfReportGenerator.sharePdf(context, pdf)
+                    try {
+                      val p = state.principalInput.toDoubleOrNull() ?: 1000000.0
+                      val r = state.interestRateInput.toDoubleOrNull() ?: 8.5
+                      val t = state.emiResult.tenureMonths
+                      val pdf = com.example.domain.report.PdfReportGenerator.generateEmiReport(context, p, r, t, state.emiResult)
+                      com.example.domain.report.PdfReportGenerator.sharePdf(context, pdf)
+                    } catch (e: Exception) {
+                      android.widget.Toast.makeText(context, "Could not generate PDF: ${e.localizedMessage ?: "Unknown error"}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                   },
                   modifier = Modifier.testTag("export_emi_pdf_button")
                 ) {

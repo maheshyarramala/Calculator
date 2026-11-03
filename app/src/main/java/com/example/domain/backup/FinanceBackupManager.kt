@@ -67,6 +67,7 @@ object FinanceBackupManager {
       obj.put("accountNumber", acc.accountNumber)
       obj.put("ifscOrRouting", acc.ifscOrRouting)
       obj.put("holderName", acc.holderName)
+      obj.put("openingBalance", acc.openingBalance)
       obj.put("balance", acc.balance)
       obj.put("notes", acc.notes)
       bankArray.put(obj)
@@ -87,13 +88,16 @@ object FinanceBackupManager {
     }
     root.put("trips", tripArray)
 
-    // Expenses (optional link to categories & trips)
+    // Expenses (and income, with bank account links)
     val expArray = JSONArray()
     expenses.forEach { exp ->
       val obj = JSONObject()
       obj.put("title", exp.title)
       obj.put("amount", exp.amount)
       obj.put("categoryName", exp.categoryName)
+      obj.put("type", exp.type)
+      obj.put("bankAccountId", exp.bankAccountId ?: -1L)
+      obj.put("bankAccountName", exp.bankAccountName)
       obj.put("dateTimestamp", exp.dateTimestamp)
       obj.put("notes", exp.notes)
       expArray.put(obj)
@@ -137,17 +141,19 @@ object FinanceBackupManager {
         for (i in 0 until bankArray.length()) {
           val obj = bankArray.getJSONObject(i)
           val bankName = obj.optString("bankName", "").trim()
-          val accNum = obj.optString("accountNumber", "").trim()
-          if (bankName.isNotEmpty() && accNum.isNotEmpty()) {
+          if (bankName.isNotEmpty()) {
+            val balanceVal = obj.optDouble("balance", 0.0)
+            val openingVal = obj.optDouble("openingBalance", balanceVal)
             bankAccounts.add(
               BankAccount(
                 id = 0, // Reset for auto-increment
                 bankName = bankName,
                 accountType = obj.optString("accountType", "Savings"),
-                accountNumber = accNum,
+                accountNumber = obj.optString("accountNumber", ""),
                 ifscOrRouting = obj.optString("ifscOrRouting", ""),
                 holderName = obj.optString("holderName", ""),
-                balance = obj.optDouble("balance", 0.0),
+                openingBalance = openingVal,
+                balance = balanceVal,
                 notes = obj.optString("notes", "")
               )
             )
@@ -185,12 +191,16 @@ object FinanceBackupManager {
           val title = obj.optString("title", "").trim()
           val amount = obj.optDouble("amount", 0.0)
           if (title.isNotEmpty() && amount > 0.0) {
+            val accId = if (obj.has("bankAccountId") && obj.getLong("bankAccountId") > 0) obj.getLong("bankAccountId") else null
             expenses.add(
               ExpenseRecord(
                 id = 0,
                 title = title,
                 amount = amount,
                 categoryName = obj.optString("categoryName", "General"),
+                type = obj.optString("type", "EXPENSE"),
+                bankAccountId = accId,
+                bankAccountName = obj.optString("bankAccountName", ""),
                 dateTimestamp = obj.optLong("dateTimestamp", System.currentTimeMillis()),
                 notes = obj.optString("notes", "")
               )
