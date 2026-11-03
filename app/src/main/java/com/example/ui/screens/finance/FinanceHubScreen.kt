@@ -246,6 +246,7 @@ fun FinanceHubScreen(
   }
 
   Scaffold(
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     snackbarHost = {
       SnackbarHost(hostState = snackbarHostState)
     },

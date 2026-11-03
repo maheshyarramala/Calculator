@@ -69,6 +69,7 @@ fun EmiScreen(
   }
 
   Scaffold(
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     snackbarHost = {
       state.toastMessage?.let { msg ->
         Snackbar(

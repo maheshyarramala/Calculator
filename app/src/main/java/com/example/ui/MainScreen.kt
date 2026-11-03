@@ -72,11 +72,11 @@ enum class MainDestination(
   val icon: ImageVector,
   val isBottomTab: Boolean = true
 ) {
-  HOME(R.string.navigation_home, Icons.Default.Dashboard),
-  EMI(R.string.navigation_emi, Icons.Default.AccountBalance),
   FINANCE(R.string.navigation_finance, Icons.Default.Savings),
+  EMI(R.string.navigation_emi, Icons.Default.AccountBalance),
   INVESTMENTS(R.string.navigation_investments, Icons.AutoMirrored.Filled.TrendingUp),
   UTILITIES(R.string.navigation_utility, Icons.Default.Widgets),
+  HOME(R.string.navigation_home, Icons.Default.Dashboard, isBottomTab = false),
   CALCULATOR(R.string.navigation_calculator, Icons.Default.Calculate, isBottomTab = false),
   INTEREST(R.string.navigation_interest, Icons.Default.Percent, isBottomTab = false),
   AGE_CALENDAR(R.string.navigation_age_date, Icons.Default.CalendarMonth, isBottomTab = false)
@@ -85,7 +85,9 @@ enum class MainDestination(
 private val mainDestinationSaver = Saver<MainDestination, String>(
   save = { it.name },
   restore = { savedName ->
-    MainDestination.values().firstOrNull { it.name == savedName } ?: MainDestination.HOME
+    MainDestination.values()
+      .firstOrNull { it.name == savedName && it.isBottomTab }
+      ?: MainDestination.FINANCE
   }
 )
 
@@ -102,7 +104,9 @@ data class CalculatorHubItem(
 fun MainScreen(
   modifier: Modifier = Modifier
 ) {
-  var currentDestination by rememberSaveable(stateSaver = mainDestinationSaver) { mutableStateOf(MainDestination.HOME) }
+  var currentDestination by rememberSaveable(stateSaver = mainDestinationSaver) {
+    mutableStateOf(MainDestination.FINANCE)
+  }
   var showHistorySheet by rememberSaveable { mutableStateOf(false) }
   var showFavoritesSheet by rememberSaveable { mutableStateOf(false) }
   var showHubSheet by rememberSaveable { mutableStateOf(false) }
@@ -121,9 +125,9 @@ fun MainScreen(
 
   val haptic = LocalHapticFeedback.current
 
-  // BackHandler: If user is not on HOME tab, back key navigates to HOME
-  BackHandler(enabled = currentDestination != MainDestination.HOME) {
-    currentDestination = MainDestination.HOME
+  // BackHandler: return to the first bottom tab from secondary destinations.
+  BackHandler(enabled = currentDestination != MainDestination.FINANCE) {
+    currentDestination = MainDestination.FINANCE
   }
 
   if (showThemeSheet) {

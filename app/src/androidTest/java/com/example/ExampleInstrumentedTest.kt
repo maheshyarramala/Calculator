@@ -33,9 +33,10 @@ class ExampleInstrumentedTest {
 
   @Test
   fun bottomNavigationChangesSelectedDestination() {
-    composeRule.onNodeWithTag("nav_tab_home").assertIsSelected()
+    composeRule.onNodeWithTag("nav_tab_home").assertDoesNotExist()
+    composeRule.onNodeWithTag("nav_tab_finance").assertIsSelected()
     composeRule.onNodeWithTag("nav_tab_emi").performClick().assertIsSelected()
-    composeRule.onNodeWithTag("nav_tab_home").performClick().assertIsSelected()
+    composeRule.onNodeWithTag("nav_tab_finance").performClick().assertIsSelected()
   }
 
   @Test

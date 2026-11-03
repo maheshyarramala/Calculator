@@ -37,6 +37,7 @@ fun InvestmentScreen(
   val haptic = LocalHapticFeedback.current
 
   Scaffold(
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     snackbarHost = {
       state.toastMessage?.let { msg ->
         Snackbar(
