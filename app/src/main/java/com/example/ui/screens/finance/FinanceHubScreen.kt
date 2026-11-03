@@ -307,7 +307,7 @@ fun FinanceHubScreen(
               val pdfFile = PdfReportGenerator.generateTripReport(context, trip, tripExpenses)
               PdfReportGenerator.sharePdf(context, pdfFile)
             } catch (e: Exception) {
-              viewModel.setToast("Failed to generate PDF: ${e.message}")
+              viewModel.showToast("Failed to generate PDF: ${e.message}")
             }
           },
           onDeleteTrip = { viewModel.deleteTrip(it) }
@@ -890,7 +890,7 @@ private fun BankAccountsSection(
               isVaultLocked = false
               enteredPin = ""
             } else {
-              haptic.performHapticFeedback(HapticFeedbackType.Reject)
+              haptic.performHapticFeedback(HapticFeedbackType.LongPress)
               pinError = true
               enteredPin = ""
             }

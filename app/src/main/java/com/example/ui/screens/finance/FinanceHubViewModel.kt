@@ -107,6 +107,10 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     _uiState.update { it.copy(toastMessage = null) }
   }
 
+  fun showToast(msg: String) {
+    _uiState.update { it.copy(toastMessage = msg) }
+  }
+
   // --- Category Actions ---
   fun addCategory(name: String, colorHex: String) {
     if (name.isBlank()) return
