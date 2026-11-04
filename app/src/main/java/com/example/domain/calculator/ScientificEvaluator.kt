@@ -18,9 +18,6 @@ object ScientificEvaluator {
       val sanitized = expression
         .replace("×", "*")
         .replace("÷", "/")
-        .replace("π", "${Math.PI}")
-        .replace("pi", "${Math.PI}", ignoreCase = true)
-        .replace("e", "${Math.E}")
         .replace("√", "sqrt")
 
       val parser = Parser(sanitized, isRadians)
@@ -69,6 +66,11 @@ object ScientificEvaluator {
       return false
     }
 
+    private fun isImplicitMultiplyNext(): Boolean {
+      while (ch == ' '.code) nextChar()
+      return ch == '('.code || ch == 'π'.code || ch in 'a'.code..'z'.code || ch in 'A'.code..'Z'.code
+    }
+
     fun parse(): Double {
       nextChar()
       val x = parseExpression()
@@ -76,7 +78,6 @@ object ScientificEvaluator {
       return x
     }
 
-    // Expression = Term (+ or - Term)*
     private fun parseExpression(): Double {
       var x = parseTerm()
       while (true) {
@@ -88,7 +89,6 @@ object ScientificEvaluator {
       }
     }
 
-    // Term = Factor (* or / or % Factor)*
     private fun parseTerm(): Double {
       var x = parseFactor()
       while (true) {
@@ -100,12 +100,12 @@ object ScientificEvaluator {
             x /= divisor
           }
           eat('%'.code) -> x %= parseFactor()
+          isImplicitMultiplyNext() -> x *= parseFactor()
           else -> return x
         }
       }
     }
 
-    // Factor = (+ or -) Factor | Unit (^ Factor)?
     private fun parseFactor(): Double {
       if (eat('+'.code)) return parseFactor()
       if (eat('-'.code)) return -parseFactor()
@@ -115,22 +115,32 @@ object ScientificEvaluator {
       if (eat('('.code)) {
         x = parseExpression()
         if (!eat(')'.code)) throw IllegalArgumentException("Missing closing parenthesis")
+      } else if (eat('π'.code)) {
+        x = Math.PI
       } else if ((ch in '0'.code..'9'.code) || ch == '.'.code) {
         while ((ch in '0'.code..'9'.code) || ch == '.'.code) nextChar()
         val numStr = input.substring(startPos, pos)
         x = numStr.toDoubleOrNull() ?: throw IllegalArgumentException("Invalid number: $numStr")
       } else if (ch in 'a'.code..'z'.code || ch in 'A'.code..'Z'.code) {
         while (ch in 'a'.code..'z'.code || ch in 'A'.code..'Z'.code) nextChar()
-        val func = input.substring(startPos, pos).lowercase()
-        if (eat('('.code)) {
-          val arg = parseExpression()
-          if (!eat(')'.code)) throw IllegalArgumentException("Missing ')' after $func")
-          x = evaluateFunction(func, arg)
-        } else {
-          throw IllegalArgumentException("Expected '(' after $func")
+        val identifier = input.substring(startPos, pos).lowercase()
+        x = when (identifier) {
+          "pi" -> Math.PI
+          "e" -> Math.E
+          else -> {
+            if (eat('('.code)) {
+              val arg = parseExpression()
+              if (!eat(')'.code)) throw IllegalArgumentException("Missing ')' after $identifier")
+              evaluateFunction(identifier, arg)
+            } else {
+              throw IllegalArgumentException("Expected '(' after $identifier")
+            }
+          }
         }
       } else {
-        throw IllegalArgumentException("Unexpected character: " + if (ch != -1) ch.toChar().toString() else "end of input")
+        throw IllegalArgumentException(
+          "Unexpected character: " + if (ch != -1) ch.toChar().toString() else "end of input"
+        )
       }
 
       if (eat('^'.code)) {
@@ -147,18 +157,9 @@ object ScientificEvaluator {
           if (arg < 0) throw ArithmeticException("Square root of negative number")
           sqrt(arg)
         }
-        "sin" -> {
-          val rad = if (isRadians) arg else Math.toRadians(arg)
-          sin(rad)
-        }
-        "cos" -> {
-          val rad = if (isRadians) arg else Math.toRadians(arg)
-          cos(rad)
-        }
-        "tan" -> {
-          val rad = if (isRadians) arg else Math.toRadians(arg)
-          tan(rad)
-        }
+        "sin" -> sin(if (isRadians) arg else Math.toRadians(arg))
+        "cos" -> cos(if (isRadians) arg else Math.toRadians(arg))
+        "tan" -> tan(if (isRadians) arg else Math.toRadians(arg))
         "log" -> {
           if (arg <= 0) throw ArithmeticException("Log of non-positive number")
           log10(arg)
