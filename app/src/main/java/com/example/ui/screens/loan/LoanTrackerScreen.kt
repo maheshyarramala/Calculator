@@ -12,10 +12,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import kotlin.math.ceil
+import kotlin.math.ln
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -810,6 +813,7 @@ private fun LoanDetailDialog(
       Column(
         modifier = Modifier
           .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
           .padding(vertical = 4.dp)
       ) {
         // Breakdown Grid
@@ -832,6 +836,13 @@ private fun LoanDetailDialog(
           DetailItem("Principal Paid", CurrencyFormatter.format(loan.cumulativePrincipalPaid))
           DetailItem("Principal Pending", CurrencyFormatter.format(loan.remainingPrincipal))
         }
+
+        Spacer(modifier = Modifier.height(14.dp))
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Prepayment & Foreclosure Simulator
+        LoanPrepaymentSimulatorSection(loan = loan)
 
         Spacer(modifier = Modifier.height(14.dp))
         HorizontalDivider()
@@ -1183,5 +1194,207 @@ private fun getLoanCategoryColor(category: String): Color {
     "EDUCATION" -> Color(0xFF06B6D4)
     "PERSONAL" -> Color(0xFF10B981)
     else -> Color(0xFF6366F1)
+  }
+}
+
+@Composable
+private fun LoanPrepaymentSimulatorSection(loan: LoanRecord) {
+  var prepayText by remember { mutableStateOf("50000") }
+  val prepayAmount = prepayText.toDoubleOrNull() ?: 0.0
+
+  val remainingMonths = (loan.tenureMonths - loan.paidEmisCount).coerceAtLeast(1)
+  val currentPrincipal = loan.remainingPrincipal
+  val monthlyRate = (loan.annualInterestRate / 100.0) / 12.0
+  val emi = loan.emiAmount
+
+  // Calculation of original interest for remaining tenure
+  val originalRemainingInterest = (remainingMonths * emi - currentPrincipal).coerceAtLeast(0.0)
+
+  // Simulated metrics
+  val newPrincipal = (currentPrincipal - prepayAmount).coerceAtLeast(0.0)
+
+  val (simulatedMonths, interestSaved, isForeclosed) = remember(newPrincipal, prepayAmount, currentPrincipal) {
+    if (prepayAmount <= 0.0) {
+      Triple(remainingMonths, 0.0, false)
+    } else if (newPrincipal <= 0.0) {
+      // Foreclosed
+      Triple(0, originalRemainingInterest, true)
+    } else {
+      if (monthlyRate > 0.0 && (newPrincipal * monthlyRate) < emi) {
+        val n = ceil(-ln(1.0 - (newPrincipal * monthlyRate / emi)) / ln(1.0 + monthlyRate)).toInt()
+        val newInterest = (n * emi - newPrincipal).coerceAtLeast(0.0)
+        val saved = (originalRemainingInterest - newInterest).coerceAtLeast(0.0)
+        Triple(n, saved, false)
+      } else {
+        Triple(remainingMonths, 0.0, false)
+      }
+    }
+  }
+
+  val monthsSaved = (remainingMonths - simulatedMonths).coerceAtLeast(0)
+
+  Card(
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(
+      containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+    ),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+    modifier = Modifier.fillMaxWidth()
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(14.dp)
+    ) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          Icons.Default.Speed,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+          Text(
+            "Prepayment & Foreclosure Simulator",
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+          )
+          Text(
+            "Simulate prepaying extra lumpsum towards principal",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Quick chips
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        listOf(
+          25000.0 to "+ ₹25,000",
+          50000.0 to "+ ₹50,000",
+          100000.0 to "+ ₹1 Lakh",
+          200000.0 to "+ ₹2 Lakhs"
+        ).forEach { (amt, label) ->
+          AssistChip(
+            onClick = { prepayText = "%.0f".format(amt) },
+            label = { Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      OutlinedTextField(
+        value = prepayText,
+        onValueChange = { prepayText = it },
+        label = { Text("Extra Prepayment Amount (₹)") },
+        leadingIcon = { Text("₹", fontWeight = FontWeight.Bold) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp)
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Impact Result Cards
+      if (isForeclosed) {
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = Color(0xFF10B981).copy(alpha = 0.18f),
+          border = BorderStroke(1.dp, Color(0xFF10B981)),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981))
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+              Text(
+                "🎉 Loan Fully Foreclosed & Closed!",
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF10B981),
+                fontSize = 13.sp
+              )
+              Text(
+                "You become debt-free immediately and save ${CurrencyFormatter.format(interestSaved)} in interest!",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+            }
+          }
+        }
+      } else {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.weight(1f)
+          ) {
+            Column(modifier = Modifier.padding(10.dp)) {
+              Text(
+                "Tenure Reduced By",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Spacer(modifier = Modifier.height(2.dp))
+              Text(
+                if (monthsSaved > 0) "$monthsSaved Months" else "0 Months",
+                style = MaterialTheme.typography.titleMedium.copy(
+                  fontWeight = FontWeight.Bold,
+                  color = if (monthsSaved > 0) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurface
+                )
+              )
+              Text(
+                "New tenure: $simulatedMonths mos",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+          }
+
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.weight(1f)
+          ) {
+            Column(modifier = Modifier.padding(10.dp)) {
+              Text(
+                "Total Interest Saved",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Spacer(modifier = Modifier.height(2.dp))
+              Text(
+                CurrencyFormatter.format(interestSaved),
+                style = MaterialTheme.typography.titleMedium.copy(
+                  fontWeight = FontWeight.Bold,
+                  color = if (interestSaved > 0) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurface
+                )
+              )
+              Text(
+                "Pure direct savings",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+          }
+        }
+      }
+    }
   }
 }

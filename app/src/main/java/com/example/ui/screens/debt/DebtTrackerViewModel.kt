@@ -165,7 +165,16 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
         bankAccountId = bankAccountId,
         bankAccountName = bankAccountName
       )
-      debtDao.insertDebt(debt)
+      val newId = debtDao.insertDebt(debt)
+      val createdDebt = debt.copy(id = newId)
+
+      // Schedule background alarm notification 1 day before due date
+      if (dueDateTimestamp != null && dueDateTimestamp > 0L) {
+        com.example.domain.notification.CreditCardBillNotificationScheduler.scheduleDebtReminder(
+          getApplication(),
+          createdDebt
+        )
+      }
 
       // Automatically log to Finance Hub ledger using reactive dynamic calculation
       // (Never mutate raw static bankAccount.balance directly)
@@ -180,7 +189,8 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
               type = "EXPENSE",
               bankAccountId = bankAccountId,
               bankAccountName = bankAccountName,
-              notes = "Recorded in Personal Lend & Borrow Tracker"
+              notes = "Recorded in Personal Lend & Borrow Tracker",
+              debtId = newId
             )
           )
         } else {
@@ -193,7 +203,8 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
               type = "INCOME",
               bankAccountId = bankAccountId,
               bankAccountName = bankAccountName,
-              notes = "Recorded in Personal Lend & Borrow Tracker"
+              notes = "Recorded in Personal Lend & Borrow Tracker",
+              debtId = newId
             )
           )
         }
@@ -211,6 +222,7 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
     bankAccountName: String
   ) {
     viewModelScope.launch {
+      com.example.domain.notification.CreditCardBillNotificationScheduler.cancelDebt(getApplication(), debt.id)
       val result = repository.settleDebt(
         debt = debt,
         preferredBankAccountId = bankAccountId,
@@ -223,23 +235,42 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
 
   fun deleteDebt(debt: DebtRecord) {
     viewModelScope.launch {
+      com.example.domain.notification.CreditCardBillNotificationScheduler.cancelDebt(getApplication(), debt.id)
       debtDao.deleteDebt(debt)
       _userMessage.value = "Transaction removed"
     }
   }
 
+  private val prefs = application.getSharedPreferences("omni_calc_finance_prefs", Context.MODE_PRIVATE)
+  private val _userUpiId = MutableStateFlow(prefs.getString("user_upi_id", "") ?: "")
+  val userUpiId: StateFlow<String> = _userUpiId.asStateFlow()
+
+  fun setUserUpiId(upiId: String) {
+    val clean = upiId.trim()
+    prefs.edit().putString("user_upi_id", clean).apply()
+    _userUpiId.value = clean
+    _userUpiId.value = clean
+  }
+
   /**
-   * Generates a preformatted WhatsApp/SMS reminder message and triggers Android Share Sheet.
+   * Generates a preformatted WhatsApp/SMS reminder message with optional 1-tap UPI payment link.
    */
   fun sendReminder(context: Context, debt: DebtRecord) {
     val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
     val dateStr = dateFormat.format(Date(debt.dateTimestamp))
     val dueDateStr = debt.dueDateTimestamp?.let { " (Due: ${dateFormat.format(Date(it))})" } ?: ""
+    val formattedAmt = com.example.ui.components.CurrencyFormatter.format(debt.amount)
+    val configuredUpi = _userUpiId.value
 
     val reminderMessage = if (debt.type == "LENT") {
-      "Hi ${debt.personName},\n\nThis is a gentle reminder regarding the ₹${"%.0f".format(debt.amount)} lent on $dateStr$dueDateStr.\n\nPlease settle it when convenient. Thank you! 🙏"
+      if (configuredUpi.isNotBlank()) {
+        val upiLink = "upi://pay?pa=$configuredUpi&pn=OmniCalc&am=${String.format(Locale.US, "%.2f", debt.amount)}&cu=INR&tn=Repayment%20for%20Udhaar"
+        "Hi ${debt.personName},\n\nFriendly reminder regarding the $formattedAmt lent on $dateStr$dueDateStr.\n\n⚡ Pay back instantly in 1-tap via UPI:\n$upiLink\n\n(Works directly in Google Pay, PhonePe, Paytm, or BHIM)\n\nThank you! 🙏"
+      } else {
+        "Hi ${debt.personName},\n\nThis is a gentle reminder regarding the $formattedAmt lent on $dateStr$dueDateStr.\n\nPlease settle it when convenient. Thank you! 🙏"
+      }
     } else {
-      "Hi ${debt.personName},\n\nJust a quick note regarding the ₹${"%.0f".format(debt.amount)} I borrowed on $dateStr$dueDateStr. Let me know the preferred payment method to settle this. Thanks! 🙏"
+      "Hi ${debt.personName},\n\nJust a quick note regarding the $formattedAmt I borrowed on $dateStr$dueDateStr. Let me know your preferred UPI ID or payment method to settle this. Thanks! 🙏"
     }
 
     val shareIntent = Intent(Intent.ACTION_SEND).apply {

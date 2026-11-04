@@ -136,7 +136,12 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
         bankAccountId = bankAccountId,
         bankAccountName = bankAccountName
       )
-      loanDao.insertLoan(newLoan)
+      val insertedId = loanDao.insertLoan(newLoan)
+      val createdLoan = newLoan.copy(id = insertedId)
+      com.example.domain.notification.CreditCardBillNotificationScheduler.scheduleLoanReminder(
+        getApplication(),
+        createdLoan
+      )
       _showAddLoanDialog.value = false
       _userMessage.value = "Loan '${newLoan.loanName}' added successfully"
     }
@@ -144,6 +149,7 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
 
   fun deleteLoan(loan: LoanRecord) {
     viewModelScope.launch {
+      com.example.domain.notification.CreditCardBillNotificationScheduler.cancelLoan(getApplication(), loan.id)
       loanDao.deleteLoan(loan)
       if (_selectedLoanDetail.value?.id == loan.id) {
         _selectedLoanDetail.value = null

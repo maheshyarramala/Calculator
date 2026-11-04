@@ -5,8 +5,12 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import com.example.data.local.entity.BankAccount
+import com.example.data.local.entity.CreditCardBillReminder
+import com.example.data.local.entity.DebtRecord
 import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
+import com.example.data.local.entity.LoanRecord
+import com.example.data.local.entity.SubscriptionRecord
 import com.example.data.local.entity.TripRecord
 import org.json.JSONArray
 import org.json.JSONObject
@@ -21,7 +25,11 @@ data class FinanceBackupPayload(
   val categories: List<ExpenseCategory>,
   val bankAccounts: List<BankAccount>,
   val trips: List<TripRecord>,
-  val expenses: List<ExpenseRecord>
+  val expenses: List<ExpenseRecord>,
+  val loans: List<LoanRecord> = emptyList(),
+  val debts: List<DebtRecord> = emptyList(),
+  val subscriptions: List<SubscriptionRecord> = emptyList(),
+  val creditCardReminders: List<CreditCardBillReminder> = emptyList()
 )
 
 sealed class BackupParseResult {
@@ -31,14 +39,18 @@ sealed class BackupParseResult {
 
 object FinanceBackupManager {
 
-  private const val BACKUP_VERSION = 1
+  private const val BACKUP_VERSION = 2
   private const val APP_IDENTIFIER = "OmniCalc"
 
   fun exportToJson(
     categories: List<ExpenseCategory>,
     bankAccounts: List<BankAccount>,
     trips: List<TripRecord>,
-    expenses: List<ExpenseRecord> = emptyList()
+    expenses: List<ExpenseRecord> = emptyList(),
+    loans: List<LoanRecord> = emptyList(),
+    debts: List<DebtRecord> = emptyList(),
+    subscriptions: List<SubscriptionRecord> = emptyList(),
+    creditCardReminders: List<CreditCardBillReminder> = emptyList()
   ): String {
     val root = JSONObject()
     root.put("version", BACKUP_VERSION)
@@ -46,7 +58,7 @@ object FinanceBackupManager {
     root.put("exportedAt", System.currentTimeMillis())
     root.put("exportedAtFormatted", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
 
-    // Categories (include custom & default so full setup is preserved)
+    // Categories
     val catArray = JSONArray()
     categories.forEach { cat ->
       val obj = JSONObject()
@@ -89,7 +101,7 @@ object FinanceBackupManager {
     }
     root.put("trips", tripArray)
 
-    // Expenses (and income, with bank account links)
+    // Expenses
     val expArray = JSONArray()
     expenses.forEach { exp ->
       val obj = JSONObject()
@@ -101,9 +113,77 @@ object FinanceBackupManager {
       obj.put("bankAccountName", exp.bankAccountName)
       obj.put("dateTimestamp", exp.dateTimestamp)
       obj.put("notes", exp.notes)
+      if (exp.loanId != null) obj.put("loanId", exp.loanId)
+      if (exp.debtId != null) obj.put("debtId", exp.debtId)
+      if (exp.tripId != null) obj.put("tripId", exp.tripId)
       expArray.put(obj)
     }
     root.put("expenses", expArray)
+
+    // Active Loans
+    val loanArray = JSONArray()
+    loans.forEach { loan ->
+      val obj = JSONObject()
+      obj.put("loanName", loan.loanName)
+      obj.put("loanCategory", loan.loanCategory)
+      obj.put("principalAmount", loan.principalAmount)
+      obj.put("annualInterestRate", loan.annualInterestRate)
+      obj.put("tenureMonths", loan.tenureMonths)
+      obj.put("emiAmount", loan.emiAmount)
+      obj.put("startDate", loan.startDate)
+      obj.put("paidEmisCount", loan.paidEmisCount)
+      obj.put("notes", loan.notes)
+      if (loan.bankAccountId != null) obj.put("bankAccountId", loan.bankAccountId)
+      loanArray.put(obj)
+    }
+    root.put("loans", loanArray)
+
+    // Debts & Udhaar Ledger
+    val debtArray = JSONArray()
+    debts.forEach { debt ->
+      val obj = JSONObject()
+      obj.put("personName", debt.personName)
+      obj.put("amount", debt.amount)
+      obj.put("type", debt.type)
+      obj.put("dateTimestamp", debt.dateTimestamp)
+      if (debt.dueDateTimestamp != null) obj.put("dueDateTimestamp", debt.dueDateTimestamp)
+      obj.put("isSettled", debt.isSettled)
+      if (debt.settledDateTimestamp != null) obj.put("settledDateTimestamp", debt.settledDateTimestamp)
+      obj.put("notes", debt.notes)
+      debtArray.put(obj)
+    }
+    root.put("debts", debtArray)
+
+    // Recurring Subscriptions
+    val subArray = JSONArray()
+    subscriptions.forEach { sub ->
+      val obj = JSONObject()
+      obj.put("title", sub.title)
+      obj.put("amount", sub.amount)
+      obj.put("categoryName", sub.categoryName)
+      obj.put("frequency", sub.frequency)
+      obj.put("dueDayOfMonth", sub.dueDayOfMonth)
+      obj.put("dueMonth", sub.dueMonth)
+      obj.put("dueDayOfWeek", sub.dueDayOfWeek)
+      obj.put("notes", sub.notes)
+      obj.put("colorHex", sub.colorHex)
+      obj.put("iconName", sub.iconName)
+      subArray.put(obj)
+    }
+    root.put("subscriptions", subArray)
+
+    // Credit Card Reminders
+    val ccArray = JSONArray()
+    creditCardReminders.forEach { cc ->
+      val obj = JSONObject()
+      obj.put("accountId", cc.accountId)
+      obj.put("amount", cc.amount)
+      obj.put("dueDateEpochDay", cc.dueDateEpochDay)
+      obj.put("paidDateEpochDay", cc.paidDateEpochDay)
+      obj.put("notificationsEnabled", cc.notificationsEnabled)
+      ccArray.put(obj)
+    }
+    root.put("creditCardReminders", ccArray)
 
     return root.toString(2)
   }
@@ -194,6 +274,9 @@ object FinanceBackupManager {
           val amount = obj.optDouble("amount", 0.0)
           if (title.isNotEmpty() && amount > 0.0) {
             val accId = if (obj.has("bankAccountId") && obj.getLong("bankAccountId") > 0) obj.getLong("bankAccountId") else null
+            val lId = if (obj.has("loanId") && obj.getLong("loanId") > 0) obj.getLong("loanId") else null
+            val dId = if (obj.has("debtId") && obj.getLong("debtId") > 0) obj.getLong("debtId") else null
+            val tId = if (obj.has("tripId") && obj.getLong("tripId") > 0) obj.getLong("tripId") else null
             expenses.add(
               ExpenseRecord(
                 id = 0,
@@ -204,26 +287,148 @@ object FinanceBackupManager {
                 bankAccountId = accId,
                 bankAccountName = obj.optString("bankAccountName", ""),
                 dateTimestamp = obj.optLong("dateTimestamp", System.currentTimeMillis()),
-                notes = obj.optString("notes", "")
+                notes = obj.optString("notes", ""),
+                loanId = lId,
+                debtId = dId,
+                tripId = tId
               )
             )
           }
         }
       }
 
-      if (categories.isEmpty() && bankAccounts.isEmpty() && trips.isEmpty() && expenses.isEmpty()) {
-        return BackupParseResult.Error("No valid categories, bank accounts, or trips found in JSON.")
+      // Parse Loans
+      val loans = mutableListOf<LoanRecord>()
+      if (root.has("loans")) {
+        val loanArray = root.getJSONArray("loans")
+        for (i in 0 until loanArray.length()) {
+          val obj = loanArray.getJSONObject(i)
+          val loanName = obj.optString("loanName", "").trim()
+          val principal = obj.optDouble("principalAmount", 0.0)
+          if (loanName.isNotEmpty() && principal > 0.0) {
+            val bId = if (obj.has("bankAccountId") && obj.getLong("bankAccountId") > 0) obj.getLong("bankAccountId") else null
+            loans.add(
+              LoanRecord(
+                id = 0,
+                loanName = loanName,
+                loanCategory = obj.optString("loanCategory", "PERSONAL"),
+                principalAmount = principal,
+                annualInterestRate = obj.optDouble("annualInterestRate", 10.0),
+                tenureMonths = obj.optInt("tenureMonths", 12),
+                emiAmount = obj.optDouble("emiAmount", 0.0),
+                startDate = obj.optString("startDate", ""),
+                paidEmisCount = obj.optInt("paidEmisCount", 0),
+                notes = obj.optString("notes", ""),
+                bankAccountId = bId
+              )
+            )
+          }
+        }
+      }
+
+      // Parse Debts
+      val debts = mutableListOf<DebtRecord>()
+      if (root.has("debts")) {
+        val debtArray = root.getJSONArray("debts")
+        for (i in 0 until debtArray.length()) {
+          val obj = debtArray.getJSONObject(i)
+          val personName = obj.optString("personName", "").trim()
+          val amount = obj.optDouble("amount", 0.0)
+          if (personName.isNotEmpty() && amount > 0.0) {
+            val due = if (obj.has("dueDateTimestamp") && obj.getLong("dueDateTimestamp") > 0) obj.getLong("dueDateTimestamp") else null
+            val settled = if (obj.has("settledDateTimestamp") && obj.getLong("settledDateTimestamp") > 0) obj.getLong("settledDateTimestamp") else null
+            debts.add(
+              DebtRecord(
+                id = 0,
+                personName = personName,
+                amount = amount,
+                type = obj.optString("type", "LENT"),
+                dateTimestamp = obj.optLong("dateTimestamp", System.currentTimeMillis()),
+                dueDateTimestamp = due,
+                isSettled = obj.optBoolean("isSettled", false),
+                notes = obj.optString("notes", ""),
+                settledDateTimestamp = settled
+              )
+            )
+          }
+        }
+      }
+
+      // Parse Subscriptions
+      val subscriptions = mutableListOf<SubscriptionRecord>()
+      if (root.has("subscriptions")) {
+        val subArray = root.getJSONArray("subscriptions")
+        for (i in 0 until subArray.length()) {
+          val obj = subArray.getJSONObject(i)
+          val title = obj.optString("title", "").trim()
+          val amount = obj.optDouble("amount", 0.0)
+          if (title.isNotEmpty() && amount > 0.0) {
+            subscriptions.add(
+              SubscriptionRecord(
+                id = 0,
+                title = title,
+                amount = amount,
+                categoryName = obj.optString("categoryName", "Subscriptions"),
+                frequency = obj.optString("frequency", "MONTHLY"),
+                dueDayOfMonth = obj.optInt("dueDayOfMonth", 1),
+                dueMonth = obj.optInt("dueMonth", 1),
+                dueDayOfWeek = obj.optInt("dueDayOfWeek", 1),
+                notes = obj.optString("notes", ""),
+                colorHex = obj.optString("colorHex", "#6366F1"),
+                iconName = obj.optString("iconName", "credit_card")
+              )
+            )
+          }
+        }
+      }
+
+      // Parse Credit Card Reminders
+      val creditCardReminders = mutableListOf<CreditCardBillReminder>()
+      if (root.has("creditCardReminders")) {
+        val ccArray = root.getJSONArray("creditCardReminders")
+        for (i in 0 until ccArray.length()) {
+          val obj = ccArray.getJSONObject(i)
+          val accId = obj.optLong("accountId", -1L)
+          if (accId > 0) {
+            creditCardReminders.add(
+              CreditCardBillReminder(
+                accountId = accId,
+                amount = obj.optDouble("amount", 0.0),
+                dueDateEpochDay = obj.optLong("dueDateEpochDay", 0L),
+                paidDateEpochDay = obj.optLong("paidDateEpochDay", -1L),
+                notificationsEnabled = obj.optBoolean("notificationsEnabled", true)
+              )
+            )
+          }
+        }
+      }
+
+      if (categories.isEmpty() && bankAccounts.isEmpty() && trips.isEmpty() && expenses.isEmpty() && loans.isEmpty() && debts.isEmpty()) {
+        return BackupParseResult.Error("No valid financial data found in JSON.")
       }
 
       val summary = buildString {
         if (categories.isNotEmpty()) append("${categories.size} Categories, ")
-        if (bankAccounts.isNotEmpty()) append("${bankAccounts.size} Bank Accounts, ")
+        if (bankAccounts.isNotEmpty()) append("${bankAccounts.size} Accounts, ")
         if (trips.isNotEmpty()) append("${trips.size} Trips, ")
-        if (expenses.isNotEmpty()) append("${expenses.size} Expenses")
+        if (expenses.isNotEmpty()) append("${expenses.size} Expenses, ")
+        if (loans.isNotEmpty()) append("${loans.size} Loans, ")
+        if (debts.isNotEmpty()) append("${debts.size} Debts, ")
+        if (subscriptions.isNotEmpty()) append("${subscriptions.size} Subscriptions, ")
+        if (creditCardReminders.isNotEmpty()) append("${creditCardReminders.size} Card Bills")
       }.trimEnd(' ', ',')
 
       BackupParseResult.Success(
-        payload = FinanceBackupPayload(categories, bankAccounts, trips, expenses),
+        payload = FinanceBackupPayload(
+          categories = categories,
+          bankAccounts = bankAccounts,
+          trips = trips,
+          expenses = expenses,
+          loans = loans,
+          debts = debts,
+          subscriptions = subscriptions,
+          creditCardReminders = creditCardReminders
+        ),
         summary = summary
       )
     } catch (e: Exception) {

@@ -55,6 +55,9 @@ fun DebtTrackerScreen(
     }
   }
 
+  val userUpiId by viewModel.userUpiId.collectAsState()
+  var showUpiDialog by remember { mutableStateOf(false) }
+
   Scaffold(
     snackbarHost = { SnackbarHost(snackbarHostState) },
     floatingActionButton = {
@@ -92,6 +95,60 @@ fun DebtTrackerScreen(
           selectedTab = state.selectedTab,
           onSelectTab = { viewModel.selectTab(it) }
         )
+      }
+
+      // 2b. 1-Tap UPI Payment Links Banner for "People Who Owe Me"
+      if (state.selectedTab == DebtTab.LENT) {
+        item {
+          Card(
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            ),
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable { showUpiDialog = true }
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Row(
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Icon(
+                  Icons.Default.QrCode,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                  Text(
+                    "1-Tap UPI Repayment Links",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                  )
+                  Text(
+                    if (userUpiId.isNotBlank()) "Your UPI: $userUpiId (Included in WhatsApp reminders)"
+                    else "Tap to add your UPI ID (GPay/PhonePe/Paytm)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+              FilledTonalIconButton(
+                onClick = { showUpiDialog = true },
+                modifier = Modifier.size(36.dp)
+              ) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit UPI ID", modifier = Modifier.size(16.dp))
+              }
+            }
+          }
+        }
       }
 
       // 3. Search Bar
@@ -217,6 +274,70 @@ fun DebtTrackerScreen(
       }
     )
   }
+
+  // Configure UPI ID Dialog
+  if (showUpiDialog) {
+    ConfigureUpiIdDialog(
+      currentUpiId = userUpiId,
+      onDismiss = { showUpiDialog = false },
+      onSave = { newUpi ->
+        viewModel.setUserUpiId(newUpi)
+        showUpiDialog = false
+      }
+    )
+  }
+}
+
+@Composable
+private fun ConfigureUpiIdDialog(
+  currentUpiId: String,
+  onDismiss: () -> Unit,
+  onSave: (String) -> Unit
+) {
+  var upiInput by remember { mutableStateOf(currentUpiId) }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.QrCode, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("Your UPI Payment ID", fontWeight = FontWeight.Bold)
+      }
+    },
+    text = {
+      Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+          "Enter your UPI ID (VPA) so that when you send WhatsApp or SMS reminders to people who owe you money, OmniCalc automatically attaches a 1-tap payment link (upi://pay?pa=...).",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        OutlinedTextField(
+          value = upiInput,
+          onValueChange = { upiInput = it },
+          label = { Text("UPI ID / VPA") },
+          placeholder = { Text("e.g. yourname@oksbi, 9876543210@paytm") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth(),
+          shape = RoundedCornerShape(12.dp)
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = { onSave(upiInput) },
+        shape = RoundedCornerShape(10.dp)
+      ) {
+        Text("Save UPI ID")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancel")
+      }
+    }
+  )
 }
 
 // -------------------------------------------------------------

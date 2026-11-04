@@ -61,6 +61,8 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   private val repository = com.example.data.repository.FinanceRepository.getInstance(application)
   private val dao = AppDatabase.getDatabase(application).financeDao()
+  private val loanDao = AppDatabase.getDatabase(application).loanDao()
+  private val debtDao = AppDatabase.getDatabase(application).debtDao()
 
   private val _uiState = MutableStateFlow(FinanceUiState())
   val uiState: StateFlow<FinanceUiState> = _uiState.asStateFlow()
@@ -83,6 +85,43 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   val subscriptions: StateFlow<List<SubscriptionRecord>> = dao.getAllSubscriptions()
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  val allLoans: StateFlow<List<com.example.data.local.entity.LoanRecord>> = repository.allLoans
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  val allDebts: StateFlow<List<com.example.data.local.entity.DebtRecord>> = repository.allDebts
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  val currentMonthCategorySpend: StateFlow<List<CategorySpend>> = combine(
+    repository.allExpenses,
+    categories
+  ) { exps, cats ->
+    val cal = Calendar.getInstance()
+    val currMonth = cal.get(Calendar.MONTH)
+    val currYear = cal.get(Calendar.YEAR)
+    val monthExpenses = exps.filter { item ->
+      if (item.type != "EXPENSE") return@filter false
+      val itemCal = Calendar.getInstance().apply { timeInMillis = item.dateTimestamp }
+      itemCal.get(Calendar.MONTH) == currMonth && itemCal.get(Calendar.YEAR) == currYear
+    }
+    val total = monthExpenses.sumOf { it.amount }
+    if (total <= 0.0) return@combine emptyList()
+
+    val colorMap = cats.associate { it.name to it.colorHex }
+
+    monthExpenses.groupBy { it.categoryName }
+      .map { (catName, list) ->
+        val sum = list.sumOf { it.amount }
+        val pct = (sum / total) * 100.0
+        CategorySpend(
+          categoryName = catName,
+          colorHex = colorMap[catName] ?: "#6366F1",
+          totalAmount = sum,
+          percentage = pct
+        )
+      }
+      .sortedByDescending { it.totalAmount }
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   private val prefs = application.getSharedPreferences("omni_calc_finance_prefs", Context.MODE_PRIVATE)
   private val _monthlyBudgetLimit = MutableStateFlow(prefs.getFloat("monthly_budget_limit", 50000f).toDouble())
@@ -587,7 +626,11 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
       categories = categories.value,
       bankAccounts = bankAccounts.value,
       trips = trips.value,
-      expenses = expenses.value
+      expenses = expenses.value,
+      loans = allLoans.value,
+      debts = allDebts.value,
+      subscriptions = subscriptions.value,
+      creditCardReminders = creditCardBillReminders.value
     )
   }
 
@@ -597,7 +640,7 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
       val success = FinanceBackupManager.writeToUri(context, uri, json)
       _uiState.update {
         it.copy(
-          toastMessage = if (success) "Backup exported successfully to file!" else "Failed to write backup file.",
+          toastMessage = if (success) "Universal backup exported successfully to file!" else "Failed to write backup file.",
           showBackupModal = false
         )
       }
@@ -611,9 +654,9 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   fun copyBackupJson(context: Context) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("OmniCalc Finance Backup", getBackupJsonString())
+    val clip = ClipData.newPlainText("OmniCalc Universal Finance Backup", getBackupJsonString())
     clipboard.setPrimaryClip(clip)
-    _uiState.update { it.copy(toastMessage = "Backup JSON copied to clipboard!") }
+    _uiState.update { it.copy(toastMessage = "Universal Backup JSON copied to clipboard!") }
   }
 
   fun importFromUri(context: Context, uri: Uri, replaceExisting: Boolean) {
@@ -644,13 +687,28 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
             dao.deleteAllBankAccounts()
             dao.deleteAllTrips()
             dao.deleteAllExpenses()
+            dao.deleteAllSubscriptions()
+            loanDao.deleteAllLoans()
+            debtDao.deleteAllDebts()
 
             if (payload.categories.isNotEmpty()) dao.insertCategories(payload.categories)
             if (payload.bankAccounts.isNotEmpty()) dao.insertBankAccounts(payload.bankAccounts)
             if (payload.trips.isNotEmpty()) dao.insertTrips(payload.trips)
             if (payload.expenses.isNotEmpty()) dao.insertExpenses(payload.expenses)
+            payload.loans.forEach {
+              val newId = loanDao.insertLoan(it)
+              CreditCardBillNotificationScheduler.scheduleLoanReminder(getApplication(), it.copy(id = newId))
+            }
+            payload.debts.forEach {
+              val newId = debtDao.insertDebt(it)
+              if (it.dueDateTimestamp != null && it.dueDateTimestamp > 0L) {
+                CreditCardBillNotificationScheduler.scheduleDebtReminder(getApplication(), it.copy(id = newId))
+              }
+            }
+            if (payload.subscriptions.isNotEmpty()) dao.insertSubscriptions(payload.subscriptions)
+            payload.creditCardReminders.forEach { dao.insertCreditCardBillReminder(it) }
           } else {
-            // Merge strategy: skip duplicate names/numbers
+            // Merge strategy
             val currentCats = categories.value.map { it.name.lowercase().trim() }.toSet()
             val newCats = payload.categories.filter { it.name.lowercase().trim() !in currentCats }
             if (newCats.isNotEmpty()) dao.insertCategories(newCats)
@@ -663,8 +721,29 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
             val newTrips = payload.trips.filter { it.tripName.lowercase().trim() !in currentTrips }
             if (newTrips.isNotEmpty()) dao.insertTrips(newTrips)
 
-            if (payload.expenses.isNotEmpty()) {
-              dao.insertExpenses(payload.expenses)
+            if (payload.expenses.isNotEmpty()) dao.insertExpenses(payload.expenses)
+
+            val currentLoans = allLoans.value.map { it.loanName.lowercase().trim() }.toSet()
+            payload.loans.filter { it.loanName.lowercase().trim() !in currentLoans }.forEach {
+              val newId = loanDao.insertLoan(it)
+              CreditCardBillNotificationScheduler.scheduleLoanReminder(getApplication(), it.copy(id = newId))
+            }
+
+            val currentDebts = allDebts.value.map { "${it.personName.lowercase().trim()}_${it.amount}_${it.type}" }.toSet()
+            payload.debts.filter { "${it.personName.lowercase().trim()}_${it.amount}_${it.type}" !in currentDebts }.forEach {
+              val newId = debtDao.insertDebt(it)
+              if (it.dueDateTimestamp != null && it.dueDateTimestamp > 0L) {
+                CreditCardBillNotificationScheduler.scheduleDebtReminder(getApplication(), it.copy(id = newId))
+              }
+            }
+
+            val currentSubs = subscriptions.value.map { it.title.lowercase().trim() }.toSet()
+            val newSubs = payload.subscriptions.filter { it.title.lowercase().trim() !in currentSubs }
+            if (newSubs.isNotEmpty()) dao.insertSubscriptions(newSubs)
+
+            val currentCCs = creditCardBillReminders.value.map { it.accountId }.toSet()
+            payload.creditCardReminders.filter { it.accountId !in currentCCs }.forEach {
+              dao.insertCreditCardBillReminder(it)
             }
           }
 
@@ -672,7 +751,7 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
             it.copy(
               showBackupModal = false,
               showPasteJsonDialog = false,
-              toastMessage = "Restored successfully: ${result.summary}!"
+              toastMessage = "Universal backup restored: ${result.summary}!"
             )
           }
         }
