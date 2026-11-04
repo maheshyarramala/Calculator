@@ -69,9 +69,7 @@ import java.time.format.ResolverStyle
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
-import com.example.ui.components.ChartSlice
 import com.example.ui.components.CurrencyFormatter
-import com.example.ui.components.DonutChart
 import com.example.ui.components.NumberInputField
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -102,7 +100,6 @@ fun FinanceHubScreen(
   val allLoans by viewModel.allLoans.collectAsState()
   val allDebts by viewModel.allDebts.collectAsState()
   val creditCardBillReminders by viewModel.creditCardBillReminders.collectAsState()
-  val categorySpend by viewModel.currentMonthCategorySpend.collectAsState()
   val monthlyBudgetLimit by viewModel.monthlyBudgetLimit.collectAsState()
   val currentMonthExpenses by viewModel.currentMonthExpenses.collectAsState()
 
@@ -427,7 +424,7 @@ fun FinanceHubScreen(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 8.dp),
+          .padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
@@ -506,7 +503,6 @@ fun FinanceHubScreen(
           totalExpense = totalExpense,
           monthlyBudgetLimit = monthlyBudgetLimit,
           currentMonthExpenses = currentMonthExpenses,
-          categorySpend = categorySpend,
           onEditBudgetClick = { viewModel.setShowSetBudget(true) },
           selectedAccountFilterId = uiState.selectedAccountFilterId,
           onSelectAccountFilter = { viewModel.setSelectedAccountFilter(it) },
@@ -762,7 +758,6 @@ private fun ExpensesSection(
   totalExpense: Double,
   monthlyBudgetLimit: Double,
   currentMonthExpenses: Double,
-  categorySpend: List<CategorySpend>,
   onEditBudgetClick: () -> Unit,
   selectedAccountFilterId: Long?,
   onSelectAccountFilter: (Long?) -> Unit,
@@ -811,8 +806,8 @@ private fun ExpensesSection(
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 88.dp),
-    verticalArrangement = Arrangement.spacedBy(12.dp)
+    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 88.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp)
   ) {
     // Total Net Balance Dashboard Banner
     item(key = "total_net_balance_card") {
@@ -1016,13 +1011,6 @@ private fun ExpensesSection(
         spent = currentMonthExpenses,
         limit = monthlyBudgetLimit,
         onEditBudget = onEditBudgetClick
-      )
-    }
-
-    item(key = "monthly_spending_breakdown_card") {
-      MonthlyCategorySpendingChartCard(
-        categorySpend = categorySpend,
-        totalSpent = currentMonthExpenses
       )
     }
 
@@ -1378,6 +1366,18 @@ private fun ExpensesSection(
       }
     }
 
+    val expenseTransactions = displayedExpenses.filter { it.type == "EXPENSE" }
+    val totalSpentOnExpenses = expenseTransactions.sumOf { it.amount }
+    if (totalSpentOnExpenses > 0) {
+      item(key = "spending_analytics") {
+        SpendingAnalyticsCard(
+          expenses = expenseTransactions,
+          categories = categories,
+          totalSpent = totalSpentOnExpenses
+        )
+      }
+    }
+
     // Category Chips Bar
     item(key = "categories_list") {
       LazyRow(
@@ -1553,7 +1553,7 @@ private fun ExpensesSection(
       title = { Text("Delete Transaction?") },
       text = {
         Text(
-          "Delete '${expense.title}' (${CurrencyFormatter.format(expense.amount)})? " +
+          "Delete '${expense.title}' (${CurrencyFormatter.formatWhole(expense.amount)})? " +
             "You can undo this briefly after confirming."
         )
       },
@@ -1711,7 +1711,11 @@ private fun ExpenseItemCard(
 
       Column(horizontalAlignment = Alignment.End) {
         Text(
-          text = if (isIncome) "+ ${CurrencyFormatter.format(expense.amount)}" else "- ${CurrencyFormatter.format(expense.amount)}",
+          text = if (isIncome) {
+            "+ ${CurrencyFormatter.formatWhole(expense.amount)}"
+          } else {
+            "- ${CurrencyFormatter.formatWhole(expense.amount)}"
+          },
           fontWeight = FontWeight.Bold,
           fontSize = 14.sp,
           color = amountColor
@@ -2025,7 +2029,7 @@ private fun SpendingAnalyticsCard(
                 verticalAlignment = Alignment.CenterVertically
               ) {
                 Text(
-                  text = CurrencyFormatter.format(amount),
+                  text = CurrencyFormatter.formatWhole(amount),
                   fontSize = 12.sp,
                   fontWeight = FontWeight.Bold
                 )
@@ -2909,7 +2913,7 @@ private fun TripCardItem(
                   )
                 }
                 Text(
-                  text = CurrencyFormatter.format(exp.amount),
+                  text = CurrencyFormatter.formatWhole(exp.amount),
                   fontWeight = FontWeight.Bold,
                   fontSize = 12.sp,
                   color = Color(0xFFDC2626)
@@ -3928,123 +3932,6 @@ private fun PasteJsonBackupDialog(
       TextButton(onClick = onDismiss) { Text("Cancel") }
     }
   )
-}
-
-// -------------------------------------------------------------
-// MONTHLY CATEGORY EXPENSE SPENDING BREAKDOWN
-// -------------------------------------------------------------
-@Composable
-private fun MonthlyCategorySpendingChartCard(
-  categorySpend: List<CategorySpend>,
-  totalSpent: Double
-) {
-  val fallbackColors = listOf(
-    Color(0xFFEF4444), Color(0xFF3B82F6), Color(0xFF10B981),
-    Color(0xFFF59E0B), Color(0xFF8B5CF6), Color(0xFFEC4899),
-    Color(0xFF06B6D4), Color(0xFF14B8A6), Color(0xFF6366F1)
-  )
-  val slices = remember(categorySpend) {
-    categorySpend.mapIndexed { index, item ->
-      val color = try {
-        Color(android.graphics.Color.parseColor(item.colorHex))
-      } catch (_: IllegalArgumentException) {
-        fallbackColors[index % fallbackColors.size]
-      }
-      ChartSlice(item.categoryName, item.totalAmount, color)
-    }
-  }
-  var selectedSliceIndex by remember(categorySpend) { mutableStateOf<Int?>(null) }
-
-  Card(
-    shape = RoundedCornerShape(20.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    modifier = Modifier
-      .fillMaxWidth()
-      .testTag("monthly_category_spending_card")
-  ) {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(18.dp)
-    ) {
-      Text(
-        text = "Monthly Spending Breakdown",
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-      )
-      Text(
-        text = "Category distribution for this month",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
-
-      if (slices.isEmpty() || totalSpent <= 0.0) {
-        Text(
-          text = "No expenses logged this month.",
-          modifier = Modifier.padding(top = 16.dp),
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-      } else {
-        Spacer(modifier = Modifier.height(16.dp))
-        DonutChart(
-          slices = slices,
-          modifier = Modifier.fillMaxWidth(),
-          size = 170.dp,
-          strokeWidth = 24.dp,
-          centerTitle = selectedSliceIndex?.let { slices.getOrNull(it) }
-            ?.let { CurrencyFormatter.formatWhole(it.value) }
-            ?: CurrencyFormatter.formatWhole(totalSpent),
-          centerSubtitle = selectedSliceIndex?.let { categorySpend.getOrNull(it)?.categoryName }
-            ?: "Total Spent",
-          selectedSliceIndex = selectedSliceIndex,
-          onSliceSelected = { selectedSliceIndex = it }
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          categorySpend.forEachIndexed { index, item ->
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .clickable {
-                  selectedSliceIndex = if (selectedSliceIndex == index) null else index
-                }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Box(
-                  modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(slices[index].color)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                  text = item.categoryName,
-                  fontSize = 13.sp,
-                  fontWeight = FontWeight.Medium,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
-                )
-              }
-              Text(
-                text = "${"%.1f".format(item.percentage)}%  ${CurrencyFormatter.format(item.totalAmount)}",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                softWrap = false
-              )
-            }
-          }
-        }
-      }
-    }
-  }
 }
 
 // -------------------------------------------------------------
