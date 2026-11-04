@@ -19,7 +19,8 @@ enum class InvestmentTab(val title: String) {
   LUMPSUM("Lump Sum"),
   COMPOUND("Compound Int."),
   PPF("PPF"),
-  FD("Fixed Deposit")
+  FD("Fixed Deposit"),
+  TRADE("Trade P&L")
 }
 
 data class InvestmentUiState(
@@ -124,6 +125,7 @@ class InvestmentViewModel : ViewModel() {
         val y = state.fdYears.toDoubleOrNull() ?: 1.0
         InvestmentCalculators.calculateFd(d, r, y)
       }
+      InvestmentTab.TRADE -> InvestmentResult("Trade P&L", 0.0, 0.0, 0.0, emptyList())
     }
     _uiState.update { it.copy(result = res) }
   }

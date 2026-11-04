@@ -632,6 +632,54 @@ private fun DateAddSubtractSection(viewModel: AgeCalendarViewModel) {
             modifier = Modifier.weight(1f)
           )
         }
+
+        Text(
+          "Quick Warranty / Return Presets:",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          SuggestionChip(
+            onClick = {
+              viewModel.toggleAdjOperation(true)
+              viewModel.updateAdjValues(years = "0", months = "0", weeks = "1", days = "0")
+            },
+            label = { Text("7-Day Return", fontSize = 10.sp) },
+            modifier = Modifier.weight(1f)
+          )
+          SuggestionChip(
+            onClick = {
+              viewModel.toggleAdjOperation(true)
+              viewModel.updateAdjValues(years = "0", months = "0", weeks = "0", days = "30")
+            },
+            label = { Text("30-Day Replacement", fontSize = 10.sp) },
+            modifier = Modifier.weight(1f)
+          )
+        }
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          SuggestionChip(
+            onClick = {
+              viewModel.toggleAdjOperation(true)
+              viewModel.updateAdjValues(years = "1", months = "0", weeks = "0", days = "0")
+            },
+            label = { Text("1-Year Warranty", fontSize = 10.sp) },
+            modifier = Modifier.weight(1f)
+          )
+          SuggestionChip(
+            onClick = {
+              viewModel.toggleAdjOperation(true)
+              viewModel.updateAdjValues(years = "3", months = "0", weeks = "0", days = "0")
+            },
+            label = { Text("3-Year Warranty", fontSize = 10.sp) },
+            modifier = Modifier.weight(1f)
+          )
+        }
       }
     }
 

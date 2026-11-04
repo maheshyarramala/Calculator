@@ -26,6 +26,30 @@ import com.example.ui.components.*
 import com.example.ui.theme.ChartInvested
 import com.example.ui.theme.ChartWealthGain
 
+@Composable
+private fun TradeChargeRow(label: String, value: String, isBold: Boolean = false) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(vertical = 4.dp),
+    horizontalArrangement = Arrangement.SpaceBetween
+  ) {
+    Text(
+      text = label,
+      style = MaterialTheme.typography.bodySmall,
+      fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Text(
+      text = value,
+      style = MaterialTheme.typography.bodySmall.copy(
+        fontWeight = if (isBold) FontWeight.Bold else FontWeight.SemiBold
+      ),
+      color = MaterialTheme.colorScheme.onSurface
+    )
+  }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InvestmentScreen(
@@ -35,6 +59,24 @@ fun InvestmentScreen(
   val state by viewModel.uiState.collectAsState()
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
+  var tradeBuyPrice by remember { mutableStateOf("500") }
+  var tradeSellPrice by remember { mutableStateOf("525") }
+  var tradeQuantity by remember { mutableStateOf("100") }
+  var isIntraday by remember { mutableStateOf(false) }
+  val parsedBuyPrice = tradeBuyPrice.toDoubleOrNull()
+  val parsedSellPrice = tradeSellPrice.toDoubleOrNull()
+  val parsedQuantity = tradeQuantity.toIntOrNull()
+  val isTradeInputValid = parsedBuyPrice?.let { it.isFinite() && it > 0.0 } == true &&
+    parsedSellPrice?.let { it.isFinite() && it > 0.0 } == true &&
+    parsedQuantity?.let { it > 0 } == true
+  val tradeResult = remember(tradeBuyPrice, tradeSellPrice, tradeQuantity, isIntraday) {
+    InvestmentCalculators.calculateEquityTradePnl(
+      buyPrice = parsedBuyPrice ?: 0.0,
+      sellPrice = parsedSellPrice ?: 0.0,
+      quantity = parsedQuantity ?: 0,
+      isIntraday = isIntraday
+    )
+  }
 
   Scaffold(
     contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -78,6 +120,7 @@ fun InvestmentScreen(
               InvestmentTab.COMPOUND -> Icons.Default.Percent
               InvestmentTab.PPF -> Icons.Default.AccountBalance
               InvestmentTab.FD -> Icons.Default.Savings
+              InvestmentTab.TRADE -> Icons.AutoMirrored.Filled.TrendingUp
             }
             Tab(
               selected = state.selectedTab == tab,
@@ -119,14 +162,16 @@ fun InvestmentScreen(
                 text = "${state.selectedTab.title} Calculator",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
               )
-              FilledTonalIconButton(
-                onClick = {
-                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-                  viewModel.saveCalculation(context)
-                },
-                modifier = Modifier.testTag("save_investment_button")
-              ) {
-                Icon(Icons.Default.BookmarkAdd, contentDescription = "Save investment")
+              if (state.selectedTab != InvestmentTab.TRADE) {
+                FilledTonalIconButton(
+                  onClick = {
+                    haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+                    viewModel.saveCalculation(context)
+                  },
+                  modifier = Modifier.testTag("save_investment_button")
+                ) {
+                  Icon(Icons.Default.BookmarkAdd, contentDescription = "Save investment")
+                }
               }
             }
 
@@ -340,13 +385,118 @@ fun InvestmentScreen(
                   testTag = "fd_years_input"
                 )
               }
+
+              InvestmentTab.TRADE -> {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                  FilterChip(
+                    selected = !isIntraday,
+                    onClick = { isIntraday = false },
+                    label = { Text("Delivery (CNC)", fontSize = 12.sp) },
+                    modifier = Modifier.weight(1f)
+                  )
+                  FilterChip(
+                    selected = isIntraday,
+                    onClick = { isIntraday = true },
+                    label = { Text("Intraday (MIS)", fontSize = 12.sp) },
+                    modifier = Modifier.weight(1f)
+                  )
+                }
+
+                NumberInputField(
+                  value = tradeBuyPrice,
+                  onValueChange = { tradeBuyPrice = it },
+                  label = "Buy Price",
+                  prefix = "₹"
+                )
+                NumberInputField(
+                  value = tradeSellPrice,
+                  onValueChange = { tradeSellPrice = it },
+                  label = "Sell Price",
+                  prefix = "₹"
+                )
+                NumberInputField(
+                  value = tradeQuantity,
+                  onValueChange = { tradeQuantity = it },
+                  label = "Quantity (Shares)"
+                )
+              }
             }
           }
         }
       }
 
       // Output Results & Donut Chart
-      item {
+      if (state.selectedTab == InvestmentTab.TRADE) {
+        item {
+          val isProfit = tradeResult.netPnl >= 0.0
+          Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = if (!isTradeInputValid) MaterialTheme.colorScheme.surfaceVariant
+                else if (isProfit) Color(0xFFECFDF5) else Color(0xFFFEF2F2)
+            ),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+              Text(
+                text = if (!isTradeInputValid) "ENTER VALID TRADE DETAILS"
+                  else if (isProfit) "ESTIMATED NET PROFIT" else "ESTIMATED NET LOSS",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = if (!isTradeInputValid) MaterialTheme.colorScheme.onSurfaceVariant
+                  else if (isProfit) Color(0xFF065F46) else Color(0xFF991B1B)
+              )
+              if (isTradeInputValid) {
+                Text(
+                  text = CurrencyFormatter.format(tradeResult.netPnl),
+                  style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 32.sp
+                  ),
+                  color = if (isProfit) Color(0xFF059669) else Color(0xFFDC2626)
+                )
+              }
+              Spacer(modifier = Modifier.height(14.dp))
+              HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+              Spacer(modifier = Modifier.height(14.dp))
+
+              if (isTradeInputValid) {
+                TradeChargeRow("Gross P&L", CurrencyFormatter.format(tradeResult.grossPnl))
+                TradeChargeRow("Brokerage Fees", CurrencyFormatter.format(tradeResult.brokerage))
+                TradeChargeRow("STT / CTT", CurrencyFormatter.format(tradeResult.stt))
+                TradeChargeRow("Exchange Txn Charges", CurrencyFormatter.format(tradeResult.exchangeTxnCharge))
+                TradeChargeRow("SEBI Turnover Fee", CurrencyFormatter.format(tradeResult.sebiCharge))
+                TradeChargeRow("Stamp Duty", CurrencyFormatter.format(tradeResult.stampDuty))
+                TradeChargeRow("GST (18%)", CurrencyFormatter.format(tradeResult.gst))
+                if (!isIntraday) {
+                  TradeChargeRow("DP Charges", CurrencyFormatter.format(tradeResult.dpCharge))
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(10.dp))
+                TradeChargeRow(
+                  "Total Government & Broker Charges",
+                  CurrencyFormatter.format(tradeResult.totalCharges),
+                  isBold = true
+                )
+                TradeChargeRow(
+                  "Breakeven Price per Share",
+                  CurrencyFormatter.format(tradeResult.breakevenPerShare),
+                  isBold = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                  text = "Estimated charges; actual rates may vary by broker and current regulations.",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+          }
+        }
+      } else item {
         Card(
           shape = RoundedCornerShape(20.dp),
           colors = CardDefaults.cardColors(
@@ -407,6 +557,7 @@ fun InvestmentScreen(
                   )
                 }
               }
+
               Card(
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -422,6 +573,7 @@ fun InvestmentScreen(
                   )
                 }
               }
+
             }
           }
         }
