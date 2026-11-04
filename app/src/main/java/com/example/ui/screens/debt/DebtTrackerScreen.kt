@@ -77,8 +77,8 @@ fun DebtTrackerScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(padding),
-      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp)
+      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
       // 1. Dual Summary Card: Receivable (Green) vs Payable (Red)
       item {

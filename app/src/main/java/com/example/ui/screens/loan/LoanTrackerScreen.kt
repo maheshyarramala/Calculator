@@ -52,6 +52,7 @@ fun LoanTrackerScreen(
   val state by viewModel.uiState.collectAsState()
   val userMessage by viewModel.userMessage.collectAsState()
   val snackbarHostState = remember { SnackbarHostState() }
+  var loanPendingEmiPayment by remember { mutableStateOf<LoanRecord?>(null) }
 
   LaunchedEffect(userMessage) {
     userMessage?.let { msg ->
@@ -177,12 +178,7 @@ fun LoanTrackerScreen(
           LoanItemCard(
             loan = loan,
             onClick = { viewModel.selectLoanForDetail(loan) },
-            onPayEmi = {
-              viewModel.payMonthlyEmi(
-                loan = loan,
-                selectedBankAccountId = loan.bankAccountId
-              )
-            },
+            onPayEmi = { loanPendingEmiPayment = loan },
             onUndoEmi = {
               viewModel.undoLastPaidEmi(loan.id)
             }
@@ -211,6 +207,73 @@ fun LoanTrackerScreen(
           bankAccountId = bankId,
           bankAccountName = bankName
         )
+      }
+    )
+  }
+
+  loanPendingEmiPayment?.let { loan ->
+    AlertDialog(
+      onDismissRequest = { loanPendingEmiPayment = null },
+      title = { Text("Select Account for EMI") },
+      text = {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 320.dp)
+            .verticalScroll(rememberScrollState()),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          Text("Choose where to deduct ${CurrencyFormatter.format(loan.emiAmount)}:")
+          if (state.bankAccounts.isEmpty()) {
+            Text(
+              "No accounts are available. You can still record this EMI without an account.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+              onClick = {
+                viewModel.payMonthlyEmi(loan, null)
+                loanPendingEmiPayment = null
+              },
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Text("Pay without an account", maxLines = 1, softWrap = false)
+            }
+          } else {
+            state.bankAccounts.forEach { account ->
+              OutlinedButton(
+                onClick = {
+                  viewModel.payMonthlyEmi(loan, account.account.id)
+                  loanPendingEmiPayment = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+              ) {
+                Column(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalAlignment = Alignment.Start
+                ) {
+                  Text(
+                    account.account.bankName,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                  )
+                  Text(
+                    "Balance: ${CurrencyFormatter.format(account.currentBalance)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                  )
+                }
+              }
+            }
+          }
+        }
+      },
+      confirmButton = {},
+      dismissButton = {
+        TextButton(onClick = { loanPendingEmiPayment = null }) { Text("Cancel") }
       }
     )
   }
@@ -488,7 +551,7 @@ private fun LoanItemCard(
             )
           }
           Spacer(modifier = Modifier.width(12.dp))
-          Column {
+          Column(modifier = Modifier.weight(1f)) {
             Text(
               text = loan.loanName,
               style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -497,6 +560,9 @@ private fun LoanItemCard(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -510,7 +576,9 @@ private fun LoanItemCard(
                   fontSize = 10.sp,
                   fontWeight = FontWeight.Bold,
                   color = if (loan.isFullyPaid) Color(0xFF059669) else MaterialTheme.colorScheme.primary,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                  maxLines = 1,
+                  softWrap = false
                 )
               }
 
@@ -524,7 +592,9 @@ private fun LoanItemCard(
                   fontSize = 10.sp,
                   fontWeight = FontWeight.Medium,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                  maxLines = 1,
+                  softWrap = false
                 )
               }
 
@@ -554,7 +624,9 @@ private fun LoanItemCard(
           Text(
             text = CurrencyFormatter.format(loan.emiAmount),
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-            color = MaterialTheme.colorScheme.primary
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            softWrap = false
           )
           Text(
             text = "/month",

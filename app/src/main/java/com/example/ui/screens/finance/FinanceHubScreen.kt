@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.AccountWithBalance
 import com.example.data.local.entity.BankAccount
+import com.example.data.local.entity.CreditCardBillReminder
 import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.TripRecord
@@ -499,6 +500,7 @@ fun FinanceHubScreen(
           expenses = expenses,
           categories = categories,
           accountsWithBalances = accountsWithBalances,
+          creditCardBillReminders = creditCardBillReminders,
           totalNetBalance = totalNetBalance,
           totalIncome = totalIncome,
           totalExpense = totalExpense,
@@ -754,6 +756,7 @@ private fun ExpensesSection(
   expenses: List<ExpenseRecord>,
   categories: List<ExpenseCategory>,
   accountsWithBalances: List<AccountWithBalance>,
+  creditCardBillReminders: List<CreditCardBillReminder>,
   totalNetBalance: Double,
   totalIncome: Double,
   totalExpense: Double,
@@ -786,8 +789,24 @@ private fun ExpensesSection(
     }
   }
 
-  val totalSpentOnExpenses = remember(displayedExpenses) {
-    displayedExpenses.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+  var selectedTransactionType by rememberSaveable { mutableStateOf<String?>(null) }
+  var selectedTransactionCategory by rememberSaveable { mutableStateOf<String?>(null) }
+  var expensePendingDelete by remember { mutableStateOf<ExpenseRecord?>(null) }
+  val filteredExpenses = remember(
+    displayedExpenses,
+    selectedTransactionType,
+    selectedTransactionCategory
+  ) {
+    displayedExpenses.filter { expense ->
+      val matchesType = when (selectedTransactionType) {
+        "EXPENSE" -> expense.type == "EXPENSE"
+        "INCOME" -> expense.type == "INCOME"
+        "TRANSFER" -> expense.type == "TRANSFER_IN" || expense.type == "TRANSFER_OUT"
+        else -> true
+      }
+      matchesType &&
+        (selectedTransactionCategory == null || expense.categoryName == selectedTransactionCategory)
+    }
   }
 
   LazyColumn(
@@ -1053,6 +1072,12 @@ private fun ExpensesSection(
       ) {
         items(accountsWithBalances, key = { it.account.id }) { accWithBal ->
           val isSelected = selectedAccountFilterId == accWithBal.account.id
+          val isCreditCard = accWithBal.account.accountType.equals("Credit Card", ignoreCase = true)
+          val billReminder = if (isCreditCard) {
+            creditCardBillReminders.firstOrNull { it.accountId == accWithBal.account.id }
+          } else {
+            null
+          }
           Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
@@ -1155,6 +1180,67 @@ private fun ExpensesSection(
                 fontWeight = FontWeight.ExtraBold,
                 color = if (accWithBal.currentBalance >= 0) Color(0xFF059669) else Color(0xFFDC2626)
               )
+
+              if (isCreditCard) {
+                val daysUntilDue = billReminder?.let {
+                  (it.dueDateEpochDay - LocalDate.now().toEpochDay()).toInt()
+                }
+                val isBillPaid = billReminder?.paidDateEpochDay?.let { it >= 0L } == true
+                val billStatusColor = when {
+                  billReminder == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                  isBillPaid -> Color(0xFF059669)
+                  daysUntilDue != null && daysUntilDue <= 3 -> Color(0xFFDC2626)
+                  else -> MaterialTheme.colorScheme.primary
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                  shape = RoundedCornerShape(10.dp),
+                  color = billStatusColor.copy(alpha = 0.1f),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Column(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                  ) {
+                    Text(
+                      "Credit Card Bill",
+                      fontSize = 9.sp,
+                      fontWeight = FontWeight.SemiBold,
+                      color = billStatusColor,
+                      maxLines = 1
+                    )
+                    if (billReminder == null) {
+                      Text(
+                        "Reminder not set",
+                        fontSize = 10.sp,
+                        color = billStatusColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                      )
+                    } else {
+                      Text(
+                        CurrencyFormatter.format(billReminder.amount),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = billStatusColor,
+                        maxLines = 1
+                      )
+                      Text(
+                        when {
+                          isBillPaid -> "Paid"
+                          daysUntilDue == 0 -> "Due today"
+                          daysUntilDue == 1 -> "Due tomorrow"
+                          daysUntilDue != null && daysUntilDue < 0 -> "${-daysUntilDue} days overdue"
+                          else -> "Due in ${daysUntilDue ?: 0} days"
+                        },
+                        fontSize = 10.sp,
+                        color = billStatusColor,
+                        maxLines = 1
+                      )
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -1293,17 +1379,6 @@ private fun ExpensesSection(
       }
     }
 
-    // Spending Analytics Donut & Breakdown Card (for expenses)
-    if (totalSpentOnExpenses > 0 && displayedExpenses.any { it.type == "EXPENSE" }) {
-      item(key = "spending_analytics") {
-        SpendingAnalyticsCard(
-          expenses = displayedExpenses.filter { it.type == "EXPENSE" },
-          categories = categories,
-          totalSpent = totalSpentOnExpenses
-        )
-      }
-    }
-
     // Category Chips Bar
     item(key = "categories_list") {
       LazyRow(
@@ -1381,7 +1456,48 @@ private fun ExpensesSection(
       }
     }
 
-    if (displayedExpenses.isEmpty()) {
+    item(key = "transaction_filters") {
+      Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          items(
+            listOf(
+              null to "All",
+              "EXPENSE" to "Expenses",
+              "INCOME" to "Income",
+              "TRANSFER" to "Transfers"
+            ),
+            key = { it.first ?: "all_types" }
+          ) { (type, label) ->
+            FilterChip(
+              selected = selectedTransactionType == type,
+              onClick = { selectedTransactionType = type },
+              label = { Text(label, maxLines = 1, softWrap = false) }
+            )
+          }
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          item(key = "all_categories") {
+            FilterChip(
+              selected = selectedTransactionCategory == null,
+              onClick = { selectedTransactionCategory = null },
+              label = { Text("All Categories", maxLines = 1, softWrap = false) }
+            )
+          }
+          items(categories, key = { it.id }) { category ->
+            FilterChip(
+              selected = selectedTransactionCategory == category.name,
+              onClick = {
+                selectedTransactionCategory =
+                  if (selectedTransactionCategory == category.name) null else category.name
+              },
+              label = { Text(category.name, maxLines = 1, softWrap = false) }
+            )
+          }
+        }
+      }
+    }
+
+    if (filteredExpenses.isEmpty()) {
       item(key = "empty_expenses") {
         Card(
           shape = RoundedCornerShape(16.dp),
@@ -1404,12 +1520,16 @@ private fun ExpensesSection(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-              text = "No transactions logged yet",
+              text = if (displayedExpenses.isEmpty()) "No transactions logged yet" else "No matching transactions",
               fontWeight = FontWeight.Medium,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-              text = "Tap '+ Expense' or '+ Income' above to record transactions",
+              text = if (displayedExpenses.isEmpty()) {
+                "Tap '+ Expense' or '+ Income' above to record transactions"
+              } else {
+                "Try changing the selected type or category filters."
+              },
               fontSize = 12.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -1417,15 +1537,42 @@ private fun ExpensesSection(
         }
       }
     } else {
-      items(displayedExpenses, key = { it.id }) { expense ->
+      items(filteredExpenses, key = { it.id }) { expense ->
         ExpenseItemCard(
           expense = expense,
           categories = categories,
-          onDelete = { onDeleteExpense(expense) },
+          onDelete = { expensePendingDelete = expense },
           onEdit = { onEditExpense(expense) }
         )
       }
     }
+  }
+
+  expensePendingDelete?.let { expense ->
+    AlertDialog(
+      onDismissRequest = { expensePendingDelete = null },
+      title = { Text("Delete Transaction?") },
+      text = {
+        Text(
+          "Delete '${expense.title}' (${CurrencyFormatter.format(expense.amount)})? " +
+            "You can undo this briefly after confirming."
+        )
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            onDeleteExpense(expense)
+            expensePendingDelete = null
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) {
+          Text("Delete")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { expensePendingDelete = null }) { Text("Cancel") }
+      }
+    )
   }
 }
 
