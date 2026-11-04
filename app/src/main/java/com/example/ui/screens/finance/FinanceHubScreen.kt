@@ -849,7 +849,7 @@ private fun ExpensesSection(
             )
             .padding(20.dp)
         ) {
-          Column(modifier = Modifier.weight(1f)) {
+          Column(modifier = Modifier.fillMaxWidth()) {
             // Header row with Icon, Label and Live Indicator Pill
             Row(
               modifier = Modifier.fillMaxWidth(),
