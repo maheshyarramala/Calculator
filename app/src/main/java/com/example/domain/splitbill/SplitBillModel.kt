@@ -21,7 +21,6 @@ data class ReceiptItem(
   val title: String,
   val price: Double,
   val quantity: Int = 1,
-  val isAlcoholOrSpecial: Boolean = false,
   val claimedParticipantIds: List<String> = emptyList(),
   val paidByParticipantId: String? = null
 )

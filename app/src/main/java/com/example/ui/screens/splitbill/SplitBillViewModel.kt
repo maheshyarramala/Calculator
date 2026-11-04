@@ -117,7 +117,6 @@ class SplitBillViewModel : ViewModel() {
     title: String,
     price: Double,
     quantity: Int,
-    isAlcohol: Boolean,
     claimedIds: List<String>,
     paidByParticipantId: String? = null
   ) {
@@ -126,7 +125,6 @@ class SplitBillViewModel : ViewModel() {
       title = title.ifBlank { "Item" },
       price = nonNegative(price),
       quantity = quantity.coerceAtLeast(1),
-      isAlcoholOrSpecial = isAlcohol,
       claimedParticipantIds = claimedIds,
       paidByParticipantId = paidByParticipantId
     )

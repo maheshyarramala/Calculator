@@ -756,8 +756,8 @@ private fun ExpensesSection(
         ) {
           Text(
             text = "Total Net Balance",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+            color = Color(0xFF4F46E5)
           )
           Spacer(modifier = Modifier.height(4.dp))
           Text(
@@ -4189,7 +4189,7 @@ private fun AddSubscriptionDialog(
   var name by remember { mutableStateOf("") }
   var amountStr by remember { mutableStateOf("") }
   var cycle by remember { mutableStateOf("MONTHLY") }
-  var dueDay by remember { mutableIntStateOf(1) }
+  var dueDayStr by remember { mutableStateOf("1") }
   var dueMonth by remember { mutableIntStateOf(LocalDate.now().monthValue) }
   var dueDayOfWeek by remember { mutableIntStateOf(LocalDate.now().dayOfWeek.value) }
   var isDueMonthMenuExpanded by remember { mutableStateOf(false) }
@@ -4278,10 +4278,9 @@ private fun AddSubscriptionDialog(
           }
         } else {
           OutlinedTextField(
-            value = dueDay.toString(),
+            value = dueDayStr,
             onValueChange = { str ->
-              val num = str.toIntOrNull()
-              if (num != null && num in 1..31) dueDay = num
+              if (str.isEmpty() || str.all { it.isDigit() }) dueDayStr = str
             },
             label = { Text("Due Day of Month (1-31)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -4344,6 +4343,7 @@ private fun AddSubscriptionDialog(
       Button(
         onClick = {
           val amt = amountStr.toDoubleOrNull() ?: 0.0
+          val dueDay = dueDayStr.toIntOrNull()?.coerceIn(1, 31) ?: 1
           if (name.isNotBlank() && amt > 0.0) {
             onConfirm(name, amt, cycle, dueDay, dueMonth, dueDayOfWeek, selectedCategory, selectedBank?.id, selectedBank?.bankName ?: "", notes)
           }

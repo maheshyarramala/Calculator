@@ -5,11 +5,6 @@ import java.util.regex.Pattern
 
 object ReceiptOcrParser {
 
-  private val alcoholKeywords = listOf(
-    "beer", "wine", "cocktail", "margarita", "whiskey", "vodka", "gin", "rum", "cider",
-    "ipa", "champagne", "liquor", "tequila", "martini", "ale", "sangria"
-  )
-
   /**
    * Parses raw receipt text into structured line items, tax, tip, discount, and grand total.
    */
@@ -81,14 +76,12 @@ object ReceiptOcrParser {
       if (lastFoundPrice != null && priceStart > 0) {
         val rawItemName = line.substring(0, priceStart).trim().trim('-', ':', '.')
         if (rawItemName.isNotBlank() && rawItemName.length > 1) {
-          val isAlcohol = alcoholKeywords.any { rawItemName.lowercase().contains(it) }
           items.add(
             ReceiptItem(
               id = UUID.randomUUID().toString(),
               title = cleanItemName(rawItemName),
               price = lastFoundPrice,
-              quantity = 1,
-              isAlcoholOrSpecial = isAlcohol
+              quantity = 1
             )
           )
         }
