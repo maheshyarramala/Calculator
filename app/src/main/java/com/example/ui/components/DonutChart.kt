@@ -72,7 +72,7 @@ fun DonutChart(
                 val dx = tap.x - center.x
                 val dy = tap.y - center.y
                 val radius = sqrt(dx * dx + dy * dy)
-                val outerRadius = canvasSize.minDimension / 2f
+                val outerRadius = minOf(canvasSize.width, canvasSize.height) / 2f
                 val innerRadius = outerRadius - strokeWidth.toPx()
                 if (radius in innerRadius..outerRadius && total > 0.0) {
                   val angle = ((Math.toDegrees(atan2(dy, dx).toDouble()) + 450.0) % 360.0)

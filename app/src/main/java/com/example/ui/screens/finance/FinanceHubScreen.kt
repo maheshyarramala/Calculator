@@ -100,6 +100,7 @@ fun FinanceHubScreen(
   val subscriptions by viewModel.subscriptions.collectAsState()
   val allLoans by viewModel.allLoans.collectAsState()
   val allDebts by viewModel.allDebts.collectAsState()
+  val creditCardBillReminders by viewModel.creditCardBillReminders.collectAsState()
   val categorySpend by viewModel.currentMonthCategorySpend.collectAsState()
   val monthlyBudgetLimit by viewModel.monthlyBudgetLimit.collectAsState()
   val currentMonthExpenses by viewModel.currentMonthExpenses.collectAsState()
@@ -153,6 +154,7 @@ fun FinanceHubScreen(
       loansCount = allLoans.size,
       debtsCount = allDebts.size,
       subscriptionsCount = subscriptions.size,
+      cardRemindersCount = creditCardBillReminders.size,
       replaceExisting = uiState.replaceExistingOnImport,
       onReplaceExistingChange = { viewModel.setReplaceExistingOnImport(it) },
       onExportToFile = {
@@ -3298,6 +3300,10 @@ private fun BackupRestoreBottomSheet(
   banksCount: Int,
   tripsCount: Int,
   expensesCount: Int,
+  loansCount: Int,
+  debtsCount: Int,
+  subscriptionsCount: Int,
+  cardRemindersCount: Int,
   replaceExisting: Boolean,
   onReplaceExistingChange: (Boolean) -> Unit,
   onExportToFile: () -> Unit,
@@ -3365,26 +3371,53 @@ private fun BackupRestoreBottomSheet(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         modifier = Modifier.fillMaxWidth()
       ) {
-        Row(
+        Column(
           modifier = Modifier.padding(12.dp),
-          horizontalArrangement = Arrangement.SpaceAround,
-          verticalAlignment = Alignment.CenterVertically
+          verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(categoriesCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
-            Text("Categories", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(categoriesCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+              Text("Categories", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(banksCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1E3A8A))
+              Text("Bank Accounts", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(tripsCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D9488))
+              Text("Trips", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(expensesCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFDC2626))
+              Text("Expenses", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
           }
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(banksCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1E3A8A))
-            Text("Bank Accounts", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          }
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(tripsCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D9488))
-            Text("Trips", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          }
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(expensesCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFDC2626))
-            Text("Expenses", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(loansCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF7C3AED))
+              Text("Loans", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(debtsCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFEA580C))
+              Text("Debts", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(subscriptionsCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0891B2))
+              Text("Subscriptions", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(cardRemindersCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFDB2777))
+              Text("Card Bills", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
           }
         }
       }
