@@ -7,12 +7,16 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.local.dao.CalculationHistoryDao
+import com.example.data.local.dao.DebtDao
 import com.example.data.local.dao.FinanceDao
+import com.example.data.local.dao.LoanDao
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.CalculationRecord
 import com.example.data.local.entity.CreditCardBillReminder
+import com.example.data.local.entity.DebtRecord
 import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
+import com.example.data.local.entity.LoanRecord
 import com.example.data.local.entity.TripRecord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,14 +30,18 @@ import kotlinx.coroutines.launch
     BankAccount::class,
     CreditCardBillReminder::class,
     TripRecord::class,
-    com.example.data.local.entity.SubscriptionRecord::class
+    com.example.data.local.entity.SubscriptionRecord::class,
+    LoanRecord::class,
+    DebtRecord::class
   ],
-  version = 6,
+  version = 7,
   exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
   abstract fun calculationHistoryDao(): CalculationHistoryDao
   abstract fun financeDao(): FinanceDao
+  abstract fun loanDao(): LoanDao
+  abstract fun debtDao(): DebtDao
 
   companion object {
     private val MIGRATION_4_5 = object : Migration(4, 5) {
@@ -54,6 +62,39 @@ abstract class AppDatabase : RoomDatabase() {
         )
       }
     }
+    private val MIGRATION_6_7 = object : Migration(6, 7) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS loans (" +
+            "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "loanName TEXT NOT NULL, " +
+            "loanCategory TEXT NOT NULL, " +
+            "principalAmount REAL NOT NULL, " +
+            "annualInterestRate REAL NOT NULL, " +
+            "tenureMonths INTEGER NOT NULL, " +
+            "emiAmount REAL NOT NULL, " +
+            "startDate TEXT NOT NULL, " +
+            "paidEmisCount INTEGER NOT NULL DEFAULT 0, " +
+            "notes TEXT NOT NULL DEFAULT '', " +
+            "bankAccountId INTEGER, " +
+            "bankAccountName TEXT NOT NULL DEFAULT '')"
+        )
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS debts (" +
+            "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "personName TEXT NOT NULL, " +
+            "amount REAL NOT NULL, " +
+            "type TEXT NOT NULL, " +
+            "dateTimestamp INTEGER NOT NULL, " +
+            "dueDateTimestamp INTEGER, " +
+            "isSettled INTEGER NOT NULL DEFAULT 0, " +
+            "settledDateTimestamp INTEGER, " +
+            "notes TEXT NOT NULL DEFAULT '', " +
+            "bankAccountId INTEGER, " +
+            "bankAccountName TEXT NOT NULL DEFAULT '')"
+        )
+      }
+    }
 
     @Volatile
     private var INSTANCE: AppDatabase? = null
@@ -67,6 +108,7 @@ abstract class AppDatabase : RoomDatabase() {
         )
           .addMigrations(MIGRATION_4_5)
           .addMigrations(MIGRATION_5_6)
+          .addMigrations(MIGRATION_6_7)
           .fallbackToDestructiveMigration(true)
           .addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {

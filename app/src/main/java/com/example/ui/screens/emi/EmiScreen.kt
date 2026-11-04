@@ -32,6 +32,16 @@ import com.example.ui.components.DonutChart
 import com.example.ui.components.NumberInputField
 import com.example.ui.theme.ChartInterest
 import com.example.ui.theme.ChartPrincipal
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.example.ui.screens.loan.LoanTrackerScreen
+import com.example.ui.screens.loan.LoanTrackerViewModel
+
+enum class EmiSubTab(val title: String, val icon: ImageVector) {
+  CALCULATOR("EMI Calculator", Icons.Default.Calculate),
+  TRACKER("Active Loans Tracker", Icons.Default.AccountBalance)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +52,8 @@ fun EmiScreen(
   val state by viewModel.uiState.collectAsState()
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
+  val loanViewModel: LoanTrackerViewModel = viewModel()
+  var selectedSubTab by rememberSaveable { mutableStateOf(EmiSubTab.CALCULATOR) }
 
   // Filter schedule if filter query is provided
   val filteredSchedule = remember(state.emiResult.schedule, state.scheduleFilterQuery) {
@@ -68,9 +80,31 @@ fun EmiScreen(
     )
   }
 
-  Scaffold(
-    contentWindowInsets = WindowInsets(0, 0, 0, 0),
-    snackbarHost = {
+  Column(modifier = modifier.fillMaxSize()) {
+    PrimaryTabRow(
+      selectedTabIndex = selectedSubTab.ordinal,
+      containerColor = MaterialTheme.colorScheme.surface,
+      modifier = Modifier.fillMaxWidth().testTag("emi_sub_tabs")
+    ) {
+      EmiSubTab.values().forEach { subTab ->
+        Tab(
+          selected = selectedSubTab == subTab,
+          onClick = {
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+            selectedSubTab = subTab
+          },
+          icon = { Icon(subTab.icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+          text = { Text(subTab.title, fontWeight = FontWeight.SemiBold, fontSize = 12.sp) },
+          modifier = Modifier.testTag("emi_tab_${subTab.name.lowercase()}")
+        )
+      }
+    }
+
+    when (selectedSubTab) {
+      EmiSubTab.CALCULATOR -> {
+        Scaffold(
+          contentWindowInsets = WindowInsets(0, 0, 0, 0),
+          snackbarHost = {
       state.toastMessage?.let { msg ->
         Snackbar(
           modifier = Modifier.padding(16.dp),
@@ -497,6 +531,15 @@ fun EmiScreen(
 
       item {
         Spacer(modifier = Modifier.height(32.dp))
+      }
+    }
+  }
+      }
+      EmiSubTab.TRACKER -> {
+        LoanTrackerScreen(
+          viewModel = loanViewModel,
+          modifier = Modifier.fillMaxSize()
+        )
       }
     }
   }

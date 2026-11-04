@@ -8,6 +8,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -387,95 +388,124 @@ private fun HomeNetBalanceHeroWidget(
 ) {
   Card(
     shape = RoundedCornerShape(22.dp),
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-    ),
+    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     modifier = Modifier
       .fillMaxWidth()
       .clickable(onClick = onClick)
       .testTag("widget_net_balance")
   ) {
-    Column(
+    Box(
       modifier = Modifier
         .fillMaxWidth()
+        .background(
+          Brush.linearGradient(
+            colors = listOf(
+              Color(0xFF1E1B4B), // Deep midnight indigo
+              Color(0xFF312E81), // Rich royal indigo
+              Color(0xFF4338CA)  // Radiant electric indigo
+            ),
+            start = Offset(0f, 0f),
+            end = Offset(1000f, 1000f)
+          )
+        )
         .padding(18.dp)
     ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(
-            modifier = Modifier
-              .size(32.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(
-              Icons.Default.AccountBalanceWallet,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(18.dp)
+      Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+              modifier = Modifier
+                .size(30.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.18f)),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                Icons.Default.AccountBalanceWallet,
+                contentDescription = null,
+                tint = Color(0xFFA5B4FC),
+                modifier = Modifier.size(17.dp)
+              )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "Total Net Balance",
+              style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.3.sp
+              ),
+              color = Color(0xFFE0E7FF)
             )
           }
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = "Total Net Balance",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color.White.copy(alpha = 0.15f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+          ) {
+            Text(
+              text = "$accountsCount ${if (accountsCount == 1) "Account" else "Accounts"}",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.SemiBold,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+              color = Color.White
+            )
+          }
         }
 
-        Surface(
-          shape = RoundedCornerShape(8.dp),
-          color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+          text = CurrencyFormatter.format(totalBalance),
+          style = MaterialTheme.typography.headlineLarge.copy(
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.5).sp
+          ),
+          color = Color.White
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+        HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text(
-            text = "$accountsCount ${if (accountsCount == 1) "Account" else "Accounts"}",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            color = MaterialTheme.colorScheme.onSurface
-          )
-        }
-      }
+          Column {
+            Text(
+              text = "Total Inflow",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Medium,
+              color = Color.White.copy(alpha = 0.75f)
+            )
+            Text(
+              text = "+${CurrencyFormatter.format(totalIncome)}",
+              fontSize = 14.sp,
+              fontWeight = FontWeight.ExtraBold,
+              color = Color(0xFF34D399) // Bright radiant emerald
+            )
+          }
 
-      Spacer(modifier = Modifier.height(10.dp))
-
-      Text(
-        text = CurrencyFormatter.format(totalBalance),
-        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
-        color = MaterialTheme.colorScheme.onSurface
-      )
-
-      Spacer(modifier = Modifier.height(14.dp))
-      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-      Spacer(modifier = Modifier.height(10.dp))
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-      ) {
-        Column {
-          Text(text = "Total Inflow", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text(
-            text = "+${CurrencyFormatter.format(totalIncome)}",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF10B981)
-          )
-        }
-
-        Column(horizontalAlignment = Alignment.End) {
-          Text(text = "Total Spent", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text(
-            text = "-${CurrencyFormatter.format(totalExpense)}",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFEF4444)
-          )
+          Column(horizontalAlignment = Alignment.End) {
+            Text(
+              text = "Total Spent",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Medium,
+              color = Color.White.copy(alpha = 0.75f)
+            )
+            Text(
+              text = "-${CurrencyFormatter.format(totalExpense)}",
+              fontSize = 14.sp,
+              fontWeight = FontWeight.ExtraBold,
+              color = Color(0xFFF87171) // Bright radiant coral
+            )
+          }
         }
       }
     }

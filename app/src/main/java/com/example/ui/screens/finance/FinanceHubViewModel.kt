@@ -29,6 +29,7 @@ import java.time.LocalDate
 enum class FinanceTab(val title: String) {
   EXPENSES("Expenses & Accounts"),
   SUBSCRIPTIONS("Recurring & Bills"),
+  DEBTS("Lend & Borrow"),
   TRIPS("Trip Manager")
 }
 

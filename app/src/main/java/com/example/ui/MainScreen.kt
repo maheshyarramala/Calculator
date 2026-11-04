@@ -74,10 +74,10 @@ enum class MainDestination(
 ) {
   FINANCE(R.string.navigation_finance, Icons.Default.Savings),
   EMI(R.string.navigation_emi, Icons.Default.AccountBalance),
+  CALCULATOR(R.string.navigation_calculator, Icons.Default.Calculate),
   INVESTMENTS(R.string.navigation_investments, Icons.AutoMirrored.Filled.TrendingUp),
   UTILITIES(R.string.navigation_utility, Icons.Default.Widgets),
   HOME(R.string.navigation_home, Icons.Default.Dashboard, isBottomTab = false),
-  CALCULATOR(R.string.navigation_calculator, Icons.Default.Calculate, isBottomTab = false),
   INTEREST(R.string.navigation_interest, Icons.Default.Percent, isBottomTab = false),
   AGE_CALENDAR(R.string.navigation_age_date, Icons.Default.CalendarMonth, isBottomTab = false)
 }
@@ -183,6 +183,11 @@ fun MainScreen(
         CalculatorHubItem("Expenses & Accounts", "Budget & bank balances", Icons.Default.Savings, Color(0xFF10B981)) {
           currentDestination = MainDestination.FINANCE
           financeViewModel.selectTab(FinanceTab.EXPENSES)
+          showHubSheet = false
+        },
+        CalculatorHubItem("Lend & Borrow", "Udhaar & personal debt ledger", Icons.Default.SwapHoriz, Color(0xFF059669)) {
+          currentDestination = MainDestination.FINANCE
+          financeViewModel.selectTab(FinanceTab.DEBTS)
           showHubSheet = false
         },
         CalculatorHubItem("Trip Manager", "Vacation budgets & caps", Icons.Default.FlightTakeoff, Color(0xFF0D9488)) {
@@ -318,7 +323,10 @@ fun MainScreen(
             label = {
               Text(
                 text = stringResource(destination.labelRes),
-                fontWeight = if (currentDestination == destination) FontWeight.Bold else FontWeight.Normal
+                fontWeight = if (currentDestination == destination) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
               )
             },
             modifier = Modifier.testTag("nav_tab_${destination.name.lowercase()}")

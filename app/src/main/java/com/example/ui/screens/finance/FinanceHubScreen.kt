@@ -32,6 +32,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.domain.report.PdfReportGenerator
+import com.example.ui.screens.debt.DebtTrackerScreen
+import com.example.ui.screens.debt.DebtTrackerViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -372,6 +375,7 @@ fun FinanceHubScreen(
             Icon(Icons.Default.AddLocationAlt, contentDescription = "Add Trip")
           }
         }
+        FinanceTab.DEBTS -> null
       }
     },
     modifier = modifier.fillMaxSize()
@@ -437,6 +441,7 @@ fun FinanceHubScreen(
           val icon = when (tab) {
             FinanceTab.EXPENSES -> Icons.AutoMirrored.Filled.ReceiptLong
             FinanceTab.SUBSCRIPTIONS -> Icons.Default.EventRepeat
+            FinanceTab.DEBTS -> Icons.Default.SwapHoriz
             FinanceTab.TRIPS -> Icons.Default.FlightTakeoff
           }
           Tab(
@@ -495,6 +500,13 @@ fun FinanceHubScreen(
           onMarkPaid = { viewModel.markSubscriptionPaid(it) },
           onDeleteSubscription = { viewModel.deleteSubscription(it) }
         )
+        FinanceTab.DEBTS -> {
+          val debtViewModel: DebtTrackerViewModel = viewModel()
+          DebtTrackerScreen(
+            viewModel = debtViewModel,
+            modifier = Modifier.fillMaxSize()
+          )
+        }
         FinanceTab.TRIPS -> TripsSection(
           trips = trips,
           expenses = expenses,
@@ -745,86 +757,191 @@ private fun ExpensesSection(
     // Total Net Balance Dashboard Banner
     item(key = "total_net_balance_card") {
       Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-        ),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("total_net_balance_card")
       ) {
-        Column(
-          modifier = Modifier.padding(20.dp)
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .background(
+              Brush.linearGradient(
+                colors = listOf(
+                  Color(0xFF1E1B4B), // Deep midnight indigo
+                  Color(0xFF312E81), // Rich royal indigo
+                  Color(0xFF4338CA)  // Radiant electric indigo
+                ),
+                start = Offset(0f, 0f),
+                end = Offset(1000f, 1000f)
+              )
+            )
+            .padding(20.dp)
         ) {
-          Text(
-            text = "Total Net Balance",
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
-            color = Color(0xFF4F46E5)
-          )
-          Spacer(modifier = Modifier.height(4.dp))
-          Text(
-            text = CurrencyFormatter.format(totalNetBalance),
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.primary
-          )
-
-          Spacer(modifier = Modifier.height(14.dp))
-
-          // Income and Expense Stat Chips
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-          ) {
-            Surface(
-              shape = RoundedCornerShape(12.dp),
-              color = Color(0xFF10B981).copy(alpha = 0.15f),
-              modifier = Modifier.weight(1f)
+          Column {
+            // Header row with Icon, Label and Live Indicator Pill
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
             ) {
-              Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Icon(
-                  Icons.Default.ArrowDownward,
-                  contentDescription = null,
-                  tint = Color(0xFF059669),
-                  modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Column {
-                  Text("Total Income", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                  Text(
-                    text = "+${CurrencyFormatter.format(totalIncome)}",
-                    fontSize = 13.sp,
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                  modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.18f)),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Icon(
+                    Icons.Default.AccountBalanceWallet,
+                    contentDescription = null,
+                    tint = Color(0xFFA5B4FC),
+                    modifier = Modifier.size(17.dp)
+                  )
+                }
+                Spacer(modifier = Modifier.width(9.dp))
+                Text(
+                  text = "Total Net Balance",
+                  style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF059669)
+                    letterSpacing = 0.3.sp
+                  ),
+                  color = Color(0xFFE0E7FF)
+                )
+              }
+
+              // Live Funds Badge
+              Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF10B981).copy(alpha = 0.22f),
+                border = BorderStroke(1.dp, Color(0xFF34D399).copy(alpha = 0.45f))
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Box(
+                    modifier = Modifier
+                      .size(6.dp)
+                      .clip(CircleShape)
+                      .background(Color(0xFF34D399))
+                  )
+                  Spacer(modifier = Modifier.width(5.dp))
+                  Text(
+                    text = "Live Funds",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF6EE7B7)
                   )
                 }
               }
             }
 
-            Surface(
-              shape = RoundedCornerShape(12.dp),
-              color = Color(0xFFEF4444).copy(alpha = 0.15f),
-              modifier = Modifier.weight(1f)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Main Balance Number: Bright, glowing white typography
+            Text(
+              text = CurrencyFormatter.format(totalNetBalance),
+              style = MaterialTheme.typography.headlineLarge.copy(
+                fontWeight = FontWeight.Black,
+                letterSpacing = (-0.5).sp
+              ),
+              color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Income and Expense Stat Chips - high contrast, glowing vibrant badges
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-              Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+              // Total Income Chip
+              Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, Color(0xFF34D399).copy(alpha = 0.35f)),
+                modifier = Modifier.weight(1f)
               ) {
-                Icon(
-                  Icons.Default.ArrowUpward,
-                  contentDescription = null,
-                  tint = Color(0xFFDC2626),
-                  modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Column {
-                  Text("Total Expenses", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                  Text(
-                    text = "-${CurrencyFormatter.format(totalExpense)}",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFDC2626)
-                  )
+                Row(
+                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Box(
+                    modifier = Modifier
+                      .size(28.dp)
+                      .clip(CircleShape)
+                      .background(Color(0xFF059669).copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center
+                  ) {
+                    Icon(
+                      Icons.Default.ArrowDownward,
+                      contentDescription = null,
+                      tint = Color(0xFF34D399),
+                      modifier = Modifier.size(16.dp)
+                    )
+                  }
+                  Spacer(modifier = Modifier.width(8.dp))
+                  Column {
+                    Text(
+                      text = "Total Income",
+                      fontSize = 10.sp,
+                      fontWeight = FontWeight.Medium,
+                      color = Color.White.copy(alpha = 0.75f)
+                    )
+                    Text(
+                      text = "+${CurrencyFormatter.format(totalIncome)}",
+                      fontSize = 13.sp,
+                      fontWeight = FontWeight.ExtraBold,
+                      color = Color(0xFF34D399)
+                    )
+                  }
+                }
+              }
+
+              // Total Expenses Chip
+              Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, Color(0xFFF87171).copy(alpha = 0.35f)),
+                modifier = Modifier.weight(1f)
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Box(
+                    modifier = Modifier
+                      .size(28.dp)
+                      .clip(CircleShape)
+                      .background(Color(0xFFDC2626).copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center
+                  ) {
+                    Icon(
+                      Icons.Default.ArrowUpward,
+                      contentDescription = null,
+                      tint = Color(0xFFF87171),
+                      modifier = Modifier.size(16.dp)
+                    )
+                  }
+                  Spacer(modifier = Modifier.width(8.dp))
+                  Column {
+                    Text(
+                      text = "Total Expenses",
+                      fontSize = 10.sp,
+                      fontWeight = FontWeight.Medium,
+                      color = Color.White.copy(alpha = 0.75f)
+                    )
+                    Text(
+                      text = "-${CurrencyFormatter.format(totalExpense)}",
+                      fontSize = 13.sp,
+                      fontWeight = FontWeight.ExtraBold,
+                      color = Color(0xFFF87171)
+                    )
+                  }
                 }
               }
             }
