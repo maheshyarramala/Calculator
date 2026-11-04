@@ -52,8 +52,19 @@ fun LoanTrackerScreen(
   val snackbarHostState = remember { SnackbarHostState() }
 
   LaunchedEffect(userMessage) {
-    userMessage?.let {
-      snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
+    userMessage?.let { msg ->
+      if (msg.startsWith("Paid EMI #")) {
+        val result = snackbarHostState.showSnackbar(
+          message = msg,
+          actionLabel = "UNDO",
+          duration = SnackbarDuration.Short
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+          viewModel.undoLastPaidEmi()
+        }
+      } else {
+        snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Short)
+      }
       viewModel.clearUserMessage()
     }
   }
@@ -77,7 +88,7 @@ fun LoanTrackerScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(padding),
-      contentPadding = PaddingValues(16.dp),
+      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
       // 1. Hero Dashboard Card
@@ -169,6 +180,9 @@ fun LoanTrackerScreen(
                 loan = loan,
                 selectedBankAccountId = loan.bankAccountId
               )
+            },
+            onUndoEmi = {
+              viewModel.undoLastPaidEmi(loan.id)
             }
           )
         }
@@ -207,6 +221,9 @@ fun LoanTrackerScreen(
       onDismiss = { viewModel.selectLoanForDetail(null) },
       onPayEmi = { bankId, _ ->
         viewModel.payMonthlyEmi(loan, bankId)
+      },
+      onUndoEmi = {
+        viewModel.undoLastPaidEmi(loan.id)
       },
       onDelete = {
         viewModel.deleteLoan(loan)
@@ -456,7 +473,8 @@ private fun LoanCategoryFilterRow(
 private fun LoanItemCard(
   loan: LoanRecord,
   onClick: () -> Unit,
-  onPayEmi: () -> Unit
+  onPayEmi: () -> Unit,
+  onUndoEmi: () -> Unit
 ) {
   Card(
     shape = RoundedCornerShape(20.dp),
@@ -702,19 +720,31 @@ private fun LoanItemCard(
 
       Spacer(modifier = Modifier.height(12.dp))
 
-      // Action row: "Pay Monthly EMI" button if active
-      if (!loan.isFullyPaid) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
+      // Action row: "Undo EMI" & "Pay Monthly EMI"
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        if (loan.paidEmisCount > 0) {
+          OutlinedButton(
+            onClick = onUndoEmi,
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+          ) {
+            Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Undo EMI (#${loan.paidEmisCount})", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+          }
+        } else {
           Text(
-            text = "Tenure: ${loan.tenureMonths} Months (${loan.startDate})",
+            text = "Tenure: ${loan.tenureMonths} Mos (${loan.startDate})",
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
+        }
 
+        if (!loan.isFullyPaid) {
           FilledTonalButton(
             onClick = onPayEmi,
             shape = RoundedCornerShape(10.dp),
@@ -724,12 +754,7 @@ private fun LoanItemCard(
             Spacer(modifier = Modifier.width(6.dp))
             Text("Pay Monthly EMI", fontSize = 12.sp, fontWeight = FontWeight.Bold)
           }
-        }
-      } else {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.End
-        ) {
+        } else {
           Surface(
             shape = RoundedCornerShape(8.dp),
             color = Color(0xFF10B981).copy(alpha = 0.15f)
@@ -759,6 +784,7 @@ private fun LoanDetailDialog(
   bankAccounts: List<AccountWithBalance>,
   onDismiss: () -> Unit,
   onPayEmi: (Long?, String) -> Unit,
+  onUndoEmi: () -> Unit,
   onDelete: () -> Unit
 ) {
   var selectedBankId by remember { mutableStateOf(loan.bankAccountId) }
@@ -858,20 +884,34 @@ private fun LoanDetailDialog(
       }
     },
     confirmButton = {
-      if (!loan.isFullyPaid) {
-        Button(
-          onClick = {
-            onPayEmi(selectedBankId, selectedAccount?.account?.bankName ?: "")
-            onDismiss()
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (loan.paidEmisCount > 0) {
+          OutlinedButton(
+            onClick = {
+              onUndoEmi()
+              onDismiss()
+            }
+          ) {
+            Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Undo #${loan.paidEmisCount}")
           }
-        ) {
-          Icon(Icons.Default.Payment, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(6.dp))
-          Text("Pay Monthly EMI")
         }
-      } else {
-        Button(onClick = onDismiss) {
-          Text("Close")
+        if (!loan.isFullyPaid) {
+          Button(
+            onClick = {
+              onPayEmi(selectedBankId, selectedAccount?.account?.bankName ?: "")
+              onDismiss()
+            }
+          ) {
+            Icon(Icons.Default.Payment, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Pay Monthly EMI")
+          }
+        } else {
+          Button(onClick = onDismiss) {
+            Text("Close")
+          }
         }
       }
     },

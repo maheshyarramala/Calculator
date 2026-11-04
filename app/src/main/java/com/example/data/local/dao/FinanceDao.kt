@@ -43,6 +43,12 @@ interface FinanceDao {
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertExpenses(expenses: List<ExpenseRecord>)
 
+  @Query("SELECT * FROM expenses WHERE id = :id LIMIT 1")
+  suspend fun getExpenseById(id: Long): ExpenseRecord?
+
+  @Query("SELECT * FROM expenses WHERE loanId = :loanId ORDER BY dateTimestamp DESC")
+  suspend fun getExpensesByLoanId(loanId: Long): List<ExpenseRecord>
+
   @Delete
   suspend fun deleteExpense(expense: ExpenseRecord)
 

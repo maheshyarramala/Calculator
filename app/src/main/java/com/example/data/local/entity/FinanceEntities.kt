@@ -26,7 +26,9 @@ data class ExpenseRecord(
   val bankAccountName: String = "",
   val dateTimestamp: Long = System.currentTimeMillis(),
   val notes: String = "",
-  val tripId: Long? = null
+  val tripId: Long? = null,
+  val loanId: Long? = null,
+  val debtId: Long? = null
 )
 
 @Entity(tableName = "bank_accounts")

@@ -152,6 +152,16 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
     }
   }
 
+  data class LastPaidEmi(
+    val loanId: Long,
+    val expenseId: Long,
+    val emiNumber: Int,
+    val loanName: String
+  )
+
+  var lastPaidEmi: LastPaidEmi? = null
+    private set
+
   /**
    * Auto-increments paid EMI count, logs corresponding expense into Finance Hub ledger,
    * and updates real-time balance across the entire app.
@@ -162,10 +172,35 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
   ) {
     viewModelScope.launch {
       val result = repository.payLoanEmi(loan, selectedBankAccountId)
+      result.onSuccess { info ->
+        lastPaidEmi = LastPaidEmi(
+          loanId = info.loanId,
+          expenseId = info.expenseId,
+          emiNumber = info.emiNumber,
+          loanName = info.loanName
+        )
+        _userMessage.value = info.message
+      }.onFailure { err ->
+        _userMessage.value = err.message ?: "Failed to record EMI payment"
+      }
+    }
+  }
+
+  /**
+   * Undoes the last paid EMI for a loan or the latest overall payment:
+   * Decrements paid count, removes corresponding expense from Finance Hub,
+   * and reactively refreshes all dashboards and balances.
+   */
+  fun undoLastPaidEmi(loanId: Long? = null) {
+    val targetLoanId = loanId ?: lastPaidEmi?.loanId ?: return
+    val targetExpenseId = if (targetLoanId == lastPaidEmi?.loanId) lastPaidEmi?.expenseId else null
+    viewModelScope.launch {
+      val result = repository.undoPayLoanEmi(targetLoanId, targetExpenseId)
+      lastPaidEmi = null
       result.onSuccess { msg ->
         _userMessage.value = msg
       }.onFailure { err ->
-        _userMessage.value = err.message ?: "Failed to record EMI payment"
+        _userMessage.value = err.message ?: "Failed to undo EMI payment"
       }
     }
   }

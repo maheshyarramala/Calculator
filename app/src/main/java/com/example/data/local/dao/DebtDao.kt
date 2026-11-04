@@ -36,6 +36,9 @@ interface DebtDao {
   @Query("UPDATE debts SET isSettled = 1, settledDateTimestamp = :settledTimestamp WHERE id = :id")
   suspend fun markSettled(id: Long, settledTimestamp: Long = System.currentTimeMillis())
 
+  @Query("UPDATE debts SET isSettled = 0, settledDateTimestamp = NULL WHERE id = :id")
+  suspend fun unmarkSettled(id: Long)
+
   @Query("DELETE FROM debts")
   suspend fun deleteAllDebts()
 }

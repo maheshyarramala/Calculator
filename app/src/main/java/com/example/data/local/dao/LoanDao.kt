@@ -33,6 +33,12 @@ interface LoanDao {
   @Query("UPDATE loans SET paidEmisCount = paidEmisCount + 1 WHERE id = :id AND paidEmisCount < tenureMonths")
   suspend fun incrementPaidEmis(id: Long)
 
+  @Query("UPDATE loans SET paidEmisCount = CASE WHEN paidEmisCount > 0 THEN paidEmisCount - 1 ELSE 0 END WHERE id = :id")
+  suspend fun decrementPaidEmis(id: Long)
+
+  @Query("SELECT * FROM loans WHERE loanName = :name LIMIT 1")
+  suspend fun getLoanByName(name: String): LoanRecord?
+
   @Query("DELETE FROM loans")
   suspend fun deleteAllLoans()
 }

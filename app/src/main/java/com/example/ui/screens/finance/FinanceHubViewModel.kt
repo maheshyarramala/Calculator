@@ -343,7 +343,7 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   fun deleteExpense(expense: ExpenseRecord) {
     viewModelScope.launch {
-      dao.deleteExpense(expense)
+      repository.deleteExpense(expense)
       _uiState.update { it.copy(toastMessage = "Transaction deleted") }
     }
   }
@@ -555,7 +555,7 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
   fun deleteExpenseWithUndo(expense: ExpenseRecord, onUndoPrompt: () -> Unit) {
     lastDeletedExpense = expense
     viewModelScope.launch {
-      dao.deleteExpense(expense)
+      repository.deleteExpense(expense)
       onUndoPrompt()
     }
   }
@@ -563,7 +563,7 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
   fun restoreLastDeletedExpense() {
     val exp = lastDeletedExpense ?: return
     viewModelScope.launch {
-      dao.insertExpense(exp)
+      repository.restoreExpense(exp)
       lastDeletedExpense = null
       _uiState.update { it.copy(toastMessage = "Restored '${exp.title}'") }
     }

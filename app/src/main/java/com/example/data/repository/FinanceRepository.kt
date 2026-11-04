@@ -113,8 +113,49 @@ class FinanceRepository private constructor(context: Context) {
     financeDao.insertExpense(expense)
   }
 
+  /**
+   * Deletes an expense and automatically updates linked systems in real time:
+   * - If this was an EMI payment (loanId != null or "EMI: ..."), decrements the active loan's paidEmisCount!
+   * - If this was a debt settlement (debtId != null or "Settlement: ..."), unmarks the debt as settled!
+   */
   suspend fun deleteExpense(expense: ExpenseRecord) = withContext(Dispatchers.IO) {
     financeDao.deleteExpense(expense)
+
+    // 1. Real-time Reflection in Active Loans section:
+    if (expense.loanId != null) {
+      loanDao.decrementPaidEmis(expense.loanId)
+    } else if (expense.title.startsWith("EMI:")) {
+      val loanName = expense.title.substringAfter("EMI:").substringBefore("(#").trim()
+      if (loanName.isNotBlank()) {
+        val loan = loanDao.getLoanByName(loanName)
+        if (loan != null) {
+          loanDao.decrementPaidEmis(loan.id)
+        }
+      }
+    }
+
+    // 2. Real-time Reflection in Debt section:
+    if (expense.debtId != null) {
+      debtDao.unmarkSettled(expense.debtId)
+    }
+  }
+
+  suspend fun restoreExpense(expense: ExpenseRecord) = withContext(Dispatchers.IO) {
+    financeDao.insertExpense(expense)
+    if (expense.loanId != null) {
+      loanDao.incrementPaidEmis(expense.loanId)
+    } else if (expense.title.startsWith("EMI:")) {
+      val loanName = expense.title.substringAfter("EMI:").substringBefore("(#").trim()
+      if (loanName.isNotBlank()) {
+        val loan = loanDao.getLoanByName(loanName)
+        if (loan != null) {
+          loanDao.incrementPaidEmis(loan.id)
+        }
+      }
+    }
+    if (expense.debtId != null) {
+      debtDao.markSettled(expense.debtId)
+    }
   }
 
   suspend fun insertBankAccount(account: BankAccount): Long = withContext(Dispatchers.IO) {
@@ -168,16 +209,24 @@ class FinanceRepository private constructor(context: Context) {
     true
   }
 
+  data class PaidEmiResult(
+    val loanId: Long,
+    val expenseId: Long,
+    val emiNumber: Int,
+    val loanName: String,
+    val message: String
+  )
+
   /**
    * Pays a monthly EMI for a loan:
    * 1. Increments paidEmisCount in LoanDao.
-   * 2. Automatically logs an ExpenseRecord in Finance Hub ledger tagged with the account.
+   * 2. Automatically logs an ExpenseRecord in Finance Hub ledger tagged with loanId.
    * 3. Prevents invalid negative account balance if the chosen account has insufficient funds.
    */
   suspend fun payLoanEmi(
     loan: LoanRecord,
     preferredBankAccountId: Long?
-  ): Result<String> = withContext(Dispatchers.IO) {
+  ): Result<PaidEmiResult> = withContext(Dispatchers.IO) {
     if (loan.isFullyPaid) {
       return@withContext Result.failure(Exception("Loan '${loan.loanName}' is already fully paid!"))
     }
@@ -199,25 +248,63 @@ class FinanceRepository private constructor(context: Context) {
     }
 
     val finalAccount = accounts.find { it.account.id == targetAccountId }
+    val emiNumber = loan.paidEmisCount + 1
 
     // Increment paid count in Room
     loanDao.incrementPaidEmis(loan.id)
 
-    // Insert expense record
-    financeDao.insertExpense(
+    // Insert expense record with loanId for bidirectional sync
+    val expenseId = financeDao.insertExpense(
       ExpenseRecord(
-        title = "EMI: ${loan.loanName} (#${loan.paidEmisCount + 1})",
+        title = "EMI: ${loan.loanName} (#$emiNumber)",
         amount = loan.emiAmount,
         categoryName = "Bills & Utilities",
         type = "EXPENSE",
         bankAccountId = targetAccountId,
         bankAccountName = finalAccount?.account?.bankName ?: "",
         dateTimestamp = System.currentTimeMillis(),
-        notes = "Auto-logged from Active Loans Tracker. ${loan.tenureMonths - (loan.paidEmisCount + 1)} EMIs left."
+        notes = "Auto-logged from Active Loans Tracker. ${loan.tenureMonths - emiNumber} EMIs left.",
+        loanId = loan.id
       )
     )
 
-    Result.success("Paid EMI #${loan.paidEmisCount + 1} (${loan.loanName})")
+    Result.success(
+      PaidEmiResult(
+        loanId = loan.id,
+        expenseId = expenseId,
+        emiNumber = emiNumber,
+        loanName = loan.loanName,
+        message = "Paid EMI #$emiNumber (${loan.loanName})"
+      )
+    )
+  }
+
+  /**
+   * Undoes a previously paid EMI:
+   * 1. Decrements paidEmisCount in LoanDao.
+   * 2. Deletes the corresponding ExpenseRecord from Finance Hub ledger.
+   * 3. Triggers real-time balance updates across all accounts.
+   */
+  suspend fun undoPayLoanEmi(
+    loanId: Long,
+    expenseId: Long? = null
+  ): Result<String> = withContext(Dispatchers.IO) {
+    loanDao.decrementPaidEmis(loanId)
+
+    if (expenseId != null && expenseId > 0) {
+      val exp = financeDao.getExpenseById(expenseId)
+      if (exp != null) {
+        financeDao.deleteExpense(exp)
+      }
+    } else {
+      val expenses = financeDao.getExpensesByLoanId(loanId)
+      if (expenses.isNotEmpty()) {
+        financeDao.deleteExpense(expenses.first())
+      }
+    }
+
+    val loan = loanDao.getLoanById(loanId)
+    Result.success("Reverted EMI payment for ${loan?.loanName ?: "loan"}")
   }
 
   /**
@@ -256,7 +343,8 @@ class FinanceRepository private constructor(context: Context) {
           type = "INCOME",
           bankAccountId = targetAcc.account.id,
           bankAccountName = targetAcc.account.bankName,
-          notes = "Settled debt from Udhaar ledger"
+          notes = "Settled debt from Udhaar ledger",
+          debtId = debt.id
         )
       )
       Result.success("Settled! Received into ${targetAcc.account.bankName}")
@@ -284,7 +372,8 @@ class FinanceRepository private constructor(context: Context) {
           type = "EXPENSE",
           bankAccountId = targetAcc.account.id,
           bankAccountName = targetAcc.account.bankName,
-          notes = "Settled debt from Udhaar ledger"
+          notes = "Settled debt from Udhaar ledger",
+          debtId = debt.id
         )
       )
       Result.success("Settled! Repaid from ${targetAcc.account.bankName}")
