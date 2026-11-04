@@ -122,36 +122,6 @@ class SplitBillViewModel : ViewModel() {
     }
   }
 
-  fun updateParticipantExact(id: String, exact: Double) {
-    _uiState.update { state ->
-      state.copy(
-        participants = state.participants.map { p ->
-          if (p.id == id) p.copy(exactAmount = nonNegative(exact)) else p
-        }
-      )
-    }
-  }
-
-  fun updateParticipantPercentage(id: String, pct: Double) {
-    _uiState.update { state ->
-      state.copy(
-        participants = state.participants.map { p ->
-          if (p.id == id) p.copy(percentage = nonNegative(pct)) else p
-        }
-      )
-    }
-  }
-
-  fun updateParticipantShares(id: String, shares: Int) {
-    _uiState.update { state ->
-      state.copy(
-        participants = state.participants.map { p ->
-          if (p.id == id) p.copy(shares = shares.coerceAtLeast(1)) else p
-        }
-      )
-    }
-  }
-
   // Items Management
   fun addItem(
     title: String,

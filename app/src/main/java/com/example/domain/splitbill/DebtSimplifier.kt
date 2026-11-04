@@ -37,21 +37,6 @@ object DebtSimplifier {
         val subtotals = distribute(nonNegative(manualBillTotal), weights)
         buildBreakdowns(participants, subtotals, safeTax, safeTip, safeDiscount, weights)
       }
-      SplitMode.EXACT -> {
-        val weights = participants.map { nonNegative(it.exactAmount) }
-        val subtotals = distribute(weights.sum(), weights)
-        buildBreakdowns(participants, subtotals, safeTax, safeTip, safeDiscount, weights)
-      }
-      SplitMode.PERCENTAGE -> {
-        val weights = participants.map { nonNegative(it.percentage) }
-        val subtotals = distribute(nonNegative(manualBillTotal), weights)
-        buildBreakdowns(participants, subtotals, safeTax, safeTip, safeDiscount, weights)
-      }
-      SplitMode.SHARES -> {
-        val weights = participants.map { it.shares.coerceAtLeast(1).toDouble() }
-        val subtotals = distribute(nonNegative(manualBillTotal), weights)
-        buildBreakdowns(participants, subtotals, safeTax, safeTip, safeDiscount, weights)
-      }
     }
   }
 

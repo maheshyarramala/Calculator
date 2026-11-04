@@ -33,14 +33,14 @@ class SplitBillCalculationTest {
   }
 
   @Test
-  fun percentageSplitAllocatesFullBillAndProratesCharges() {
+  fun equalSplitIncludesTaxTipAndDiscount() {
     val participants = listOf(
-      Participant(id = "a", name = "A", percentage = 25.0),
-      Participant(id = "b", name = "B", percentage = 75.0)
+      Participant(id = "a", name = "A"),
+      Participant(id = "b", name = "B")
     )
 
     val result = DebtSimplifier.calculateBreakdowns(
-      mode = SplitMode.PERCENTAGE,
+      mode = SplitMode.EQUAL,
       participants = participants,
       items = emptyList(),
       tax = 10.0,
@@ -49,30 +49,9 @@ class SplitBillCalculationTest {
       manualBillTotal = 100.0
     )
 
-    assertEquals(28.0, result[0].totalToPay, 0.001)
-    assertEquals(84.0, result[1].totalToPay, 0.001)
+    assertEquals(56.0, result[0].totalToPay, 0.001)
+    assertEquals(56.0, result[1].totalToPay, 0.001)
     assertEquals(112.0, result.sumOf { it.totalToPay }, 0.001)
-  }
-
-  @Test
-  fun exactSplitIncludesTaxTipAndDiscount() {
-    val participants = listOf(
-      Participant(id = "a", name = "A", exactAmount = 10.0),
-      Participant(id = "b", name = "B", exactAmount = 20.0)
-    )
-
-    val result = DebtSimplifier.calculateBreakdowns(
-      mode = SplitMode.EXACT,
-      participants = participants,
-      items = emptyList(),
-      tax = 3.0,
-      tip = 1.0,
-      discount = 1.0,
-      manualBillTotal = 500.0
-    )
-
-    assertEquals(33.0, result.sumOf { it.totalToPay }, 0.001)
-    assertEquals(30.0, result.sumOf { it.subtotal }, 0.001)
   }
 
   @Test
@@ -104,6 +83,34 @@ class SplitBillCalculationTest {
     val transfers = DebtSimplifier.simplifyDebts(result)
     assertEquals(6.66, transfers.sumOf { it.amount }, 0.001)
     assertTrue(transfers.all { it.toParticipant.id == "a" })
+  }
+
+  @Test
+  fun itemIsSplitOnlyAmongSelectedDiners() {
+    val participants = listOf(
+      Participant(id = "a", name = "A"),
+      Participant(id = "b", name = "B"),
+      Participant(id = "c", name = "C")
+    )
+    val item = ReceiptItem(
+      title = "Shared item",
+      price = 12.0,
+      claimedParticipantIds = listOf("a", "c")
+    )
+
+    val result = DebtSimplifier.calculateBreakdowns(
+      mode = SplitMode.ITEMIZED,
+      participants = participants,
+      items = listOf(item),
+      tax = 0.0,
+      tip = 0.0,
+      discount = 0.0,
+      manualBillTotal = 0.0
+    )
+
+    assertEquals(6.0, result.first { it.participant.id == "a" }.totalToPay, 0.001)
+    assertEquals(0.0, result.first { it.participant.id == "b" }.totalToPay, 0.001)
+    assertEquals(6.0, result.first { it.participant.id == "c" }.totalToPay, 0.001)
   }
 
   @Test

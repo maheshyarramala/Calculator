@@ -177,45 +177,31 @@ fun SplitBillScreen(
 
     Spacer(modifier = Modifier.height(10.dp))
 
-    // Mode Selector Chips Row
-    Column(
-      verticalArrangement = Arrangement.spacedBy(4.dp),
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      SplitMode.values().toList().chunked(3).forEach { modes ->
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-          modes.forEach { mode ->
-            val icon = when (mode) {
-              SplitMode.EQUAL -> Icons.Default.Balance
-              SplitMode.ITEMIZED -> Icons.Default.RestaurantMenu
-              SplitMode.EXACT -> Icons.Default.Pin
-              SplitMode.PERCENTAGE -> Icons.Default.Percent
-              SplitMode.SHARES -> Icons.Default.PieChart
-            }
-            FilterChip(
-              selected = state.splitMode == mode,
-              onClick = {
-                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                viewModel.setSplitMode(mode)
-              },
-              leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
-              label = {
-                Text(
-                  text = when (mode) {
-                    SplitMode.EQUAL -> "Equal"
-                    SplitMode.ITEMIZED -> "Items"
-                    SplitMode.EXACT -> "Exact"
-                    SplitMode.PERCENTAGE -> "Percent"
-                    SplitMode.SHARES -> "Shares"
-                  },
-                  fontSize = 10.5.sp,
-                  maxLines = 1,
-                  softWrap = false
-                )
-              },
+    // Keep the split choices focused on equal sharing or per-item diner selection.
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      listOf(SplitMode.EQUAL, SplitMode.ITEMIZED).forEach { mode ->
+        FilterChip(
+          selected = state.splitMode == mode,
+          onClick = {
+            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+            viewModel.setSplitMode(mode)
+          },
+          leadingIcon = {
+            Icon(
+              if (mode == SplitMode.EQUAL) Icons.Default.Balance else Icons.Default.RestaurantMenu,
+              contentDescription = null,
+              modifier = Modifier.size(16.dp)
+            )
+          },
+          label = {
+            Text(
+              text = if (mode == SplitMode.EQUAL) "Equal" else "Items",
+              fontSize = 10.5.sp,
+              maxLines = 1,
+              softWrap = false
             )
           }
-        }
+        )
       }
     }
 
@@ -414,8 +400,7 @@ private fun ItemsAndBillTab(
     verticalArrangement = Arrangement.spacedBy(10.dp),
     contentPadding = PaddingValues(bottom = 80.dp)
   ) {
-    if (state.splitMode != SplitMode.ITEMIZED && state.splitMode != SplitMode.EXACT) {
-      // Exact mode derives the subtotal from the amount entered for each diner.
+    if (state.splitMode == SplitMode.EQUAL) {
       item {
         Card(
           shape = RoundedCornerShape(14.dp),
@@ -853,17 +838,8 @@ private fun DinersAndClaimsTab(
 
     items(breakdowns, key = { it.participant.id }) { b ->
       val p = b.participant
-      var exactAmountInput by remember(p.id, state.splitMode) {
-        mutableStateOf(amountInputText(p.exactAmount))
-      }
-      var percentageInput by remember(p.id, state.splitMode) {
-        mutableStateOf(amountInputText(p.percentage))
-      }
       var paidAmountInput by remember(p.id) {
         mutableStateOf(amountInputText(p.paidAmount))
-      }
-      var sharesInput by remember(p.id, state.splitMode) {
-        mutableStateOf(p.shares.toString())
       }
       val avatarColor = try {
         Color(android.graphics.Color.parseColor(p.avatarColorHex))
@@ -984,53 +960,6 @@ private fun DinersAndClaimsTab(
           }
 
           Spacer(modifier = Modifier.height(8.dp))
-          when (state.splitMode) {
-            SplitMode.EXACT -> {
-              OutlinedTextField(
-                value = exactAmountInput,
-                onValueChange = {
-                  exactAmountInput = it
-                  it.toDoubleOrNull()?.let { amount -> viewModel.updateParticipantExact(p.id, amount) }
-                },
-                label = { Text("Exact subtotal", fontSize = 10.sp) },
-                prefix = { Text(state.currencySymbol, fontSize = 11.sp) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth()
-              )
-            }
-            SplitMode.PERCENTAGE -> {
-              OutlinedTextField(
-                value = percentageInput,
-                onValueChange = {
-                  percentageInput = it
-                  it.toDoubleOrNull()?.let { percentage ->
-                    viewModel.updateParticipantPercentage(p.id, percentage)
-                  }
-                },
-                label = { Text("Share weight (%)", fontSize = 10.sp) },
-                suffix = { Text("%") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth()
-              )
-            }
-            SplitMode.SHARES -> {
-              OutlinedTextField(
-                value = sharesInput,
-                onValueChange = {
-                  sharesInput = it
-                  it.toIntOrNull()?.let { shares -> viewModel.updateParticipantShares(p.id, shares) }
-                },
-                label = { Text("Share units", fontSize = 10.sp) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth()
-              )
-            }
-            SplitMode.EQUAL, SplitMode.ITEMIZED -> Unit
-          }
-
           if (state.splitMode == SplitMode.EQUAL) {
             Text(
               text = "Equal share: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.totalToPay)}",
@@ -1122,23 +1051,6 @@ private fun ShareDistributionChart(
           color = MaterialTheme.colorScheme.primary
         )
       }
-      if (splitMode == SplitMode.PERCENTAGE) {
-        val enteredTotal = breakdowns.sumOf { it.participant.percentage }
-        val shareHint = if (enteredTotal <= 0.0) {
-          "Add percentage weights; shares are currently equal."
-        } else if (kotlin.math.abs(enteredTotal - 100.0) > 0.05) {
-          "Entered weights total ${String.format(Locale.US, "%.1f", enteredTotal)}%; amounts are scaled to the full bill."
-        } else {
-          null
-        }
-        if (shareHint != null) {
-          Text(
-            text = shareHint,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-      }
       breakdowns.forEach { breakdown ->
         val fraction = if (total > 0.0) {
           (breakdown.totalToPay / total).toFloat().coerceIn(0f, 1f)
@@ -1180,13 +1092,6 @@ private fun ShareDistributionChart(
                 .fillMaxWidth(fraction)
                 .fillMaxHeight()
                 .background(color)
-            )
-          }
-          if (splitMode == SplitMode.PERCENTAGE) {
-            Text(
-              text = "Weight entered: ${String.format(Locale.US, "%.1f", breakdown.participant.percentage)}%",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
         }
@@ -1638,7 +1543,7 @@ private fun AddReceiptItemDialog(
   var priceStr by remember { mutableStateOf("") }
   var qtyStr by remember { mutableStateOf("1") }
   var isAlcohol by remember { mutableStateOf(false) }
-  var selectedParticipantIds by remember { mutableStateOf(participants.map { it.id }) }
+  var selectedParticipantIds by remember(participants) { mutableStateOf(participants.map { it.id }) }
   var selectedPayerId by remember { mutableStateOf(participants.firstOrNull()?.id) }
   var payerMenuExpanded by remember { mutableStateOf(false) }
 
@@ -1648,7 +1553,7 @@ private fun AddReceiptItemDialog(
     text = {
       Column(
         modifier = Modifier
-          .heightIn(max = 320.dp)
+          .heightIn(max = 380.dp)
           .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
       ) {
@@ -1684,6 +1589,47 @@ private fun AddReceiptItemDialog(
         ) {
           Text("🍷 Drink / Alcohol item", fontSize = 12.sp)
           Switch(checked = isAlcohol, onCheckedChange = { isAlcohol = it })
+        }
+
+        Text(
+          text = "Split this item with",
+          style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+        )
+        Text(
+          text = "Select at least one diner.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        participants.forEach { participant ->
+          val isSelected = participant.id in selectedParticipantIds
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable {
+                selectedParticipantIds = if (isSelected) {
+                  if (selectedParticipantIds.size > 1) {
+                    selectedParticipantIds - participant.id
+                  } else {
+                    selectedParticipantIds
+                  }
+                } else {
+                  selectedParticipantIds + participant.id
+                }
+              },
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Checkbox(
+              checked = isSelected,
+              onCheckedChange = null,
+              enabled = !isSelected || selectedParticipantIds.size > 1
+            )
+            Text(
+              text = participant.name,
+              style = MaterialTheme.typography.bodyMedium,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
         }
 
         Box {

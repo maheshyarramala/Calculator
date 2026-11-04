@@ -66,6 +66,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,10 +93,21 @@ fun FinanceHubScreen(
   val snackbarHostState = remember { SnackbarHostState() }
   val coroutineScope = rememberCoroutineScope()
   var preselectedTripIdForExpense by remember { mutableStateOf<Long?>(null) }
+  var accountForDetails by remember { mutableStateOf<BankAccount?>(null) }
+  var accountPendingDelete by remember { mutableStateOf<BankAccount?>(null) }
 
   LaunchedEffect(uiState.toastMessage) {
     uiState.toastMessage?.let { msg ->
-      snackbarHostState.showSnackbar(msg)
+      val snackbarJob = launch {
+        snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Indefinite)
+      }
+      snapshotFlow { snackbarHostState.currentSnackbarData }
+        .first { it?.visuals?.message == msg }
+      delay(1800)
+      if (snackbarHostState.currentSnackbarData?.visuals?.message == msg) {
+        snackbarHostState.currentSnackbarData?.dismiss()
+      }
+      snackbarJob.join()
       viewModel.clearToast()
     }
   }
@@ -200,6 +213,55 @@ fun FinanceHubScreen(
       onConfirm = { newBal ->
         viewModel.updateAccountOpeningBalance(account, newBal)
         editingAccountForOpeningBalance = null
+      }
+    )
+  }
+
+  accountForDetails?.let { account ->
+    val currentBalance = accountsWithBalances
+      .firstOrNull { it.account.id == account.id }
+      ?.currentBalance
+      ?: account.openingBalance
+    AccountDetailsDialog(
+      account = account,
+      currentBalance = currentBalance,
+      onDismiss = { accountForDetails = null },
+      onDelete = {
+        accountForDetails = null
+        accountPendingDelete = account
+      },
+      onShowTransactions = {
+        viewModel.setSelectedAccountFilter(account.id)
+        accountForDetails = null
+      }
+    )
+  }
+
+  accountPendingDelete?.let { account ->
+    AlertDialog(
+      onDismissRequest = { accountPendingDelete = null },
+      title = { Text("Delete account?") },
+      text = {
+        Text("Are you sure you want to delete \"${account.bankName}\"? This action cannot be undone.")
+      },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            if (uiState.selectedAccountFilterId == account.id) {
+              viewModel.setSelectedAccountFilter(null)
+            }
+            viewModel.deleteBankAccount(account)
+            accountPendingDelete = null
+          },
+          colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        ) {
+          Text("Delete")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { accountPendingDelete = null }) {
+          Text("Cancel")
+        }
       }
     )
   }
@@ -386,7 +448,7 @@ fun FinanceHubScreen(
           onSelectAccountFilter = { viewModel.setSelectedAccountFilter(it) },
           onAddAccountClick = { viewModel.setShowAddBank(true) },
           onEditOpeningBalance = { editingAccountForOpeningBalance = it },
-          onDeleteAccount = { viewModel.deleteBankAccount(it) },
+          onOpenAccountDetails = { accountForDetails = it },
           onAddExpenseClick = { viewModel.setShowAddExpense(true) },
           onAddIncomeClick = { viewModel.setShowAddIncome(true) },
           onAddCategoryClick = { viewModel.setShowAddCategory(true) },
@@ -436,6 +498,57 @@ fun FinanceHubScreen(
   }
 }
 
+@Composable
+private fun AccountDetailsDialog(
+  account: BankAccount,
+  currentBalance: Double,
+  onDismiss: () -> Unit,
+  onDelete: () -> Unit,
+  onShowTransactions: () -> Unit
+) {
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(account.bankName) },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(account.accountType, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          Text("Opening balance")
+          Text(CurrencyFormatter.formatWhole(account.openingBalance), fontWeight = FontWeight.SemiBold)
+        }
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          Text("Current balance")
+          Text(CurrencyFormatter.format(currentBalance), fontWeight = FontWeight.Bold)
+        }
+      }
+    },
+    confirmButton = {
+      FilledTonalButton(onClick = onShowTransactions) {
+        Text("Transactions")
+      }
+    },
+    dismissButton = {
+      Row {
+        TextButton(
+          onClick = onDelete,
+          colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        ) {
+          Text("Delete")
+        }
+        TextButton(onClick = onDismiss) {
+          Text("Close")
+        }
+      }
+    }
+  )
+}
+
 // -------------------------------------------------------------
 // EXPENSES & CUSTOM CATEGORIES SECTION
 // -------------------------------------------------------------
@@ -454,7 +567,7 @@ private fun ExpensesSection(
   onSelectAccountFilter: (Long?) -> Unit,
   onAddAccountClick: () -> Unit,
   onEditOpeningBalance: (BankAccount) -> Unit,
-  onDeleteAccount: (BankAccount) -> Unit,
+  onOpenAccountDetails: (BankAccount) -> Unit,
   onAddExpenseClick: () -> Unit,
   onAddIncomeClick: () -> Unit,
   onAddCategoryClick: () -> Unit,
@@ -639,7 +752,7 @@ private fun ExpensesSection(
               .width(200.dp)
               .clickable {
                 haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onSelectAccountFilter(if (isSelected) null else accWithBal.account.id)
+                onOpenAccountDetails(accWithBal.account)
               }
           ) {
             Column(modifier = Modifier.padding(14.dp)) {
@@ -674,14 +787,16 @@ private fun ExpensesSection(
                     )
                   }
                   IconButton(
-                    onClick = { onDeleteAccount(accWithBal.account) },
+                    onClick = {
+                      onSelectAccountFilter(if (isSelected) null else accWithBal.account.id)
+                    },
                     modifier = Modifier.size(24.dp)
                   ) {
                     Icon(
-                      Icons.Default.Close,
-                      contentDescription = "Remove Account",
+                      Icons.AutoMirrored.Filled.ReceiptLong,
+                      contentDescription = "Show account transactions",
                       modifier = Modifier.size(14.dp),
-                      tint = MaterialTheme.colorScheme.onSurfaceVariant
+                      tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                   }
                 }
@@ -949,44 +1064,11 @@ private fun ExpensesSection(
       }
     } else {
       items(displayedExpenses, key = { it.id }) { expense ->
-        val dismissState = rememberSwipeToDismissBoxState(
-          confirmValueChange = { dismissValue ->
-            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
-              onDeleteExpense(expense)
-              true
-            } else {
-              false
-            }
-          }
+        ExpenseItemCard(
+          expense = expense,
+          categories = categories,
+          onDelete = { onDeleteExpense(expense) }
         )
-
-        SwipeToDismissBox(
-          state = dismissState,
-          enableDismissFromStartToEnd = false,
-          enableDismissFromEndToStart = true,
-          backgroundContent = {
-            Box(
-              modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFEF4444))
-                .padding(horizontal = 20.dp),
-              contentAlignment = Alignment.CenterEnd
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Delete", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
-              }
-            }
-          }
-        ) {
-          ExpenseItemCard(
-            expense = expense,
-            categories = categories,
-            onDelete = { onDeleteExpense(expense) }
-          )
-        }
       }
     }
   }
@@ -3441,43 +3523,12 @@ private fun SubscriptionsSection(
       }
     } else {
       items(subscriptions, key = { it.id }) { sub ->
-        val dismissState = rememberSwipeToDismissBoxState(
-          confirmValueChange = { dismissValue ->
-            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
-              onDeleteSubscription(sub)
-              true
-            } else false
-          }
+        SubscriptionItemCard(
+          sub = sub,
+          today = today,
+          onMarkPaid = { onMarkPaid(sub) },
+          onDelete = { onDeleteSubscription(sub) }
         )
-
-        SwipeToDismissBox(
-          state = dismissState,
-          enableDismissFromStartToEnd = false,
-          enableDismissFromEndToStart = true,
-          backgroundContent = {
-            Box(
-              modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFEF4444))
-                .padding(horizontal = 20.dp),
-              contentAlignment = Alignment.CenterEnd
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Delete", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
-              }
-            }
-          }
-        ) {
-          SubscriptionItemCard(
-            sub = sub,
-            today = today,
-            onMarkPaid = { onMarkPaid(sub) },
-            onDelete = { onDeleteSubscription(sub) }
-          )
-        }
       }
     }
   }
