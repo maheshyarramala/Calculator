@@ -4,16 +4,15 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
-import com.example.data.local.entity.BankAccount
-import com.example.data.local.entity.ExpenseRecord
+import com.example.data.local.entity.AccountWithBalance
 import com.example.data.local.entity.LoanRecord
+import com.example.data.repository.FinanceRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class LoanTrackerUiState(
@@ -25,18 +24,17 @@ data class LoanTrackerUiState(
   val totalMonthlyEmiOutflow: Double = 0.0,
   val totalPrincipalPaid: Double = 0.0,
   val totalInterestPayable: Double = 0.0,
-  val bankAccounts: List<BankAccount> = emptyList(),
+  val bankAccounts: List<AccountWithBalance> = emptyList(),
   val selectedCategoryFilter: String? = null,
   val showAddLoanDialog: Boolean = false,
-  val selectedLoanDetail: LoanRecord? = null,
-  val userMessage: String? = null
+  val selectedLoanDetail: LoanRecord? = null
 )
 
 class LoanTrackerViewModel(application: Application) : AndroidViewModel(application) {
 
+  private val repository = FinanceRepository.getInstance(application)
   private val database = AppDatabase.getDatabase(application)
   private val loanDao = database.loanDao()
-  private val financeDao = database.financeDao()
 
   private val _selectedCategoryFilter = MutableStateFlow<String?>(null)
   private val _showAddLoanDialog = MutableStateFlow(false)
@@ -46,8 +44,8 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
   val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
   val uiState: StateFlow<LoanTrackerUiState> = combine(
-    loanDao.getAllLoans(),
-    financeDao.getAllBankAccounts(),
+    repository.allLoans,
+    repository.accountsWithBalances,
     _selectedCategoryFilter,
     _showAddLoanDialog,
     _selectedLoanDetail
@@ -61,12 +59,15 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
       loans.filter { it.loanCategory.equals(categoryFilter, ignoreCase = true) }
     }
 
-    val totalRemainingPrincipal = active.sumOf { it.estimatedRemainingPrincipal }
-    val totalMonthlyOutflow = active.sumOf { it.emiAmount }
-    val totalPaid = loans.sumOf { it.estimatedPrincipalPaid }
+    // Dynamic Summary Boxes:
+    // - Monthly EMI Outflow: Sums installments of strictly active loans
+    // - Principal Paid: Aggregates cumulative principal component from paid EMIs across all loans
+    val totalRemainingPrincipal = active.sumOf { it.remainingPrincipal }
+    val totalMonthlyOutflow = active.sumOf { it.activeMonthlyOutflow }
+    val totalPaid = loans.sumOf { it.cumulativePrincipalPaid }
     val totalInterest = loans.sumOf { it.totalInterestPayable }
 
-    // Keep selected loan fresh if it was updated
+    // Keep selected loan fresh if updated
     val refreshedSelectedLoan = selectedLoan?.let { current ->
       loans.find { it.id == current.id }
     }
@@ -152,49 +153,20 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
   }
 
   /**
-   * Auto-increments paid EMI count and logs a corresponding expense into Finance Hub ledger.
+   * Auto-increments paid EMI count, logs corresponding expense into Finance Hub ledger,
+   * and updates real-time balance across the entire app.
    */
   fun payMonthlyEmi(
     loan: LoanRecord,
-    selectedBankAccountId: Long?,
-    selectedBankAccountName: String
+    selectedBankAccountId: Long?
   ) {
     viewModelScope.launch {
-      if (loan.isFullyPaid) {
-        _userMessage.value = "Loan '${loan.loanName}' is already fully paid!"
-        return@launch
+      val result = repository.payLoanEmi(loan, selectedBankAccountId)
+      result.onSuccess { msg ->
+        _userMessage.value = msg
+      }.onFailure { err ->
+        _userMessage.value = err.message ?: "Failed to record EMI payment"
       }
-
-      // 1. Increment paid count in Room
-      loanDao.incrementPaidEmis(loan.id)
-
-      // 2. Log expense in Finance Hub ledger
-      val bankId = selectedBankAccountId ?: loan.bankAccountId
-      val bankName = if (!selectedBankAccountName.isBlank()) selectedBankAccountName else loan.bankAccountName
-
-      val expenseRecord = ExpenseRecord(
-        title = "EMI: ${loan.loanName} (#${loan.paidEmisCount + 1})",
-        amount = loan.emiAmount,
-        categoryName = "Bills & Utilities",
-        type = "EXPENSE",
-        bankAccountId = bankId,
-        bankAccountName = bankName,
-        dateTimestamp = System.currentTimeMillis(),
-        notes = "Auto-logged from Loan & EMI Tracker. ${loan.tenureMonths - (loan.paidEmisCount + 1)} EMIs left."
-      )
-      financeDao.insertExpense(expenseRecord)
-
-      // 3. Update active bank account balance if linked
-      if (bankId != null) {
-        val allAccounts = uiState.value.bankAccounts
-        val targetAccount = allAccounts.find { it.id == bankId }
-        if (targetAccount != null) {
-          val updatedAccount = targetAccount.copy(balance = targetAccount.balance - loan.emiAmount)
-          financeDao.insertBankAccount(updatedAccount)
-        }
-      }
-
-      _userMessage.value = "EMI of ₹${"%.0f".format(loan.emiAmount)} paid & recorded in Finance Hub!"
     }
   }
 }

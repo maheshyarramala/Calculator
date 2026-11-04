@@ -48,6 +48,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.local.entity.AccountWithBalance
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
@@ -393,7 +394,7 @@ fun FinanceHubScreen(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+        Column(modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)) {
           Text(
             text = "Finance & Money",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -416,14 +417,14 @@ fun FinanceHubScreen(
             viewModel.setShowBackupModal(true)
           },
           shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-          modifier = Modifier.testTag("backup_restore_header_btn")
+          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+          modifier = Modifier.defaultMinSize(minHeight = 36.dp).testTag("backup_restore_header_btn")
         ) {
           Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(4.dp))
+          Spacer(modifier = Modifier.width(5.dp))
           Text(
             text = "Backup / Restore",
-            fontSize = 11.5.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             softWrap = false
@@ -966,7 +967,7 @@ private fun ExpensesSection(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+        Column(modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)) {
           Text(
             text = "My Bank & Cash Accounts",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -987,11 +988,12 @@ private fun ExpensesSection(
             onAddAccountClick()
           },
           shape = RoundedCornerShape(10.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+          modifier = Modifier.defaultMinSize(minHeight = 36.dp)
         ) {
           Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
           Spacer(modifier = Modifier.width(4.dp))
-          Text("Account", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+          Text("+ Account", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
         }
       }
     }
@@ -1576,7 +1578,7 @@ private fun SpendingAnalyticsCard(
       ) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.weight(1f).padding(end = 8.dp)
+          modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
         ) {
           Icon(
             Icons.Default.PieChart,
@@ -1599,7 +1601,7 @@ private fun SpendingAnalyticsCard(
         ) {
           Text(
             text = "${catSpendList.size} Categories",
-            fontSize = 11.sp,
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,

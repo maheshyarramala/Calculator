@@ -6,9 +6,11 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
+import com.example.data.local.entity.AccountWithBalance
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.DebtRecord
 import com.example.data.local.entity.ExpenseRecord
+import com.example.data.repository.FinanceRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +38,7 @@ data class DebtTrackerUiState(
   val netBalance: Double = 0.0,
   val selectedTab: DebtTab = DebtTab.LENT,
   val searchQuery: String = "",
-  val bankAccounts: List<BankAccount> = emptyList(),
+  val bankAccounts: List<AccountWithBalance> = emptyList(),
   val showAddDebtDialog: Boolean = false,
   val debtToSettle: DebtRecord? = null,
   val userMessage: String? = null
@@ -44,9 +46,9 @@ data class DebtTrackerUiState(
 
 class DebtTrackerViewModel(application: Application) : AndroidViewModel(application) {
 
+  private val repository = FinanceRepository.getInstance(application)
   private val database = AppDatabase.getDatabase(application)
   private val debtDao = database.debtDao()
-  private val financeDao = database.financeDao()
 
   private val _selectedTab = MutableStateFlow(DebtTab.LENT)
   private val _searchQuery = MutableStateFlow("")
@@ -73,8 +75,8 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
   }
 
   val uiState: StateFlow<DebtTrackerUiState> = combine(
-    debtDao.getAllDebts(),
-    financeDao.getAllBankAccounts(),
+    repository.allDebts,
+    repository.accountsWithBalances,
     filterParamsFlow
   ) { debts, bankAccounts, params ->
     val lentActive = debts.filter { it.type == "LENT" && !it.isSettled }
@@ -165,42 +167,35 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
       )
       debtDao.insertDebt(debt)
 
-      // Optionally adjust account balance and log to Finance Hub immediately
+      // Automatically log to Finance Hub ledger using reactive dynamic calculation
+      // (Never mutate raw static bankAccount.balance directly)
       if (adjustBankBalanceNow && bankAccountId != null) {
-        val allAccounts = uiState.value.bankAccounts
-        val target = allAccounts.find { it.id == bankAccountId }
-        if (target != null) {
-          if (type == "LENT") {
-            // Money left my account to give to them
-            val updated = target.copy(balance = target.balance - amount)
-            financeDao.insertBankAccount(updated)
-            financeDao.insertExpense(
-              ExpenseRecord(
-                title = "Lent to $personName",
-                amount = amount,
-                categoryName = "Bills & Utilities",
-                type = "EXPENSE",
-                bankAccountId = bankAccountId,
-                bankAccountName = bankAccountName,
-                notes = "Recorded in Personal Lend & Borrow Tracker"
-              )
+        if (type == "LENT") {
+          // Money left my account to give to them -> EXPENSE
+          repository.insertExpense(
+            ExpenseRecord(
+              title = "Lent to $personName",
+              amount = amount,
+              categoryName = "Bills & Utilities",
+              type = "EXPENSE",
+              bankAccountId = bankAccountId,
+              bankAccountName = bankAccountName,
+              notes = "Recorded in Personal Lend & Borrow Tracker"
             )
-          } else {
-            // Money entered my account from them
-            val updated = target.copy(balance = target.balance + amount)
-            financeDao.insertBankAccount(updated)
-            financeDao.insertExpense(
-              ExpenseRecord(
-                title = "Borrowed from $personName",
-                amount = amount,
-                categoryName = "Bills & Utilities",
-                type = "INCOME",
-                bankAccountId = bankAccountId,
-                bankAccountName = bankAccountName,
-                notes = "Recorded in Personal Lend & Borrow Tracker"
-              )
+          )
+        } else {
+          // Money entered my account from them -> INCOME
+          repository.insertExpense(
+            ExpenseRecord(
+              title = "Borrowed from $personName",
+              amount = amount,
+              categoryName = "Bills & Utilities",
+              type = "INCOME",
+              bankAccountId = bankAccountId,
+              bankAccountName = bankAccountName,
+              notes = "Recorded in Personal Lend & Borrow Tracker"
             )
-          }
+          )
         }
       }
 
@@ -216,48 +211,13 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
     bankAccountName: String
   ) {
     viewModelScope.launch {
-      debtDao.markSettled(debt.id)
-
-      if (adjustBankBalance && bankAccountId != null) {
-        val allAccounts = uiState.value.bankAccounts
-        val target = allAccounts.find { it.id == bankAccountId }
-        if (target != null) {
-          if (debt.type == "LENT") {
-            // Settled: They returned the money to me -> Income into my account
-            val updated = target.copy(balance = target.balance + debt.amount)
-            financeDao.insertBankAccount(updated)
-            financeDao.insertExpense(
-              ExpenseRecord(
-                title = "Settlement: ${debt.personName} repaid",
-                amount = debt.amount,
-                categoryName = "Bills & Utilities",
-                type = "INCOME",
-                bankAccountId = bankAccountId,
-                bankAccountName = bankAccountName,
-                notes = "Settled debt from Udhaar ledger"
-              )
-            )
-          } else {
-            // Settled: I paid them back -> Expense from my account
-            val updated = target.copy(balance = target.balance - debt.amount)
-            financeDao.insertBankAccount(updated)
-            financeDao.insertExpense(
-              ExpenseRecord(
-                title = "Settlement: Repaid ${debt.personName}",
-                amount = debt.amount,
-                categoryName = "Bills & Utilities",
-                type = "EXPENSE",
-                bankAccountId = bankAccountId,
-                bankAccountName = bankAccountName,
-                notes = "Settled debt from Udhaar ledger"
-              )
-            )
-          }
-        }
-      }
-
+      val result = repository.settleDebt(
+        debt = debt,
+        preferredBankAccountId = bankAccountId,
+        adjustBankBalance = adjustBankBalance
+      )
       _debtToSettle.value = null
-      _userMessage.value = "Marked debt with ${debt.personName} as settled!"
+      _userMessage.value = result.getOrDefault("Marked debt with ${debt.personName} as settled!")
     }
   }
 

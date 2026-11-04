@@ -33,14 +33,6 @@ enum class FinanceTab(val title: String) {
   TRIPS("Trip Manager")
 }
 
-data class AccountWithBalance(
-  val account: BankAccount,
-  val openingBalance: Double,
-  val totalIncome: Double,
-  val totalExpense: Double,
-  val currentBalance: Double
-)
-
 data class CategorySpend(
   val categoryName: String,
   val colorHex: String,
@@ -67,6 +59,7 @@ data class FinanceUiState(
 
 class FinanceHubViewModel(application: Application) : AndroidViewModel(application) {
 
+  private val repository = com.example.data.repository.FinanceRepository.getInstance(application)
   private val dao = AppDatabase.getDatabase(application).financeDao()
 
   private val _uiState = MutableStateFlow(FinanceUiState())
@@ -75,10 +68,10 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
   val categories: StateFlow<List<ExpenseCategory>> = dao.getAllCategories()
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  val expenses: StateFlow<List<ExpenseRecord>> = dao.getAllExpenses()
+  val expenses: StateFlow<List<ExpenseRecord>> = repository.allExpenses
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-  val bankAccounts: StateFlow<List<BankAccount>> = dao.getAllBankAccounts()
+  val bankAccounts: StateFlow<List<BankAccount>> = repository.rawBankAccounts
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   val creditCardBillReminders: StateFlow<List<CreditCardBillReminder>> =
@@ -95,48 +88,14 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
   private val _monthlyBudgetLimit = MutableStateFlow(prefs.getFloat("monthly_budget_limit", 50000f).toDouble())
   val monthlyBudgetLimit: StateFlow<Double> = _monthlyBudgetLimit.asStateFlow()
 
-  // Computed accounts with live balances based on opening balance, income, and expenses
-  val accountsWithBalances: StateFlow<List<AccountWithBalance>> = combine(bankAccounts, expenses) { accs, exps ->
-    accs.map { acc ->
-      val accExpenses = exps.filter {
-        (it.type == "EXPENSE" || it.type == "TRANSFER_OUT") && it.bankAccountId == acc.id
-      }.sumOf { it.amount }
-      val accIncome = exps.filter {
-        (it.type == "INCOME" || it.type == "TRANSFER_IN") && it.bankAccountId == acc.id
-      }.sumOf { it.amount }
-      val current = acc.openingBalance + accIncome - accExpenses
-      AccountWithBalance(
-        account = acc,
-        openingBalance = acc.openingBalance,
-        totalIncome = accIncome,
-        totalExpense = accExpenses,
-        currentBalance = current
-      )
-    }
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+  // Centralized accounts with live balances from FinanceRepository
+  val accountsWithBalances: StateFlow<List<com.example.data.local.entity.AccountWithBalance>> =
+    repository.accountsWithBalances
 
-  val totalNetBalance: StateFlow<Double> = accountsWithBalances.map { list ->
-    list.sumOf { it.currentBalance }
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
-
-  val totalIncome: StateFlow<Double> = expenses.map { list ->
-    list.filter { it.type == "INCOME" }.sumOf { it.amount }
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
-
-  val totalExpense: StateFlow<Double> = expenses.map { list ->
-    list.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
-
-  val currentMonthExpenses: StateFlow<Double> = expenses.map { list ->
-    val cal = Calendar.getInstance()
-    val currMonth = cal.get(Calendar.MONTH)
-    val currYear = cal.get(Calendar.YEAR)
-    list.filter { item ->
-      if (item.type != "EXPENSE") return@filter false
-      val itemCal = Calendar.getInstance().apply { timeInMillis = item.dateTimestamp }
-      itemCal.get(Calendar.MONTH) == currMonth && itemCal.get(Calendar.YEAR) == currYear
-    }.sumOf { it.amount }
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+  val totalNetBalance: StateFlow<Double> = repository.totalNetBalance
+  val totalIncome: StateFlow<Double> = repository.totalIncome
+  val totalExpense: StateFlow<Double> = repository.totalExpense
+  val currentMonthExpenses: StateFlow<Double> = repository.currentMonthExpenses
 
   // Ensure default categories exist if empty
   init {

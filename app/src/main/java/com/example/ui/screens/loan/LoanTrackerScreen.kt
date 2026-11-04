@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.local.entity.AccountWithBalance
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.LoanRecord
 import com.example.ui.components.CurrencyFormatter
@@ -166,8 +167,7 @@ fun LoanTrackerScreen(
             onPayEmi = {
               viewModel.payMonthlyEmi(
                 loan = loan,
-                selectedBankAccountId = loan.bankAccountId,
-                selectedBankAccountName = loan.bankAccountName
+                selectedBankAccountId = loan.bankAccountId
               )
             }
           )
@@ -205,8 +205,8 @@ fun LoanTrackerScreen(
       loan = loan,
       bankAccounts = state.bankAccounts,
       onDismiss = { viewModel.selectLoanForDetail(null) },
-      onPayEmi = { bankId, bankName ->
-        viewModel.payMonthlyEmi(loan, bankId, bankName)
+      onPayEmi = { bankId, _ ->
+        viewModel.payMonthlyEmi(loan, bankId)
       },
       onDelete = {
         viewModel.deleteLoan(loan)
@@ -450,7 +450,7 @@ private fun LoanCategoryFilterRow(
 }
 
 // -------------------------------------------------------------
-// LOAN ITEM CARD
+// ENHANCED LOAN ITEM CARD
 // -------------------------------------------------------------
 @Composable
 private fun LoanItemCard(
@@ -459,7 +459,7 @@ private fun LoanItemCard(
   onPayEmi: () -> Unit
 ) {
   Card(
-    shape = RoundedCornerShape(18.dp),
+    shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
@@ -474,15 +474,19 @@ private fun LoanItemCard(
         .fillMaxWidth()
         .padding(16.dp)
     ) {
+      // Top Row: Category Icon, Title, Status & Interest Rate Chips, and EMI Amount
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+          modifier = Modifier.weight(1f).padding(end = 8.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
           Box(
             modifier = Modifier
-              .size(40.dp)
+              .size(42.dp)
               .clip(RoundedCornerShape(12.dp))
               .background(getLoanCategoryColor(loan.loanCategory).copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
@@ -502,18 +506,55 @@ private fun LoanItemCard(
               maxLines = 1,
               overflow = TextOverflow.Ellipsis
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                text = "${loan.annualInterestRate}% p.a.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-              if (loan.bankAccountName.isNotBlank()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+              // Status Badge
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = if (loan.isFullyPaid) Color(0xFF10B981).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+              ) {
                 Text(
-                  text = " • ${loan.bankAccountName}",
-                  style = MaterialTheme.typography.bodySmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                  text = if (loan.isFullyPaid) "Closed" else "Active • ${loan.remainingEmisCount} left",
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = if (loan.isFullyPaid) Color(0xFF059669) else MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
+              }
+
+              // Interest Rate Chip
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+              ) {
+                Text(
+                  text = "${loan.annualInterestRate}% p.a.",
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.Medium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+              }
+
+              // Linked Account Chip
+              if (loan.bankAccountName.isNotBlank()) {
+                Surface(
+                  shape = RoundedCornerShape(6.dp),
+                  color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                ) {
+                  Text(
+                    text = loan.bankAccountName,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                  )
+                }
               }
             }
           }
@@ -536,7 +577,45 @@ private fun LoanItemCard(
 
       Spacer(modifier = Modifier.height(14.dp))
 
-      // Progress Bar
+      // Exact Breakdown of EMIs Paid vs Pending
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(
+            Icons.Default.DoneAll,
+            contentDescription = null,
+            tint = if (loan.isFullyPaid) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(15.dp)
+          )
+          Spacer(modifier = Modifier.width(4.dp))
+          Text(
+            text = "${loan.paidEmisCount}/${loan.tenureMonths} EMIs Paid",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+        }
+
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ) {
+          Text(
+            text = "${(loan.progressFraction * 100).toInt()}% Paid • ${loan.remainingEmisCount} EMIs Pending",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (loan.isFullyPaid) Color(0xFF059669) else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      // Progress Bar representation
       LinearProgressIndicator(
         progress = { loan.progressFraction },
         modifier = Modifier
@@ -547,26 +626,78 @@ private fun LoanItemCard(
         trackColor = MaterialTheme.colorScheme.surfaceVariant
       )
 
-      Spacer(modifier = Modifier.height(8.dp))
+      Spacer(modifier = Modifier.height(12.dp))
 
-      // Percentage & EMI counts
+      // Dual Principal Reporting Cards: Principal Paid vs. Remaining Principal
       Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        Text(
-          text = "${(loan.progressFraction * 100).toInt()}% Paid (${loan.paidEmisCount}/${loan.tenureMonths} EMIs)",
-          fontSize = 12.sp,
-          fontWeight = FontWeight.Medium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-          text = "Pending: ${CurrencyFormatter.format(loan.estimatedRemainingPrincipal)}",
-          fontSize = 12.sp,
-          fontWeight = FontWeight.Bold,
-          color = if (loan.isFullyPaid) Color(0xFF10B981) else MaterialTheme.colorScheme.error
-        )
+        // Principal Paid Card (Emerald)
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = Color(0xFF10B981).copy(alpha = 0.10f),
+          border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.25f)),
+          modifier = Modifier.weight(1f)
+        ) {
+          Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = Color(0xFF059669),
+                modifier = Modifier.size(13.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = "Principal Paid",
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF047857)
+              )
+            }
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+              text = CurrencyFormatter.format(loan.cumulativePrincipalPaid),
+              fontSize = 13.sp,
+              fontWeight = FontWeight.ExtraBold,
+              color = Color(0xFF059669)
+            )
+          }
+        }
+
+        // Remaining Principal Card (Rose/Coral)
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = if (loan.isFullyPaid) Color(0xFF10B981).copy(alpha = 0.08f) else Color(0xFFEF4444).copy(alpha = 0.08f),
+          border = BorderStroke(1.dp, if (loan.isFullyPaid) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFFEF4444).copy(alpha = 0.2f)),
+          modifier = Modifier.weight(1f)
+        ) {
+          Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                if (loan.isFullyPaid) Icons.Default.Check else Icons.Default.Pending,
+                contentDescription = null,
+                tint = if (loan.isFullyPaid) Color(0xFF059669) else Color(0xFFDC2626),
+                modifier = Modifier.size(13.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = "Remaining Principal",
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (loan.isFullyPaid) Color(0xFF047857) else Color(0xFFB91C1C)
+              )
+            }
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+              text = CurrencyFormatter.format(loan.remainingPrincipal),
+              fontSize = 13.sp,
+              fontWeight = FontWeight.ExtraBold,
+              color = if (loan.isFullyPaid) Color(0xFF059669) else Color(0xFFDC2626)
+            )
+          }
+        }
       }
 
       Spacer(modifier = Modifier.height(12.dp))
@@ -575,8 +706,15 @@ private fun LoanItemCard(
       if (!loan.isFullyPaid) {
         Row(
           modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.End
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
         ) {
+          Text(
+            text = "Tenure: ${loan.tenureMonths} Months (${loan.startDate})",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+
           FilledTonalButton(
             onClick = onPayEmi,
             shape = RoundedCornerShape(10.dp),
@@ -618,7 +756,7 @@ private fun LoanItemCard(
 @Composable
 private fun LoanDetailDialog(
   loan: LoanRecord,
-  bankAccounts: List<BankAccount>,
+  bankAccounts: List<AccountWithBalance>,
   onDismiss: () -> Unit,
   onPayEmi: (Long?, String) -> Unit,
   onDelete: () -> Unit
@@ -626,7 +764,7 @@ private fun LoanDetailDialog(
   var selectedBankId by remember { mutableStateOf(loan.bankAccountId) }
   var showDeleteConfirm by remember { mutableStateOf(false) }
 
-  val selectedAccount = bankAccounts.find { it.id == selectedBankId }
+  val selectedAccount = bankAccounts.find { it.account.id == selectedBankId }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -665,8 +803,8 @@ private fun LoanDetailDialog(
         }
         Spacer(modifier = Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          DetailItem("Principal Paid", CurrencyFormatter.format(loan.estimatedPrincipalPaid))
-          DetailItem("Principal Pending", CurrencyFormatter.format(loan.estimatedRemainingPrincipal))
+          DetailItem("Principal Paid", CurrencyFormatter.format(loan.cumulativePrincipalPaid))
+          DetailItem("Principal Pending", CurrencyFormatter.format(loan.remainingPrincipal))
         }
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -687,7 +825,7 @@ private fun LoanDetailDialog(
             onExpandedChange = { expanded = it }
           ) {
             OutlinedTextField(
-              value = selectedAccount?.let { "${it.bankName} (${CurrencyFormatter.format(it.balance)})" } ?: "Select payment account",
+              value = selectedAccount?.let { "${it.account.bankName} (${CurrencyFormatter.format(it.currentBalance)})" } ?: "Select payment account",
               onValueChange = {},
               readOnly = true,
               label = { Text("Deduct EMI from") },
@@ -702,9 +840,9 @@ private fun LoanDetailDialog(
             ) {
               bankAccounts.forEach { acc ->
                 DropdownMenuItem(
-                  text = { Text("${acc.bankName} - Balance: ${CurrencyFormatter.format(acc.balance)}") },
+                  text = { Text("${acc.account.bankName} - Balance: ${CurrencyFormatter.format(acc.currentBalance)}") },
                   onClick = {
-                    selectedBankId = acc.id
+                    selectedBankId = acc.account.id
                     expanded = false
                   }
                 )
@@ -723,7 +861,7 @@ private fun LoanDetailDialog(
       if (!loan.isFullyPaid) {
         Button(
           onClick = {
-            onPayEmi(selectedBankId, selectedAccount?.bankName ?: "")
+            onPayEmi(selectedBankId, selectedAccount?.account?.bankName ?: "")
             onDismiss()
           }
         ) {
@@ -784,7 +922,7 @@ private fun DetailItem(label: String, value: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddLoanDialog(
-  bankAccounts: List<BankAccount>,
+  bankAccounts: List<AccountWithBalance>,
   onDismiss: () -> Unit,
   onConfirm: (
     name: String,
@@ -807,7 +945,7 @@ private fun AddLoanDialog(
   var tenureMonthsText by rememberSaveable { mutableStateOf("36") }
   var initialPaidEmisText by rememberSaveable { mutableStateOf("0") }
   var notes by rememberSaveable { mutableStateOf("") }
-  var selectedBankId by rememberSaveable { mutableStateOf<Long?>(bankAccounts.firstOrNull()?.id) }
+  var selectedBankId by rememberSaveable { mutableStateOf<Long?>(bankAccounts.firstOrNull()?.account?.id) }
 
   val principalVal = principalText.toDoubleOrNull() ?: 0.0
   val rateVal = interestRateText.toDoubleOrNull() ?: 0.0
@@ -817,7 +955,7 @@ private fun AddLoanDialog(
     LoanRecord.calculateEmi(principalVal, rateVal, tenureVal)
   }
 
-  val selectedAccount = bankAccounts.find { it.id == selectedBankId }
+  val selectedAccount = bankAccounts.find { it.account.id == selectedBankId }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -903,6 +1041,40 @@ private fun AddLoanDialog(
           }
         }
 
+        // Optional Linked Bank Account
+        if (bankAccounts.isNotEmpty()) {
+          var expanded by remember { mutableStateOf(false) }
+          ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it }
+          ) {
+            OutlinedTextField(
+              value = selectedAccount?.let { "${it.account.bankName} (${CurrencyFormatter.format(it.currentBalance)})" } ?: "Select Linked Account (Optional)",
+              onValueChange = {},
+              readOnly = true,
+              label = { Text("Deduct EMI from Account") },
+              trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+              modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+            )
+            ExposedDropdownMenu(
+              expanded = expanded,
+              onDismissRequest = { expanded = false }
+            ) {
+              bankAccounts.forEach { acc ->
+                DropdownMenuItem(
+                  text = { Text("${acc.account.bankName} (${CurrencyFormatter.format(acc.currentBalance)})") },
+                  onClick = {
+                    selectedBankId = acc.account.id
+                    expanded = false
+                  }
+                )
+              }
+            }
+          }
+        }
+
         OutlinedTextField(
           value = initialPaidEmisText,
           onValueChange = { initialPaidEmisText = it },
@@ -935,7 +1107,7 @@ private fun AddLoanDialog(
               initialPaidEmisText.toIntOrNull() ?: 0,
               notes,
               selectedBankId,
-              selectedAccount?.bankName ?: ""
+              selectedAccount?.account?.bankName ?: ""
             )
           }
         },

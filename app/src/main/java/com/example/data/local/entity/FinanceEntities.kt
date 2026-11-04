@@ -86,3 +86,11 @@ data class SubscriptionRecord(
   val lastPaidTimestamp: Long = 0L,
   val notes: String = ""
 )
+
+data class AccountWithBalance(
+  val account: BankAccount,
+  val openingBalance: Double,
+  val totalIncome: Double,
+  val totalExpense: Double,
+  val currentBalance: Double
+)

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.local.entity.AccountWithBalance
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.DebtRecord
 import com.example.ui.components.CurrencyFormatter
@@ -582,7 +583,7 @@ private fun DebtItemCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddDebtDialog(
-  bankAccounts: List<BankAccount>,
+  bankAccounts: List<AccountWithBalance>,
   initialType: String,
   onDismiss: () -> Unit,
   onConfirm: (
@@ -603,10 +604,10 @@ private fun AddDebtDialog(
   var dueDateMillis by rememberSaveable { mutableStateOf<Long?>(null) }
   var notes by rememberSaveable { mutableStateOf("") }
   var adjustBalance by rememberSaveable { mutableStateOf(false) }
-  var selectedBankId by rememberSaveable { mutableStateOf<Long?>(bankAccounts.firstOrNull()?.id) }
+  var selectedBankId by rememberSaveable { mutableStateOf<Long?>(bankAccounts.firstOrNull()?.account?.id) }
 
   val amountVal = amountText.toDoubleOrNull() ?: 0.0
-  val selectedAccount = bankAccounts.find { it.id == selectedBankId }
+  val selectedAccount = bankAccounts.find { it.account.id == selectedBankId }
 
   val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
 
@@ -710,7 +711,7 @@ private fun AddDebtDialog(
               onExpandedChange = { expanded = it }
             ) {
               OutlinedTextField(
-                value = selectedAccount?.bankName ?: "Select Account",
+                value = selectedAccount?.let { "${it.account.bankName} (${CurrencyFormatter.format(it.currentBalance)})" } ?: "Select Account",
                 onValueChange = {},
                 readOnly = true,
                 label = { Text("Bank / Wallet Account") },
@@ -725,9 +726,9 @@ private fun AddDebtDialog(
               ) {
                 bankAccounts.forEach { acc ->
                   DropdownMenuItem(
-                    text = { Text("${acc.bankName} (${CurrencyFormatter.format(acc.balance)})") },
+                    text = { Text("${acc.account.bankName} (${CurrencyFormatter.format(acc.currentBalance)})") },
                     onClick = {
-                      selectedBankId = acc.id
+                      selectedBankId = acc.account.id
                       expanded = false
                     }
                   )
@@ -756,7 +757,7 @@ private fun AddDebtDialog(
               dueDateMillis,
               notes,
               if (adjustBalance) selectedBankId else null,
-              if (adjustBalance) selectedAccount?.bankName ?: "" else "",
+              if (adjustBalance) selectedAccount?.account?.bankName ?: "" else "",
               adjustBalance
             )
           }
@@ -781,14 +782,23 @@ private fun AddDebtDialog(
 @Composable
 private fun SettleDebtDialog(
   debt: DebtRecord,
-  bankAccounts: List<BankAccount>,
+  bankAccounts: List<AccountWithBalance>,
   onDismiss: () -> Unit,
   onConfirm: (adjustBalance: Boolean, bankId: Long?, bankName: String) -> Unit
 ) {
   var adjustBalance by rememberSaveable { mutableStateOf(false) }
-  var selectedBankId by rememberSaveable { mutableStateOf<Long?>(bankAccounts.firstOrNull()?.id) }
+  // Auto-select account with sufficient funds if available
+  val preferredAccount = remember(bankAccounts, debt) {
+    if (debt.type == "BORROWED") {
+      bankAccounts.find { it.currentBalance >= debt.amount } ?: bankAccounts.firstOrNull()
+    } else {
+      bankAccounts.firstOrNull()
+    }
+  }
+  var selectedBankId by rememberSaveable { mutableStateOf<Long?>(preferredAccount?.account?.id) }
 
-  val selectedAccount = bankAccounts.find { it.id == selectedBankId }
+  val selectedAccount = bankAccounts.find { it.account.id == selectedBankId }
+  val totalLiquidFunds = remember(bankAccounts) { bankAccounts.sumOf { it.currentBalance } }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -827,7 +837,7 @@ private fun SettleDebtDialog(
               onExpandedChange = { expanded = it }
             ) {
               OutlinedTextField(
-                value = selectedAccount?.bankName ?: "Select Account",
+                value = selectedAccount?.let { "${it.account.bankName} (${CurrencyFormatter.format(it.currentBalance)})" } ?: "Select Account",
                 onValueChange = {},
                 readOnly = true,
                 label = { Text("Account") },
@@ -842,11 +852,44 @@ private fun SettleDebtDialog(
               ) {
                 bankAccounts.forEach { acc ->
                   DropdownMenuItem(
-                    text = { Text("${acc.bankName} (${CurrencyFormatter.format(acc.balance)})") },
+                    text = { Text("${acc.account.bankName} (${CurrencyFormatter.format(acc.currentBalance)})") },
                     onClick = {
-                      selectedBankId = acc.id
+                      selectedBankId = acc.account.id
                       expanded = false
                     }
+                  )
+                }
+              }
+            }
+
+            // Liquid fund notice if selected account balance is low
+            if (debt.type == "BORROWED" && selectedAccount != null && selectedAccount.currentBalance < debt.amount) {
+              Card(
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(
+                  containerColor = if (totalLiquidFunds >= debt.amount) Color(0xFF3B82F6).copy(alpha = 0.12f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+              ) {
+                Row(
+                  modifier = Modifier.padding(10.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Icon(
+                    imageVector = if (totalLiquidFunds >= debt.amount) Icons.Default.Info else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (totalLiquidFunds >= debt.amount) Color(0xFF2563EB) else MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp)
+                  )
+                  Spacer(modifier = Modifier.width(8.dp))
+                  Text(
+                    text = if (totalLiquidFunds >= debt.amount) {
+                      "Selected account balance (${CurrencyFormatter.format(selectedAccount.currentBalance)}) is below ${CurrencyFormatter.format(debt.amount)}. Available liquid funds (${CurrencyFormatter.format(totalLiquidFunds)}) will be safely utilized to prevent negative account balance."
+                    } else {
+                      "Warning: Total liquid funds (${CurrencyFormatter.format(totalLiquidFunds)}) are lower than settlement amount."
+                    },
+                    fontSize = 11.5.sp,
+                    color = if (totalLiquidFunds >= debt.amount) Color(0xFF1E40AF) else MaterialTheme.colorScheme.error
                   )
                 }
               }
@@ -861,7 +904,7 @@ private fun SettleDebtDialog(
           onConfirm(
             adjustBalance,
             if (adjustBalance) selectedBankId else null,
-            if (adjustBalance) selectedAccount?.bankName ?: "" else ""
+            if (adjustBalance) selectedAccount?.account?.bankName ?: "" else ""
           )
         }
       ) {
