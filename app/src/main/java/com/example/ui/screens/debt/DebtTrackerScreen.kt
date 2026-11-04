@@ -634,7 +634,7 @@ private fun DebtItemCard(
 
         // Amount Display
         Text(
-          text = "${if (isLent) "+" else "-"}${CurrencyFormatter.format(debt.amount)}",
+          text = "${if (isLent) "+" else "-"}${CurrencyFormatter.formatWhole(debt.amount)}",
           style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
           color = primaryColor
         )
@@ -952,9 +952,9 @@ private fun SettleDebtDialog(
       Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
           text = if (debt.type == "LENT") {
-            "Did ${debt.personName} repay ${CurrencyFormatter.format(debt.amount)} to you?"
+            "Did ${debt.personName} repay ${CurrencyFormatter.formatWhole(debt.amount)} to you?"
           } else {
-            "Did you repay ${CurrencyFormatter.format(debt.amount)} to ${debt.personName}?"
+            "Did you repay ${CurrencyFormatter.formatWhole(debt.amount)} to ${debt.personName}?"
           },
           fontSize = 14.sp
         )
@@ -1029,9 +1029,9 @@ private fun SettleDebtDialog(
                   Spacer(modifier = Modifier.width(8.dp))
                   Text(
                     text = if (totalLiquidFunds >= debt.amount) {
-                      "Selected account balance (${CurrencyFormatter.format(selectedAccount.currentBalance)}) is below ${CurrencyFormatter.format(debt.amount)}. Available liquid funds (${CurrencyFormatter.format(totalLiquidFunds)}) will be safely utilized to prevent negative account balance."
+                      "Selected account balance (${CurrencyFormatter.format(selectedAccount.currentBalance)}) is below ${CurrencyFormatter.formatWhole(debt.amount)}. Available liquid funds (${CurrencyFormatter.format(totalLiquidFunds)}) will be safely utilized to prevent negative account balance."
                     } else {
-                      "Warning: Total liquid funds (${CurrencyFormatter.format(totalLiquidFunds)}) are lower than settlement amount."
+                      "Warning: Total liquid funds (${CurrencyFormatter.format(totalLiquidFunds)}) are lower than settlement amount ${CurrencyFormatter.formatWhole(debt.amount)}."
                     },
                     fontSize = 11.5.sp,
                     color = if (totalLiquidFunds >= debt.amount) Color(0xFF1E40AF) else MaterialTheme.colorScheme.error

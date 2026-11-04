@@ -28,6 +28,7 @@ import org.json.JSONObject
 import java.util.Calendar
 import android.net.Uri
 import java.time.LocalDate
+import kotlin.coroutines.cancellation.CancellationException
 
 enum class FinanceTab(val title: String) {
   EXPENSES("Expenses & Accounts"),
@@ -645,24 +646,36 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
-  // --- Swipe-to-Delete with Undo ---
-  var lastDeletedExpense: ExpenseRecord? = null
-    private set
+  fun deleteExpensesWithUndo(
+    expensesToDelete: List<ExpenseRecord>,
+    onUndoPrompt: (undo: () -> Unit) -> Unit
+  ) {
+    val deletedExpenses = expensesToDelete.distinctBy { it.id }
+    if (deletedExpenses.isEmpty()) return
 
-  fun deleteExpenseWithUndo(expense: ExpenseRecord, onUndoPrompt: () -> Unit) {
-    lastDeletedExpense = expense
     viewModelScope.launch {
-      repository.deleteExpense(expense)
-      onUndoPrompt()
-    }
-  }
-
-  fun restoreLastDeletedExpense() {
-    val exp = lastDeletedExpense ?: return
-    viewModelScope.launch {
-      repository.restoreExpense(exp)
-      lastDeletedExpense = null
-      _uiState.update { it.copy(toastMessage = "Restored '${exp.title}'") }
+      try {
+        database.withTransaction {
+          deletedExpenses.forEach { repository.deleteExpense(it) }
+        }
+        onUndoPrompt {
+          viewModelScope.launch {
+            try {
+              database.withTransaction {
+                deletedExpenses.forEach { repository.restoreExpense(it) }
+              }
+              val restoredTitles = deletedExpenses.joinToString { it.title }
+              _uiState.update { it.copy(toastMessage = "Restored '$restoredTitles'") }
+            } catch (error: Exception) {
+              if (error is CancellationException) throw error
+              showToast("Could not restore transaction: ${error.localizedMessage ?: "Unknown error"}")
+            }
+          }
+        }
+      } catch (error: Exception) {
+        if (error is CancellationException) throw error
+        showToast("Could not delete transaction: ${error.localizedMessage ?: "Unknown error"}")
+      }
     }
   }
 

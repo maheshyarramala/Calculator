@@ -265,7 +265,7 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
     val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
     val dateStr = dateFormat.format(Date(debt.dateTimestamp))
     val dueDateStr = debt.dueDateTimestamp?.let { " (Due: ${dateFormat.format(Date(it))})" } ?: ""
-    val formattedAmt = com.example.ui.components.CurrencyFormatter.format(debt.amount)
+    val formattedAmt = com.example.ui.components.CurrencyFormatter.formatWhole(debt.amount)
     val configuredUpi = _userUpiId.value
 
     val reminderMessage = if (debt.type == "LENT") {

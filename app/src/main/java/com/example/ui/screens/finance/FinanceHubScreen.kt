@@ -515,16 +515,20 @@ fun FinanceHubScreen(
           onTransferClick = { showTransferDialog = true },
           onAddCategoryClick = { viewModel.setShowAddCategory(true) },
           onDeleteCategory = { viewModel.deleteCategory(it) },
-          onDeleteExpense = { exp ->
-            viewModel.deleteExpenseWithUndo(exp) {
+          onDeleteExpenses = { deletedExpenses ->
+            viewModel.deleteExpensesWithUndo(deletedExpenses) { undo ->
               coroutineScope.launch {
                 val res = snackbarHostState.showSnackbar(
-                  message = "Deleted '${exp.title}'",
+                  message = if (deletedExpenses.size > 1) {
+                    "Deleted both entries for this transfer"
+                  } else {
+                    "Deleted '${deletedExpenses.first().title}'"
+                  },
                   actionLabel = "Undo",
                   duration = SnackbarDuration.Short
                 )
                 if (res == SnackbarResult.ActionPerformed) {
-                  viewModel.restoreLastDeletedExpense()
+                  undo()
                 }
               }
             }
@@ -770,7 +774,7 @@ private fun ExpensesSection(
   onTransferClick: () -> Unit,
   onAddCategoryClick: () -> Unit,
   onDeleteCategory: (ExpenseCategory) -> Unit,
-  onDeleteExpense: (ExpenseRecord) -> Unit,
+  onDeleteExpenses: (List<ExpenseRecord>) -> Unit,
   onEditExpense: (ExpenseRecord) -> Unit
 ) {
   val haptic = LocalHapticFeedback.current
@@ -783,10 +787,19 @@ private fun ExpensesSection(
       expenses.filter { it.bankAccountId == selectedAccountFilterId }
     }
   }
+  val transactionCategories = remember(displayedExpenses) {
+    displayedExpenses
+      .map { it.categoryName }
+      .distinctBy { it.lowercase() }
+      .sortedBy { it.lowercase() }
+  }
 
   var selectedTransactionType by rememberSaveable { mutableStateOf<String?>(null) }
   var selectedTransactionCategory by rememberSaveable { mutableStateOf<String?>(null) }
   var expensePendingDelete by remember { mutableStateOf<ExpenseRecord?>(null) }
+  LaunchedEffect(selectedAccountFilterId) {
+    selectedTransactionCategory = null
+  }
   val filteredExpenses = remember(
     displayedExpenses,
     selectedTransactionType,
@@ -800,7 +813,8 @@ private fun ExpensesSection(
         else -> true
       }
       matchesType &&
-        (selectedTransactionCategory == null || expense.categoryName == selectedTransactionCategory)
+        (selectedTransactionCategory == null ||
+          expense.categoryName.equals(selectedTransactionCategory, ignoreCase = true))
     }
   }
 
@@ -835,7 +849,7 @@ private fun ExpensesSection(
             )
             .padding(20.dp)
         ) {
-          Column {
+          Column(modifier = Modifier.weight(1f)) {
             // Header row with Icon, Label and Live Indicator Pill
             Row(
               modifier = Modifier.fillMaxWidth(),
@@ -940,7 +954,7 @@ private fun ExpensesSection(
                     )
                   }
                   Spacer(modifier = Modifier.width(8.dp))
-                  Column {
+                  Column(modifier = Modifier.weight(1f)) {
                     Text(
                       text = "Total Income",
                       fontSize = 10.sp,
@@ -948,10 +962,13 @@ private fun ExpensesSection(
                       color = Color.White.copy(alpha = 0.75f)
                     )
                     Text(
-                      text = "+${CurrencyFormatter.format(totalIncome)}",
-                      fontSize = 13.sp,
+                      text = "+${CurrencyFormatter.formatWhole(totalIncome)}",
+                      fontSize = 12.sp,
                       fontWeight = FontWeight.ExtraBold,
-                      color = Color(0xFF34D399)
+                      color = Color(0xFF34D399),
+                      maxLines = 1,
+                      softWrap = false,
+                      overflow = TextOverflow.Ellipsis
                     )
                   }
                 }
@@ -983,7 +1000,7 @@ private fun ExpensesSection(
                     )
                   }
                   Spacer(modifier = Modifier.width(8.dp))
-                  Column {
+                  Column(modifier = Modifier.weight(1f)) {
                     Text(
                       text = "Total Expenses",
                       fontSize = 10.sp,
@@ -991,10 +1008,13 @@ private fun ExpensesSection(
                       color = Color.White.copy(alpha = 0.75f)
                     )
                     Text(
-                      text = "-${CurrencyFormatter.format(totalExpense)}",
-                      fontSize = 13.sp,
+                      text = "-${CurrencyFormatter.formatWhole(totalExpense)}",
+                      fontSize = 12.sp,
                       fontWeight = FontWeight.ExtraBold,
-                      color = Color(0xFFF87171)
+                      color = Color(0xFFF87171),
+                      maxLines = 1,
+                      softWrap = false,
+                      overflow = TextOverflow.Ellipsis
                     )
                   }
                 }
@@ -1482,14 +1502,14 @@ private fun ExpensesSection(
               label = { Text("All Categories", maxLines = 1, softWrap = false) }
             )
           }
-          items(categories, key = { it.id }) { category ->
+          items(transactionCategories, key = { it.lowercase() }) { category ->
             FilterChip(
-              selected = selectedTransactionCategory == category.name,
+              selected = selectedTransactionCategory.equals(category, ignoreCase = true),
               onClick = {
                 selectedTransactionCategory =
-                  if (selectedTransactionCategory == category.name) null else category.name
+                  if (selectedTransactionCategory.equals(category, ignoreCase = true)) null else category
               },
-              label = { Text(category.name, maxLines = 1, softWrap = false) }
+              label = { Text(category, maxLines = 1, softWrap = false) }
             )
           }
         }
@@ -1548,28 +1568,48 @@ private fun ExpensesSection(
   }
 
   expensePendingDelete?.let { expense ->
+    val transferCounterparts = findTransferCounterparts(expense, expenses)
+    val isTransfer = expense.type == "TRANSFER_IN" || expense.type == "TRANSFER_OUT"
+    val isAmbiguousTransfer = isTransfer && transferCounterparts.size > 1
+    val transactionsToDelete = listOf(expense) + transferCounterparts.takeIf { it.size == 1 }.orEmpty()
     AlertDialog(
       onDismissRequest = { expensePendingDelete = null },
       title = { Text("Delete Transaction?") },
       text = {
-        Text(
-          "Delete '${expense.title}' (${CurrencyFormatter.formatWhole(expense.amount)})? " +
-            "You can undo this briefly after confirming."
-        )
+        when {
+          isAmbiguousTransfer -> Text(
+            "More than one matching transfer entry was found, so the linked transaction cannot be identified safely. No transactions were deleted."
+          )
+          transferCounterparts.size == 1 -> Text(
+            "Delete this transfer and its matching entry from ${transferCounterparts.single().bankAccountName}? You can undo both briefly."
+          )
+          isTransfer -> Text(
+            "No matching transfer entry was found. Delete '${expense.title}' " +
+              "(${CurrencyFormatter.formatWhole(expense.amount)}) only? You can undo it briefly."
+          )
+          else -> Text(
+            "Delete '${expense.title}' (${CurrencyFormatter.formatWhole(expense.amount)})? " +
+              "You can undo this briefly after confirming."
+          )
+        }
       },
       confirmButton = {
-        Button(
-          onClick = {
-            onDeleteExpense(expense)
-            expensePendingDelete = null
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-        ) {
-          Text("Delete")
+        if (!isAmbiguousTransfer) {
+          Button(
+            onClick = {
+              onDeleteExpenses(transactionsToDelete)
+              expensePendingDelete = null
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+          ) {
+            Text("Delete")
+          }
         }
       },
       dismissButton = {
-        TextButton(onClick = { expensePendingDelete = null }) { Text("Cancel") }
+        TextButton(onClick = { expensePendingDelete = null }) {
+          Text(if (isAmbiguousTransfer) "OK" else "Cancel")
+        }
       }
     )
   }
@@ -1840,6 +1880,46 @@ private fun EditExpenseDialog(
       TextButton(onClick = onDismiss) { Text("Cancel") }
     }
   )
+}
+
+private fun findTransferCounterparts(
+  transfer: ExpenseRecord,
+  expenses: List<ExpenseRecord>
+): List<ExpenseRecord> {
+  val expectedType: String
+  val expectedTitle: String
+  val expectedAccountName: String
+
+  when (transfer.type) {
+    "TRANSFER_OUT" -> {
+      expectedAccountName = transfer.title
+        .takeIf { it.startsWith("Transfer to ", ignoreCase = true) }
+        ?.substringAfter("Transfer to ")
+        ?.takeIf { it.isNotBlank() }
+        ?: return emptyList()
+      expectedType = "TRANSFER_IN"
+      expectedTitle = "Transfer from ${transfer.bankAccountName}"
+    }
+    "TRANSFER_IN" -> {
+      expectedAccountName = transfer.title
+        .takeIf { it.startsWith("Transfer from ", ignoreCase = true) }
+        ?.substringAfter("Transfer from ")
+        ?.takeIf { it.isNotBlank() }
+        ?: return emptyList()
+      expectedType = "TRANSFER_OUT"
+      expectedTitle = "Transfer to ${transfer.bankAccountName}"
+    }
+    else -> return emptyList()
+  }
+
+  return expenses.filter { candidate ->
+    candidate.id != transfer.id &&
+      candidate.type == expectedType &&
+      candidate.amount == transfer.amount &&
+      kotlin.math.abs(candidate.dateTimestamp - transfer.dateTimestamp) <= 1L &&
+      candidate.title.equals(expectedTitle, ignoreCase = true) &&
+      candidate.bankAccountName.equals(expectedAccountName, ignoreCase = true)
+  }
 }
 
 @Composable
