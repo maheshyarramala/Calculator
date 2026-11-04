@@ -6,11 +6,143 @@ import kotlin.math.pow
 
 object InvestmentCalculators {
 
+  data class StockAverageResult(
+    val totalQuantity: Int,
+    val totalInvested: Double,
+    val averagePrice: Double,
+    val targetSellPrice: Double = 0.0,
+    val netProfitAtTarget: Double = 0.0
+  )
+
+  data class TradeChargeBreakdown(
+    val grossPnl: Double,
+    val brokerage: Double,
+    val stt: Double,
+    val exchangeTxnCharge: Double,
+    val sebiCharge: Double,
+    val stampDuty: Double,
+    val gst: Double,
+    val dpCharge: Double,
+    val totalCharges: Double,
+    val netPnl: Double,
+    val breakevenPerShare: Double
+  )
+
   enum class CompoundingFrequency(val title: String, val timesPerYear: Int) {
     ANNUALLY("Annually", 1),
     SEMI_ANNUALLY("Semi-Annually", 2),
     QUARTERLY("Quarterly", 4),
     MONTHLY("Monthly", 12)
+  }
+
+  fun calculateStockAverage(
+    qty1: Int,
+    price1: Double,
+    qty2: Int,
+    price2: Double,
+    currentMarketPrice: Double = 0.0
+  ): StockAverageResult {
+    val firstQuantity = qty1.coerceAtLeast(0)
+    val secondQuantity = qty2.coerceAtLeast(0)
+    val totalQuantityLong = firstQuantity.toLong() + secondQuantity.toLong()
+    if (
+      totalQuantityLong == 0L ||
+      totalQuantityLong > Int.MAX_VALUE ||
+      (firstQuantity > 0 && (!price1.isFinite() || price1 <= 0.0)) ||
+      (secondQuantity > 0 && (!price2.isFinite() || price2 <= 0.0))
+    ) {
+      return StockAverageResult(0, 0.0, 0.0)
+    }
+
+    val totalQuantity = totalQuantityLong.toInt()
+    val totalInvested = firstQuantity * price1 + secondQuantity * price2
+    if (!totalInvested.isFinite()) return StockAverageResult(0, 0.0, 0.0)
+
+    val averagePrice = totalInvested / totalQuantity
+    val targetPrice = currentMarketPrice.takeIf { it.isFinite() && it > 0.0 } ?: 0.0
+    val profitAtTarget = if (targetPrice > 0.0) {
+      targetPrice * totalQuantity - totalInvested
+    } else {
+      0.0
+    }
+
+    return StockAverageResult(
+      totalQuantity = totalQuantity,
+      totalInvested = totalInvested,
+      averagePrice = averagePrice,
+      targetSellPrice = targetPrice,
+      netProfitAtTarget = profitAtTarget
+    )
+  }
+
+  /**
+   * Estimates Indian equity charges using common discount-broker rates.
+   * Actual charges vary by exchange, broker, and current regulations.
+   */
+  fun calculateEquityTradePnl(
+    buyPrice: Double,
+    sellPrice: Double,
+    quantity: Int,
+    isIntraday: Boolean,
+    brokerageFlatOrMax: Double = 20.0,
+    dpChargeOnDeliverySell: Double = 15.34
+  ): TradeChargeBreakdown {
+    val zeroResult = TradeChargeBreakdown(
+      grossPnl = 0.0,
+      brokerage = 0.0,
+      stt = 0.0,
+      exchangeTxnCharge = 0.0,
+      sebiCharge = 0.0,
+      stampDuty = 0.0,
+      gst = 0.0,
+      dpCharge = 0.0,
+      totalCharges = 0.0,
+      netPnl = 0.0,
+      breakevenPerShare = 0.0
+    )
+    if (
+      !buyPrice.isFinite() || buyPrice <= 0.0 ||
+      !sellPrice.isFinite() || sellPrice <= 0.0 ||
+      quantity <= 0 ||
+      !brokerageFlatOrMax.isFinite() || brokerageFlatOrMax < 0.0 ||
+      !dpChargeOnDeliverySell.isFinite() || dpChargeOnDeliverySell < 0.0
+    ) {
+      return zeroResult
+    }
+
+    val buyTurnover = buyPrice * quantity
+    val sellTurnover = sellPrice * quantity
+    val totalTurnover = buyTurnover + sellTurnover
+    if (!totalTurnover.isFinite()) return zeroResult
+
+    val grossPnl = sellTurnover - buyTurnover
+    val brokerage = if (isIntraday) {
+      (buyTurnover * 0.0003).coerceAtMost(brokerageFlatOrMax) +
+        (sellTurnover * 0.0003).coerceAtMost(brokerageFlatOrMax)
+    } else {
+      0.0
+    }
+    val stt = if (isIntraday) sellTurnover * 0.00025 else totalTurnover * 0.001
+    val exchangeTxnCharge = totalTurnover * 0.0000297
+    val sebiCharge = totalTurnover * 0.000001
+    val stampDuty = if (isIntraday) buyTurnover * 0.00003 else buyTurnover * 0.00015
+    val gst = (brokerage + exchangeTxnCharge + sebiCharge) * 0.18
+    val dpCharge = if (isIntraday) 0.0 else dpChargeOnDeliverySell
+    val totalCharges = brokerage + stt + exchangeTxnCharge + sebiCharge + stampDuty + gst + dpCharge
+
+    return TradeChargeBreakdown(
+      grossPnl = grossPnl,
+      brokerage = brokerage,
+      stt = stt,
+      exchangeTxnCharge = exchangeTxnCharge,
+      sebiCharge = sebiCharge,
+      stampDuty = stampDuty,
+      gst = gst,
+      dpCharge = dpCharge,
+      totalCharges = totalCharges,
+      netPnl = grossPnl - totalCharges,
+      breakevenPerShare = buyPrice + totalCharges / quantity
+    )
   }
 
   fun calculateSip(

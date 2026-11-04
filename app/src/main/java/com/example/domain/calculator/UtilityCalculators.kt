@@ -1,6 +1,89 @@
 package com.example.domain.calculator
 
+import kotlin.math.pow
+
 object UtilityCalculators {
+
+  data class NoCostEmiAnalysis(
+    val productPrice: Double,
+    val upfrontMerchantDiscount: Double,
+    val effectiveLoanPrincipal: Double,
+    val monthlyBaseEmi: Double,
+    val totalInterestComponent: Double,
+    val gstOnInterest18Percent: Double,
+    val processingFeeWithGst: Double,
+    val totalHiddenCost: Double,
+    val actualTotalOutflow: Double,
+    val effectiveAnnualCostPercent: Double
+  )
+
+  fun calculateTrueNoCostEmi(
+    productPrice: Double,
+    annualBankRatePercent: Double = 16.0,
+    tenureMonths: Int = 6,
+    processingFee: Double = 199.0,
+    gstRatePercent: Double = 18.0
+  ): NoCostEmiAnalysis {
+    val zeroResult = NoCostEmiAnalysis(
+      productPrice = 0.0,
+      upfrontMerchantDiscount = 0.0,
+      effectiveLoanPrincipal = 0.0,
+      monthlyBaseEmi = 0.0,
+      totalInterestComponent = 0.0,
+      gstOnInterest18Percent = 0.0,
+      processingFeeWithGst = 0.0,
+      totalHiddenCost = 0.0,
+      actualTotalOutflow = 0.0,
+      effectiveAnnualCostPercent = 0.0
+    )
+    if (
+      !productPrice.isFinite() || productPrice <= 0.0 ||
+      !annualBankRatePercent.isFinite() || annualBankRatePercent < 0.0 ||
+      tenureMonths <= 0 ||
+      !processingFee.isFinite() || processingFee < 0.0 ||
+      !gstRatePercent.isFinite() || gstRatePercent < 0.0
+    ) {
+      return zeroResult
+    }
+
+    val monthlyRate = annualBankRatePercent / 1200.0
+    val monthlyBaseEmi = productPrice / tenureMonths
+    val effectivePrincipal = if (monthlyRate == 0.0) {
+      productPrice
+    } else {
+      val factor = (1.0 + monthlyRate).pow(tenureMonths.toDouble())
+      monthlyBaseEmi * (factor - 1.0) / (monthlyRate * factor)
+    }
+    if (!effectivePrincipal.isFinite()) return zeroResult
+
+    val upfrontDiscount = (productPrice - effectivePrincipal).coerceAtLeast(0.0)
+    val gstMultiplier = gstRatePercent / 100.0
+    val gstOnInterest = upfrontDiscount * gstMultiplier
+    val processingFeeWithGst = processingFee * (1.0 + gstMultiplier)
+    val hiddenCost = gstOnInterest + processingFeeWithGst
+    val actualTotalOutflow = productPrice + hiddenCost
+    val annualizedCostPercent = (hiddenCost / productPrice) * (12.0 / tenureMonths) * 100.0
+    if (
+      !hiddenCost.isFinite() ||
+      !actualTotalOutflow.isFinite() ||
+      !annualizedCostPercent.isFinite()
+    ) {
+      return zeroResult
+    }
+
+    return NoCostEmiAnalysis(
+      productPrice = productPrice,
+      upfrontMerchantDiscount = upfrontDiscount,
+      effectiveLoanPrincipal = effectivePrincipal,
+      monthlyBaseEmi = monthlyBaseEmi,
+      totalInterestComponent = upfrontDiscount,
+      gstOnInterest18Percent = gstOnInterest,
+      processingFeeWithGst = processingFeeWithGst,
+      totalHiddenCost = hiddenCost,
+      actualTotalOutflow = actualTotalOutflow,
+      effectiveAnnualCostPercent = annualizedCostPercent
+    )
+  }
 
   data class BillSplitResult(
     val billAmount: Double,

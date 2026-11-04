@@ -103,27 +103,30 @@ object PdfReportGenerator {
     y += 125f
 
     // Schedule Table Header
-    canvas.drawText("Amortization Schedule Breakdown (First 20 Months)", 40f, y, boldPaint)
+    canvas.drawText("Amortization Schedule Breakdown (${result.schedule.size} Months)", 40f, y, boldPaint)
     y += 15f
 
     val headerBg = Paint().apply {
       color = Color.rgb(229, 231, 235)
       style = Paint.Style.FILL
     }
-    canvas.drawRect(40f, y, 555f, y + 22f, headerBg)
-
     val thPaint = Paint().apply {
       color = Color.rgb(31, 41, 55)
       textSize = 10f
       isFakeBoldText = true
       isAntiAlias = true
     }
-    val ty = y + 15f
-    canvas.drawText("Mo.", 50f, ty, thPaint)
-    canvas.drawText("Opening", 110f, ty, thPaint)
-    canvas.drawText("Principal", 220f, ty, thPaint)
-    canvas.drawText("Interest", 330f, ty, thPaint)
-    canvas.drawText("Closing Balance", 430f, ty, thPaint)
+    fun drawScheduleHeader(targetCanvas: android.graphics.Canvas, top: Float) {
+      targetCanvas.drawRect(40f, top, 555f, top + 22f, headerBg)
+      val headerY = top + 15f
+      targetCanvas.drawText("Mo.", 50f, headerY, thPaint)
+      targetCanvas.drawText("Opening", 110f, headerY, thPaint)
+      targetCanvas.drawText("Principal", 220f, headerY, thPaint)
+      targetCanvas.drawText("Interest", 330f, headerY, thPaint)
+      targetCanvas.drawText("Closing Balance", 430f, headerY, thPaint)
+    }
+
+    drawScheduleHeader(canvas, y)
 
     y += 24f
 
@@ -133,28 +136,44 @@ object PdfReportGenerator {
       isAntiAlias = true
     }
 
-    val maxRows = result.schedule.take(20)
-    maxRows.forEachIndexed { index, m ->
+    var currentPage = page
+    var currentCanvas = canvas
+    var pageNumber = 1
+    result.schedule.forEachIndexed { index, m ->
+      if (y + 20f > 780f) {
+        currentCanvas.drawLine(40f, 800f, 555f, 800f, linePaint)
+        currentCanvas.drawText("OmniCalc Financial Tool • Confidential & Personal Record", 40f, 815f, subtitlePaint)
+        currentCanvas.drawText("Page $pageNumber", 500f, 815f, subtitlePaint)
+        pdfDocument.finishPage(currentPage)
+
+        pageNumber++
+        val nextPageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        currentPage = pdfDocument.startPage(nextPageInfo)
+        currentCanvas = currentPage.canvas
+        y = 50f
+        drawScheduleHeader(currentCanvas, y)
+        y += 24f
+      }
+
       val ry = y + 16f
       if (index % 2 == 1) {
         val altBg = Paint().apply { color = Color.rgb(249, 250, 251) }
-        canvas.drawRect(40f, y, 555f, y + 20f, altBg)
+        currentCanvas.drawRect(40f, y, 555f, y + 20f, altBg)
       }
-      canvas.drawText(m.monthIndex.toString(), 50f, ry, rowPaint)
-      canvas.drawText(CurrencyFormatter.formatWhole(m.openingBalance, ""), 110f, ry, rowPaint)
-      canvas.drawText(CurrencyFormatter.formatWhole(m.principalPaid, ""), 220f, ry, rowPaint)
-      canvas.drawText(CurrencyFormatter.formatWhole(m.interestPaid, ""), 330f, ry, rowPaint)
-      canvas.drawText(CurrencyFormatter.formatWhole(m.closingBalance, ""), 430f, ry, rowPaint)
+      currentCanvas.drawText(m.monthIndex.toString(), 50f, ry, rowPaint)
+      currentCanvas.drawText(CurrencyFormatter.formatWhole(m.openingBalance, ""), 110f, ry, rowPaint)
+      currentCanvas.drawText(CurrencyFormatter.formatWhole(m.principalPaid, ""), 220f, ry, rowPaint)
+      currentCanvas.drawText(CurrencyFormatter.formatWhole(m.interestPaid, ""), 330f, ry, rowPaint)
+      currentCanvas.drawText(CurrencyFormatter.formatWhole(m.closingBalance, ""), 430f, ry, rowPaint)
       y += 20f
     }
 
     // Footer
-    y = 800f
-    canvas.drawLine(40f, y, 555f, y, linePaint)
-    canvas.drawText("OmniCalc Financial Tool • Confidential & Personal Record", 40f, y + 15f, subtitlePaint)
-    canvas.drawText("Page 1 of 1", 500f, y + 15f, subtitlePaint)
+    currentCanvas.drawLine(40f, 800f, 555f, 800f, linePaint)
+    currentCanvas.drawText("OmniCalc Financial Tool • Confidential & Personal Record", 40f, 815f, subtitlePaint)
+    currentCanvas.drawText("Page $pageNumber", 500f, 815f, subtitlePaint)
 
-    pdfDocument.finishPage(page)
+    pdfDocument.finishPage(currentPage)
 
     val dir = File(context.cacheDir, "reports")
     if (!dir.exists()) dir.mkdirs()
@@ -253,19 +272,22 @@ object PdfReportGenerator {
       color = Color.rgb(204, 251, 241)
       style = Paint.Style.FILL
     }
-    canvas.drawRect(40f, y, 555f, y + 22f, headerBg)
-
     val thPaint = Paint().apply {
       color = Color.rgb(19, 78, 74)
       textSize = 10f
       isFakeBoldText = true
       isAntiAlias = true
     }
-    val ty = y + 15f
-    canvas.drawText("Date", 50f, ty, thPaint)
-    canvas.drawText("Expense Description", 160f, ty, thPaint)
-    canvas.drawText("Category", 350f, ty, thPaint)
-    canvas.drawText("Amount", 470f, ty, thPaint)
+    fun drawExpenseTableHeader(targetCanvas: android.graphics.Canvas, top: Float) {
+      targetCanvas.drawRect(40f, top, 555f, top + 22f, headerBg)
+      val headerY = top + 15f
+      targetCanvas.drawText("Date", 50f, headerY, thPaint)
+      targetCanvas.drawText("Expense Description", 160f, headerY, thPaint)
+      targetCanvas.drawText("Category", 350f, headerY, thPaint)
+      targetCanvas.drawText("Amount", 470f, headerY, thPaint)
+    }
+
+    drawExpenseTableHeader(canvas, y)
 
     y += 24f
 
@@ -276,27 +298,44 @@ object PdfReportGenerator {
     }
 
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    expenses.take(25).forEachIndexed { index, exp ->
+    var currentPage = page
+    var currentCanvas = canvas
+    var pageNumber = 1
+    expenses.forEachIndexed { index, exp ->
+      if (y + 20f > 780f) {
+        currentCanvas.drawLine(40f, 800f, 555f, 800f, linePaint)
+        currentCanvas.drawText("OmniCalc Trip Expense Statement • Generated for personal tracking", 40f, 815f, subtitlePaint)
+        currentCanvas.drawText("Page $pageNumber", 500f, 815f, subtitlePaint)
+        pdfDocument.finishPage(currentPage)
+
+        pageNumber++
+        val nextPageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+        currentPage = pdfDocument.startPage(nextPageInfo)
+        currentCanvas = currentPage.canvas
+        y = 50f
+        drawExpenseTableHeader(currentCanvas, y)
+        y += 24f
+      }
+
       val ry = y + 16f
       if (index % 2 == 1) {
         val altBg = Paint().apply { color = Color.rgb(249, 250, 251) }
-        canvas.drawRect(40f, y, 555f, y + 20f, altBg)
+        currentCanvas.drawRect(40f, y, 555f, y + 20f, altBg)
       }
       val d = dateFormat.format(Date(exp.dateTimestamp))
-      canvas.drawText(d, 50f, ry, rowPaint)
-      canvas.drawText(exp.title.take(30), 160f, ry, rowPaint)
-      canvas.drawText(exp.categoryName, 350f, ry, rowPaint)
-      canvas.drawText(CurrencyFormatter.formatWhole(exp.amount), 470f, ry, boldPaint)
+      currentCanvas.drawText(d, 50f, ry, rowPaint)
+      currentCanvas.drawText(exp.title.take(30), 160f, ry, rowPaint)
+      currentCanvas.drawText(exp.categoryName, 350f, ry, rowPaint)
+      currentCanvas.drawText(CurrencyFormatter.formatWhole(exp.amount), 470f, ry, boldPaint)
       y += 20f
     }
 
     // Footer
-    y = 800f
-    canvas.drawLine(40f, y, 555f, y, linePaint)
-    canvas.drawText("OmniCalc Trip Expense Statement • Generated for personal tracking", 40f, y + 15f, subtitlePaint)
-    canvas.drawText("Page 1 of 1", 500f, y + 15f, subtitlePaint)
+    currentCanvas.drawLine(40f, 800f, 555f, 800f, linePaint)
+    currentCanvas.drawText("OmniCalc Trip Expense Statement • Generated for personal tracking", 40f, 815f, subtitlePaint)
+    currentCanvas.drawText("Page $pageNumber", 500f, 815f, subtitlePaint)
 
-    pdfDocument.finishPage(page)
+    pdfDocument.finishPage(currentPage)
 
     val dir = File(context.cacheDir, "reports")
     if (!dir.exists()) dir.mkdirs()

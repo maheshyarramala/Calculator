@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.domain.report.PdfReportGenerator
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -48,12 +49,16 @@ import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.TripRecord
 import com.example.data.local.entity.SubscriptionRecord
 import com.example.domain.calculator.SubscriptionDueDateCalculator
+import com.example.domain.finance.BankSmsParser
 import org.json.JSONObject
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import java.util.Calendar
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.time.format.ResolverStyle
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -95,6 +100,7 @@ fun FinanceHubScreen(
   var preselectedTripIdForExpense by remember { mutableStateOf<Long?>(null) }
   var accountForDetails by remember { mutableStateOf<BankAccount?>(null) }
   var accountPendingDelete by remember { mutableStateOf<BankAccount?>(null) }
+  var showTransferDialog by remember { mutableStateOf(false) }
 
   LaunchedEffect(uiState.toastMessage) {
     uiState.toastMessage?.let { msg ->
@@ -193,6 +199,17 @@ fun FinanceHubScreen(
       onDismiss = { viewModel.setShowAddIncome(false) },
       onConfirm = { title, amount, category, accountId, accountName, notes ->
         viewModel.addIncome(title, amount, category, accountId, accountName, notes)
+      }
+    )
+  }
+
+  if (showTransferDialog) {
+    TransferBetweenAccountsDialog(
+      accounts = bankAccounts,
+      onDismiss = { showTransferDialog = false },
+      onConfirm = { from, to, amount, notes ->
+        viewModel.transferBetweenAccounts(from, to, amount, notes)
+        showTransferDialog = false
       }
     )
   }
@@ -451,6 +468,8 @@ fun FinanceHubScreen(
           onOpenAccountDetails = { accountForDetails = it },
           onAddExpenseClick = { viewModel.setShowAddExpense(true) },
           onAddIncomeClick = { viewModel.setShowAddIncome(true) },
+          onPasteSmsClick = { viewModel.logFromClipboardSms(context) },
+          onTransferClick = { showTransferDialog = true },
           onAddCategoryClick = { viewModel.setShowAddCategory(true) },
           onDeleteCategory = { viewModel.deleteCategory(it) },
           onDeleteExpense = { exp ->
@@ -549,6 +568,131 @@ private fun AccountDetailsDialog(
   )
 }
 
+@Composable
+private fun TransferBetweenAccountsDialog(
+  accounts: List<BankAccount>,
+  onDismiss: () -> Unit,
+  onConfirm: (from: BankAccount, to: BankAccount, amount: Double, notes: String) -> Unit
+) {
+  var fromAccountId by remember(accounts) { mutableStateOf(accounts.firstOrNull()?.id) }
+  var toAccountId by remember(accounts) {
+    mutableStateOf(accounts.firstOrNull { it.id != fromAccountId }?.id)
+  }
+  var amountText by remember { mutableStateOf("") }
+  var notes by remember { mutableStateOf("") }
+  var fromMenuExpanded by remember { mutableStateOf(false) }
+  var toMenuExpanded by remember { mutableStateOf(false) }
+  val fromAccount = accounts.firstOrNull { it.id == fromAccountId }
+  val toAccount = accounts.firstOrNull { it.id == toAccountId }
+  val amount = amountText.toDoubleOrNull()
+  val canTransfer = fromAccount != null && toAccount != null &&
+    fromAccount.id != toAccount.id && amount != null && amount.isFinite() && amount > 0.0
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Transfer Between Accounts") },
+    text = {
+      Column(
+        modifier = Modifier
+          .heightIn(max = 420.dp)
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+      ) {
+        Box {
+          OutlinedButton(
+            onClick = { fromMenuExpanded = true },
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Text("From: ${fromAccount?.bankName ?: "Choose account"}")
+          }
+          DropdownMenu(
+            expanded = fromMenuExpanded,
+            onDismissRequest = { fromMenuExpanded = false }
+          ) {
+            accounts.forEach { account ->
+              DropdownMenuItem(
+                text = { Text(account.bankName) },
+                onClick = {
+                  fromAccountId = account.id
+                  if (toAccountId == account.id) {
+                    toAccountId = accounts.firstOrNull { it.id != account.id }?.id
+                  }
+                  fromMenuExpanded = false
+                }
+              )
+            }
+          }
+        }
+
+        Box {
+          OutlinedButton(
+            onClick = { toMenuExpanded = true },
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Text("To: ${toAccount?.bankName ?: "Choose account"}")
+          }
+          DropdownMenu(
+            expanded = toMenuExpanded,
+            onDismissRequest = { toMenuExpanded = false }
+          ) {
+            accounts.filter { it.id != fromAccountId }.forEach { account ->
+              DropdownMenuItem(
+                text = { Text(account.bankName) },
+                onClick = {
+                  toAccountId = account.id
+                  toMenuExpanded = false
+                }
+              )
+            }
+          }
+        }
+
+        NumberInputField(
+          value = amountText,
+          onValueChange = { amountText = it },
+          label = "Amount",
+          prefix = "₹"
+        )
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+          text = "Transfers are excluded from income, expense, and budget totals.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val source = fromAccount
+          val destination = toAccount
+          val transferAmount = amount
+          if (
+            source != null && destination != null && transferAmount != null &&
+            source.id != destination.id && transferAmount.isFinite() && transferAmount > 0.0
+          ) {
+            onConfirm(source, destination, transferAmount, notes)
+          }
+        },
+        enabled = canTransfer
+      ) {
+        Text("Transfer")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancel")
+      }
+    }
+  )
+}
+
 // -------------------------------------------------------------
 // EXPENSES & CUSTOM CATEGORIES SECTION
 // -------------------------------------------------------------
@@ -570,6 +714,8 @@ private fun ExpensesSection(
   onOpenAccountDetails: (BankAccount) -> Unit,
   onAddExpenseClick: () -> Unit,
   onAddIncomeClick: () -> Unit,
+  onPasteSmsClick: () -> Unit,
+  onTransferClick: () -> Unit,
   onAddCategoryClick: () -> Unit,
   onDeleteCategory: (ExpenseCategory) -> Unit,
   onDeleteExpense: (ExpenseRecord) -> Unit
@@ -883,58 +1029,97 @@ private fun ExpensesSection(
 
     // Quick Action Buttons (+ Expense, + Income, + Category)
     item(key = "quick_actions_bar") {
-      Row(
+      Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        FilledTonalButton(
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-            onAddExpenseClick()
-          },
-          colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = Color(0xFFEF4444).copy(alpha = 0.15f),
-            contentColor = Color(0xFFDC2626)
-          ),
-          shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-          modifier = Modifier.weight(1f)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-          Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(15.dp))
-          Spacer(modifier = Modifier.width(3.dp))
-          Text("- Expense", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, maxLines = 1, softWrap = false)
+          FilledTonalButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+              onAddExpenseClick()
+            },
+            colors = ButtonDefaults.filledTonalButtonColors(
+              containerColor = Color(0xFFEF4444).copy(alpha = 0.15f),
+              contentColor = Color(0xFFDC2626)
+            ),
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+            modifier = Modifier.weight(1f)
+          ) {
+            Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(3.dp))
+            Text("- Expense", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, maxLines = 1, softWrap = false)
+          }
+
+          FilledTonalButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+              onAddIncomeClick()
+            },
+            colors = ButtonDefaults.filledTonalButtonColors(
+              containerColor = Color(0xFF10B981).copy(alpha = 0.15f),
+              contentColor = Color(0xFF059669)
+            ),
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+            modifier = Modifier.weight(1f)
+          ) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(3.dp))
+            Text("+ Income", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, maxLines = 1, softWrap = false)
+          }
+
+          OutlinedButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+              onPasteSmsClick()
+            },
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+            modifier = Modifier.weight(1f)
+          ) {
+            Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(3.dp))
+            Text("Paste SMS", fontSize = 11.sp, maxLines = 1, softWrap = false)
+          }
         }
 
-        FilledTonalButton(
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-            onAddIncomeClick()
-          },
-          colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = Color(0xFF10B981).copy(alpha = 0.15f),
-            contentColor = Color(0xFF059669)
-          ),
-          shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-          modifier = Modifier.weight(1f)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
-          Spacer(modifier = Modifier.width(3.dp))
-          Text("+ Income", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, maxLines = 1, softWrap = false)
-        }
+          OutlinedButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+              onTransferClick()
+            },
+            enabled = accountsWithBalances.size >= 2,
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+            modifier = Modifier.weight(1f)
+          ) {
+            Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(3.dp))
+            Text("Transfer", fontSize = 11.sp, maxLines = 1, softWrap = false)
+          }
 
-        OutlinedButton(
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onAddCategoryClick()
-          },
-          shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-          modifier = Modifier.weight(1f)
-        ) {
-          Icon(Icons.Default.Sell, contentDescription = null, modifier = Modifier.size(14.dp))
-          Spacer(modifier = Modifier.width(3.dp))
-          Text("Category", fontSize = 11.sp, maxLines = 1, softWrap = false)
+          OutlinedButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+              onAddCategoryClick()
+            },
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+            modifier = Modifier.weight(1f)
+          ) {
+            Icon(Icons.Default.Sell, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(3.dp))
+            Text("Category", fontSize = 11.sp, maxLines = 1, softWrap = false)
+          }
         }
       }
     }
@@ -1093,7 +1278,13 @@ private fun ExpenseItemCard(
   val dateFormatted = remember(expense.dateTimestamp) {
     SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(expense.dateTimestamp))
   }
-  val isIncome = expense.type == "INCOME"
+  val isTransfer = expense.type == "TRANSFER_IN" || expense.type == "TRANSFER_OUT"
+  val isIncome = expense.type == "INCOME" || expense.type == "TRANSFER_IN"
+  val amountColor = when {
+    isTransfer -> MaterialTheme.colorScheme.primary
+    isIncome -> Color(0xFF059669)
+    else -> Color(0xFFDC2626)
+  }
 
   Card(
     shape = RoundedCornerShape(16.dp),
@@ -1119,14 +1310,22 @@ private fun ExpenseItemCard(
             .size(40.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(
-              if (isIncome) Color(0xFF10B981).copy(alpha = 0.15f) else catColor.copy(alpha = 0.15f)
+              when {
+                isTransfer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                isIncome -> Color(0xFF10B981).copy(alpha = 0.15f)
+                else -> catColor.copy(alpha = 0.15f)
+              }
             ),
           contentAlignment = Alignment.Center
         ) {
           Icon(
-            imageVector = if (isIncome) Icons.Default.ArrowDownward else Icons.Default.Sell,
+            imageVector = when {
+              isTransfer -> Icons.Default.SwapHoriz
+              isIncome -> Icons.Default.ArrowDownward
+              else -> Icons.Default.Sell
+            },
             contentDescription = null,
-            tint = if (isIncome) Color(0xFF059669) else catColor,
+            tint = if (isTransfer) MaterialTheme.colorScheme.primary else if (isIncome) Color(0xFF059669) else catColor,
             modifier = Modifier.size(20.dp)
           )
         }
@@ -1198,7 +1397,7 @@ private fun ExpenseItemCard(
           text = if (isIncome) "+ ${CurrencyFormatter.format(expense.amount)}" else "- ${CurrencyFormatter.format(expense.amount)}",
           fontWeight = FontWeight.Bold,
           fontSize = 14.sp,
-          color = if (isIncome) Color(0xFF059669) else Color(0xFFDC2626)
+          color = amountColor
         )
         IconButton(
           onClick = onDelete,
@@ -2394,6 +2593,8 @@ private fun AddExpenseDialog(
   var notes by remember { mutableStateOf("") }
   var selectedTripId by remember { mutableStateOf<Long?>(initialTripId) }
   var categoryDropdownExpanded by remember { mutableStateOf(false) }
+  var smsParseMessage by remember { mutableStateOf<String?>(null) }
+  val clipboard = LocalClipboardManager.current
 
   val selectedAccountName = remember(selectedAccountId, bankAccounts) {
     bankAccounts.find { it.id == selectedAccountId }?.bankName ?: ""
@@ -2407,6 +2608,36 @@ private fun AddExpenseDialog(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
+        OutlinedButton(
+          onClick = {
+            val parsed = BankSmsParser.parseSms(clipboard.getText()?.text.orEmpty(), bankAccounts)
+            when {
+              parsed == null -> smsParseMessage = "Copy a bank SMS with an amount, then try again."
+              parsed.isIncome -> smsParseMessage = "This SMS looks like income. Use Add Income to record it."
+              else -> {
+                title = parsed.merchantOrTitle
+                amountStr = parsed.amount.toString()
+                categories.firstOrNull {
+                  it.name.equals(parsed.suggestedCategory, ignoreCase = true)
+                }?.let { selectedCategory = it.name }
+                parsed.matchedAccountId?.let { matchedId ->
+                  if (bankAccounts.any { it.id == matchedId }) selectedAccountId = matchedId
+                }
+                notes = parsed.rawNotes
+                smsParseMessage = "Expense details filled from SMS."
+              }
+            }
+          },
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(modifier = Modifier.width(6.dp))
+          Text("Auto-Fill from SMS")
+        }
+        smsParseMessage?.let { message ->
+          Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
         OutlinedTextField(
           value = title,
           onValueChange = { title = it },
@@ -2531,6 +2762,8 @@ private fun AddIncomeDialog(
   var selectedCategory by remember { mutableStateOf("Salary") }
   var selectedAccountId by remember { mutableStateOf(bankAccounts.firstOrNull()?.id) }
   var notes by remember { mutableStateOf("") }
+  var smsParseMessage by remember { mutableStateOf<String?>(null) }
+  val clipboard = LocalClipboardManager.current
 
   val incomeSources = listOf("Salary", "Freelance", "Business", "Investment", "Bonus", "Gift", "Other")
 
@@ -2546,6 +2779,44 @@ private fun AddIncomeDialog(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
+        OutlinedButton(
+          onClick = {
+            val smsText = clipboard.getText()?.text.orEmpty()
+            val parsed = BankSmsParser.parseSms(smsText, bankAccounts)
+            when {
+              parsed == null -> smsParseMessage = "Copy a bank SMS with an amount, then try again."
+              !parsed.isIncome -> smsParseMessage = "This SMS looks like an expense. Use Add Expense to record it."
+              else -> {
+                title = parsed.merchantOrTitle
+                amountStr = parsed.amount.toString()
+                val lowerSms = smsText.lowercase()
+                selectedCategory = when {
+                  lowerSms.contains("salary") || lowerSms.contains("payroll") -> "Salary"
+                  lowerSms.contains("freelance") -> "Freelance"
+                  lowerSms.contains("business") -> "Business"
+                  lowerSms.contains("investment") || lowerSms.contains("interest") -> "Investment"
+                  lowerSms.contains("bonus") -> "Bonus"
+                  lowerSms.contains("gift") -> "Gift"
+                  else -> "Other"
+                }
+                parsed.matchedAccountId?.let { matchedId ->
+                  if (bankAccounts.any { it.id == matchedId }) selectedAccountId = matchedId
+                }
+                notes = parsed.rawNotes
+                smsParseMessage = "Income details filled from SMS."
+              }
+            }
+          },
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(modifier = Modifier.width(6.dp))
+          Text("Auto-Fill from SMS")
+        }
+        smsParseMessage?.let { message ->
+          Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
         OutlinedTextField(
           value = title,
           onValueChange = { title = it },
@@ -4231,34 +4502,35 @@ private fun SetTripCategoryCapDialog(
 // -------------------------------------------------------------
 // HELPER FUNCTIONS
 // -------------------------------------------------------------
-private fun calculateTripDays(startDateStr: String, endDateStr: String): Int {
-  return try {
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    val start = sdf.parse(startDateStr.trim())
-    val end = sdf.parse(endDateStr.trim())
-    if (start != null && end != null) {
-      val diffMs = end.time - start.time
-      val days = (diffMs / (1000 * 60 * 60 * 24)).toInt() + 1
-      days.coerceAtLeast(1)
-    } else 7
-  } catch (e: Exception) {
-    7
+private val tripDateFormatters = listOf(
+  DateTimeFormatter.ofPattern("dd/MM/uuuu", Locale.getDefault()).withResolverStyle(ResolverStyle.STRICT),
+  DateTimeFormatter.ofPattern("uuuu-MM-dd", Locale.getDefault()).withResolverStyle(ResolverStyle.STRICT),
+  DateTimeFormatter.ofPattern("dd-MM-uuuu", Locale.getDefault()).withResolverStyle(ResolverStyle.STRICT)
+)
+
+private fun parseFlexibleTripDate(dateStr: String): LocalDate? {
+  val trimmed = dateStr.trim()
+  if (trimmed.isEmpty()) return null
+
+  for (formatter in tripDateFormatters) {
+    try {
+      return LocalDate.parse(trimmed, formatter)
+    } catch (_: DateTimeParseException) {
+      // Try the next supported stored date format.
+    }
   }
+  return null
+}
+
+private fun calculateTripDays(startDateStr: String, endDateStr: String): Int {
+  val start = parseFlexibleTripDate(startDateStr) ?: return 7
+  val end = parseFlexibleTripDate(endDateStr) ?: return 7
+  return (ChronoUnit.DAYS.between(start, end).toInt() + 1).coerceAtLeast(1)
 }
 
 private fun calculateElapsedDays(startDateStr: String): Int {
-  return try {
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    val start = sdf.parse(startDateStr.trim())
-    if (start != null) {
-      val now = System.currentTimeMillis()
-      val diffMs = now - start.time
-      val days = (diffMs / (1000 * 60 * 60 * 24)).toInt() + 1
-      days.coerceAtLeast(1)
-    } else 1
-  } catch (e: Exception) {
-    1
-  }
+  val start = parseFlexibleTripDate(startDateStr) ?: return 1
+  return (ChronoUnit.DAYS.between(start, LocalDate.now()).toInt() + 1).coerceAtLeast(1)
 }
 
 private fun parseCategoryCaps(jsonStr: String): Map<String, Double> {

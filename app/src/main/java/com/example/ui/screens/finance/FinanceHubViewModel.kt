@@ -20,6 +20,7 @@ import com.example.domain.backup.FinanceBackupManager
 import com.example.domain.backup.FinanceBackupPayload
 import com.example.data.local.entity.SubscriptionRecord
 import com.example.domain.notification.CreditCardBillNotificationScheduler
+import com.example.domain.finance.BankSmsParser
 import org.json.JSONObject
 import java.util.Calendar
 import android.net.Uri
@@ -96,8 +97,12 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
   // Computed accounts with live balances based on opening balance, income, and expenses
   val accountsWithBalances: StateFlow<List<AccountWithBalance>> = combine(bankAccounts, expenses) { accs, exps ->
     accs.map { acc ->
-      val accExpenses = exps.filter { it.type == "EXPENSE" && it.bankAccountId == acc.id }.sumOf { it.amount }
-      val accIncome = exps.filter { it.type == "INCOME" && it.bankAccountId == acc.id }.sumOf { it.amount }
+      val accExpenses = exps.filter {
+        (it.type == "EXPENSE" || it.type == "TRANSFER_OUT") && it.bankAccountId == acc.id
+      }.sumOf { it.amount }
+      val accIncome = exps.filter {
+        (it.type == "INCOME" || it.type == "TRANSFER_IN") && it.bankAccountId == acc.id
+      }.sumOf { it.amount }
       val current = acc.openingBalance + accIncome - accExpenses
       AccountWithBalance(
         account = acc,
@@ -208,6 +213,41 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     _uiState.update { it.copy(toastMessage = msg) }
   }
 
+  fun logFromClipboardSms(context: Context) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    val smsText = clipboard?.primaryClip
+      ?.takeIf { it.itemCount > 0 }
+      ?.getItemAt(0)
+      ?.coerceToText(context)
+      ?.toString()
+      .orEmpty()
+    val parsed = BankSmsParser.parseSms(smsText, bankAccounts.value)
+    if (parsed == null) {
+      showToast("No valid bank/UPI SMS found in clipboard")
+      return
+    }
+
+    if (parsed.isIncome) {
+      addIncome(
+        parsed.merchantOrTitle,
+        parsed.amount,
+        "Income",
+        parsed.matchedAccountId,
+        parsed.matchedAccountName,
+        parsed.rawNotes
+      )
+    } else {
+      addExpense(
+        parsed.merchantOrTitle,
+        parsed.amount,
+        parsed.suggestedCategory,
+        parsed.matchedAccountId,
+        parsed.matchedAccountName,
+        parsed.rawNotes
+      )
+    }
+  }
+
   // --- Category Actions ---
   fun addCategory(name: String, colorHex: String) {
     if (name.isBlank()) return
@@ -281,6 +321,63 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
         )
       )
       _uiState.update { it.copy(showAddIncomeDialog = false, toastMessage = "Income added to $bankAccountName!") }
+    }
+  }
+
+  fun transferBetweenAccounts(
+    fromAccount: BankAccount,
+    toAccount: BankAccount,
+    amount: Double,
+    notes: String = ""
+  ) {
+    if (!amount.isFinite() || amount <= 0.0) {
+      showToast("Enter a transfer amount greater than zero.")
+      return
+    }
+    if (fromAccount.id == toAccount.id) {
+      showToast("Choose two different accounts to transfer between.")
+      return
+    }
+
+    viewModelScope.launch {
+      val currentAccounts = bankAccounts.value
+      val source = currentAccounts.firstOrNull { it.id == fromAccount.id }
+      val destination = currentAccounts.firstOrNull { it.id == toAccount.id }
+      if (source == null || destination == null) {
+        _uiState.update { it.copy(toastMessage = "Choose two existing accounts to transfer between.") }
+        return@launch
+      }
+
+      val timestamp = System.currentTimeMillis()
+      dao.insertExpenses(
+        listOf(
+          ExpenseRecord(
+            title = "Transfer to ${destination.bankName}",
+            amount = amount,
+            categoryName = "Transfer",
+            type = "TRANSFER_OUT",
+            bankAccountId = source.id,
+            bankAccountName = source.bankName,
+            dateTimestamp = timestamp,
+            notes = notes
+          ),
+          ExpenseRecord(
+            title = "Transfer from ${source.bankName}",
+            amount = amount,
+            categoryName = "Transfer",
+            type = "TRANSFER_IN",
+            bankAccountId = destination.id,
+            bankAccountName = destination.bankName,
+            dateTimestamp = timestamp + 1,
+            notes = notes
+          )
+        )
+      )
+      _uiState.update {
+        it.copy(
+          toastMessage = "Transferred ₹${amount.toLong()} from ${source.bankName} to ${destination.bankName}"
+        )
+      }
     }
   }
 
