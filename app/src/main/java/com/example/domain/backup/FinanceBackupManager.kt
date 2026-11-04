@@ -29,7 +29,10 @@ data class FinanceBackupPayload(
   val loans: List<LoanRecord> = emptyList(),
   val debts: List<DebtRecord> = emptyList(),
   val subscriptions: List<SubscriptionRecord> = emptyList(),
-  val creditCardReminders: List<CreditCardBillReminder> = emptyList()
+  val creditCardReminders: List<CreditCardBillReminder> = emptyList(),
+  val creditCardReminderAccountNames: Map<Long, String> = emptyMap(),
+  val monthlyBudgetLimit: Double? = null,
+  val userUpiId: String? = null
 )
 
 sealed class BackupParseResult {
@@ -39,7 +42,7 @@ sealed class BackupParseResult {
 
 object FinanceBackupManager {
 
-  private const val BACKUP_VERSION = 2
+  private const val BACKUP_VERSION = 3
   private const val APP_IDENTIFIER = "OmniCalc"
 
   fun exportToJson(
@@ -50,18 +53,23 @@ object FinanceBackupManager {
     loans: List<LoanRecord> = emptyList(),
     debts: List<DebtRecord> = emptyList(),
     subscriptions: List<SubscriptionRecord> = emptyList(),
-    creditCardReminders: List<CreditCardBillReminder> = emptyList()
+    creditCardReminders: List<CreditCardBillReminder> = emptyList(),
+    monthlyBudgetLimit: Double? = null,
+    userUpiId: String? = null
   ): String {
     val root = JSONObject()
     root.put("version", BACKUP_VERSION)
     root.put("app", APP_IDENTIFIER)
     root.put("exportedAt", System.currentTimeMillis())
     root.put("exportedAtFormatted", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
+    if (monthlyBudgetLimit != null) root.put("monthlyBudgetLimit", monthlyBudgetLimit)
+    if (userUpiId != null) root.put("userUpiId", userUpiId)
 
     // Categories
     val catArray = JSONArray()
     categories.forEach { cat ->
       val obj = JSONObject()
+      obj.put("id", cat.id)
       obj.put("name", cat.name)
       obj.put("colorHex", cat.colorHex)
       obj.put("iconName", cat.iconName)
@@ -74,6 +82,7 @@ object FinanceBackupManager {
     val bankArray = JSONArray()
     bankAccounts.forEach { acc ->
       val obj = JSONObject()
+      obj.put("id", acc.id)
       obj.put("bankName", acc.bankName)
       obj.put("accountType", acc.accountType)
       obj.put("accountNumber", acc.accountNumber)
@@ -90,6 +99,7 @@ object FinanceBackupManager {
     val tripArray = JSONArray()
     trips.forEach { trip ->
       val obj = JSONObject()
+      obj.put("id", trip.id)
       obj.put("tripName", trip.tripName)
       obj.put("destination", trip.destination)
       obj.put("budget", trip.budget)
@@ -105,6 +115,7 @@ object FinanceBackupManager {
     val expArray = JSONArray()
     expenses.forEach { exp ->
       val obj = JSONObject()
+      obj.put("id", exp.id)
       obj.put("title", exp.title)
       obj.put("amount", exp.amount)
       obj.put("categoryName", exp.categoryName)
@@ -124,6 +135,7 @@ object FinanceBackupManager {
     val loanArray = JSONArray()
     loans.forEach { loan ->
       val obj = JSONObject()
+      obj.put("id", loan.id)
       obj.put("loanName", loan.loanName)
       obj.put("loanCategory", loan.loanCategory)
       obj.put("principalAmount", loan.principalAmount)
@@ -134,6 +146,7 @@ object FinanceBackupManager {
       obj.put("paidEmisCount", loan.paidEmisCount)
       obj.put("notes", loan.notes)
       if (loan.bankAccountId != null) obj.put("bankAccountId", loan.bankAccountId)
+      obj.put("bankAccountName", loan.bankAccountName)
       loanArray.put(obj)
     }
     root.put("loans", loanArray)
@@ -142,6 +155,7 @@ object FinanceBackupManager {
     val debtArray = JSONArray()
     debts.forEach { debt ->
       val obj = JSONObject()
+      obj.put("id", debt.id)
       obj.put("personName", debt.personName)
       obj.put("amount", debt.amount)
       obj.put("type", debt.type)
@@ -150,6 +164,8 @@ object FinanceBackupManager {
       obj.put("isSettled", debt.isSettled)
       if (debt.settledDateTimestamp != null) obj.put("settledDateTimestamp", debt.settledDateTimestamp)
       obj.put("notes", debt.notes)
+      if (debt.bankAccountId != null) obj.put("bankAccountId", debt.bankAccountId)
+      obj.put("bankAccountName", debt.bankAccountName)
       debtArray.put(obj)
     }
     root.put("debts", debtArray)
@@ -158,16 +174,18 @@ object FinanceBackupManager {
     val subArray = JSONArray()
     subscriptions.forEach { sub ->
       val obj = JSONObject()
-      obj.put("title", sub.title)
+      obj.put("id", sub.id)
+      obj.put("name", sub.name)
       obj.put("amount", sub.amount)
       obj.put("categoryName", sub.categoryName)
-      obj.put("frequency", sub.frequency)
+      obj.put("billingCycle", sub.billingCycle)
       obj.put("dueDayOfMonth", sub.dueDayOfMonth)
       obj.put("dueMonth", sub.dueMonth)
       obj.put("dueDayOfWeek", sub.dueDayOfWeek)
       obj.put("notes", sub.notes)
-      obj.put("colorHex", sub.colorHex)
-      obj.put("iconName", sub.iconName)
+      if (sub.bankAccountId != null) obj.put("bankAccountId", sub.bankAccountId)
+      obj.put("bankAccountName", sub.bankAccountName)
+      obj.put("lastPaidTimestamp", sub.lastPaidTimestamp)
       subArray.put(obj)
     }
     root.put("subscriptions", subArray)
@@ -177,6 +195,7 @@ object FinanceBackupManager {
     creditCardReminders.forEach { cc ->
       val obj = JSONObject()
       obj.put("accountId", cc.accountId)
+      obj.put("accountName", bankAccounts.firstOrNull { it.id == cc.accountId }?.bankName.orEmpty())
       obj.put("amount", cc.amount)
       obj.put("dueDateEpochDay", cc.dueDateEpochDay)
       obj.put("paidDateEpochDay", cc.paidDateEpochDay)
@@ -205,7 +224,7 @@ object FinanceBackupManager {
           if (name.isNotEmpty()) {
             categories.add(
               ExpenseCategory(
-                id = 0, // Reset for auto-increment
+                id = obj.optLong("id", 0L),
                 name = name,
                 colorHex = obj.optString("colorHex", "#6366F1"),
                 iconName = obj.optString("iconName", "category"),
@@ -227,7 +246,7 @@ object FinanceBackupManager {
             val openingVal = obj.optDouble("openingBalance", balanceVal)
             bankAccounts.add(
               BankAccount(
-                id = 0, // Reset for auto-increment
+                id = obj.optLong("id", 0L),
                 bankName = bankName,
                 accountType = obj.optString("accountType", "Savings"),
                 accountNumber = obj.optString("accountNumber", ""),
@@ -251,7 +270,7 @@ object FinanceBackupManager {
           if (tripName.isNotEmpty()) {
             trips.add(
               TripRecord(
-                id = 0, // Reset for auto-increment
+                id = obj.optLong("id", 0L),
                 tripName = tripName,
                 destination = obj.optString("destination", ""),
                 budget = obj.optDouble("budget", 0.0),
@@ -279,7 +298,7 @@ object FinanceBackupManager {
             val tId = if (obj.has("tripId") && obj.getLong("tripId") > 0) obj.getLong("tripId") else null
             expenses.add(
               ExpenseRecord(
-                id = 0,
+                id = obj.optLong("id", 0L),
                 title = title,
                 amount = amount,
                 categoryName = obj.optString("categoryName", "General"),
@@ -309,7 +328,7 @@ object FinanceBackupManager {
             val bId = if (obj.has("bankAccountId") && obj.getLong("bankAccountId") > 0) obj.getLong("bankAccountId") else null
             loans.add(
               LoanRecord(
-                id = 0,
+                id = obj.optLong("id", 0L),
                 loanName = loanName,
                 loanCategory = obj.optString("loanCategory", "PERSONAL"),
                 principalAmount = principal,
@@ -319,7 +338,8 @@ object FinanceBackupManager {
                 startDate = obj.optString("startDate", ""),
                 paidEmisCount = obj.optInt("paidEmisCount", 0),
                 notes = obj.optString("notes", ""),
-                bankAccountId = bId
+                bankAccountId = bId,
+                bankAccountName = obj.optString("bankAccountName", "")
               )
             )
           }
@@ -339,7 +359,7 @@ object FinanceBackupManager {
             val settled = if (obj.has("settledDateTimestamp") && obj.getLong("settledDateTimestamp") > 0) obj.getLong("settledDateTimestamp") else null
             debts.add(
               DebtRecord(
-                id = 0,
+                id = obj.optLong("id", 0L),
                 personName = personName,
                 amount = amount,
                 type = obj.optString("type", "LENT"),
@@ -347,7 +367,9 @@ object FinanceBackupManager {
                 dueDateTimestamp = due,
                 isSettled = obj.optBoolean("isSettled", false),
                 notes = obj.optString("notes", ""),
-                settledDateTimestamp = settled
+                settledDateTimestamp = settled,
+                bankAccountId = if (obj.optLong("bankAccountId", -1L) > 0L) obj.optLong("bankAccountId") else null,
+                bankAccountName = obj.optString("bankAccountName", "")
               )
             )
           }
@@ -360,22 +382,23 @@ object FinanceBackupManager {
         val subArray = root.getJSONArray("subscriptions")
         for (i in 0 until subArray.length()) {
           val obj = subArray.getJSONObject(i)
-          val title = obj.optString("title", "").trim()
+          val title = obj.optString("name", obj.optString("title", "")).trim()
           val amount = obj.optDouble("amount", 0.0)
           if (title.isNotEmpty() && amount > 0.0) {
             subscriptions.add(
               SubscriptionRecord(
-                id = 0,
-                title = title,
+                id = obj.optLong("id", 0L),
+                name = title,
                 amount = amount,
                 categoryName = obj.optString("categoryName", "Subscriptions"),
-                frequency = obj.optString("frequency", "MONTHLY"),
+                billingCycle = obj.optString("billingCycle", obj.optString("frequency", "MONTHLY")),
                 dueDayOfMonth = obj.optInt("dueDayOfMonth", 1),
                 dueMonth = obj.optInt("dueMonth", 1),
                 dueDayOfWeek = obj.optInt("dueDayOfWeek", 1),
                 notes = obj.optString("notes", ""),
-                colorHex = obj.optString("colorHex", "#6366F1"),
-                iconName = obj.optString("iconName", "credit_card")
+                bankAccountId = if (obj.optLong("bankAccountId", -1L) > 0L) obj.optLong("bankAccountId") else null,
+                bankAccountName = obj.optString("bankAccountName", ""),
+                lastPaidTimestamp = obj.optLong("lastPaidTimestamp", 0L)
               )
             )
           }
@@ -384,12 +407,14 @@ object FinanceBackupManager {
 
       // Parse Credit Card Reminders
       val creditCardReminders = mutableListOf<CreditCardBillReminder>()
+      val creditCardReminderAccountNames = mutableMapOf<Long, String>()
       if (root.has("creditCardReminders")) {
         val ccArray = root.getJSONArray("creditCardReminders")
         for (i in 0 until ccArray.length()) {
           val obj = ccArray.getJSONObject(i)
           val accId = obj.optLong("accountId", -1L)
           if (accId > 0) {
+            creditCardReminderAccountNames[accId] = obj.optString("accountName", "")
             creditCardReminders.add(
               CreditCardBillReminder(
                 accountId = accId,
@@ -402,21 +427,31 @@ object FinanceBackupManager {
           }
         }
       }
+      val monthlyBudgetLimit = if (root.has("monthlyBudgetLimit")) {
+        root.optDouble("monthlyBudgetLimit", Double.NaN).takeIf { it.isFinite() && it >= 0.0 }
+      } else null
+      val userUpiId = if (root.has("userUpiId")) root.optString("userUpiId").trim() else null
 
-      if (categories.isEmpty() && bankAccounts.isEmpty() && trips.isEmpty() && expenses.isEmpty() && loans.isEmpty() && debts.isEmpty()) {
+      if (
+        categories.isEmpty() && bankAccounts.isEmpty() && trips.isEmpty() && expenses.isEmpty() &&
+        loans.isEmpty() && debts.isEmpty() && subscriptions.isEmpty() && creditCardReminders.isEmpty() &&
+        monthlyBudgetLimit == null && userUpiId == null
+      ) {
         return BackupParseResult.Error("No valid financial data found in JSON.")
       }
 
-      val summary = buildString {
-        if (categories.isNotEmpty()) append("${categories.size} Categories, ")
-        if (bankAccounts.isNotEmpty()) append("${bankAccounts.size} Accounts, ")
-        if (trips.isNotEmpty()) append("${trips.size} Trips, ")
-        if (expenses.isNotEmpty()) append("${expenses.size} Expenses, ")
-        if (loans.isNotEmpty()) append("${loans.size} Loans, ")
-        if (debts.isNotEmpty()) append("${debts.size} Debts, ")
-        if (subscriptions.isNotEmpty()) append("${subscriptions.size} Subscriptions, ")
-        if (creditCardReminders.isNotEmpty()) append("${creditCardReminders.size} Card Bills")
-      }.trimEnd(' ', ',')
+      val summary = listOfNotNull(
+        categories.size.takeIf { it > 0 }?.let { "$it Categories" },
+        bankAccounts.size.takeIf { it > 0 }?.let { "$it Accounts" },
+        trips.size.takeIf { it > 0 }?.let { "$it Trips" },
+        expenses.size.takeIf { it > 0 }?.let { "$it Expenses" },
+        loans.size.takeIf { it > 0 }?.let { "$it Loans" },
+        debts.size.takeIf { it > 0 }?.let { "$it Debts" },
+        subscriptions.size.takeIf { it > 0 }?.let { "$it Subscriptions" },
+        creditCardReminders.size.takeIf { it > 0 }?.let { "$it Card Bills" },
+        monthlyBudgetLimit?.let { "Budget" },
+        userUpiId?.takeIf { it.isNotBlank() }?.let { "UPI ID" }
+      ).joinToString(", ")
 
       BackupParseResult.Success(
         payload = FinanceBackupPayload(
@@ -427,7 +462,10 @@ object FinanceBackupManager {
           loans = loans,
           debts = debts,
           subscriptions = subscriptions,
-          creditCardReminders = creditCardReminders
+          creditCardReminders = creditCardReminders,
+          creditCardReminderAccountNames = creditCardReminderAccountNames,
+          monthlyBudgetLimit = monthlyBudgetLimit,
+          userUpiId = userUpiId
         ),
         summary = summary
       )
@@ -438,7 +476,8 @@ object FinanceBackupManager {
 
   fun writeToUri(context: Context, uri: Uri, content: String): Boolean {
     return try {
-      context.contentResolver.openOutputStream(uri)?.use { stream ->
+      val outputStream = context.contentResolver.openOutputStream(uri) ?: return false
+      outputStream.use { stream ->
         stream.write(content.toByteArray(Charsets.UTF_8))
         stream.flush()
       }

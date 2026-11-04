@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -20,10 +21,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.atan2
+import kotlin.math.sqrt
 
 data class ChartSlice(
   val label: String,
@@ -38,7 +42,9 @@ fun DonutChart(
   size: Dp = 180.dp,
   strokeWidth: Dp = 26.dp,
   centerTitle: String? = null,
-  centerSubtitle: String? = null
+  centerSubtitle: String? = null,
+  selectedSliceIndex: Int? = null,
+  onSliceSelected: ((Int) -> Unit)? = null
 ) {
   val total = androidx.compose.runtime.remember(slices) { slices.sumOf { it.value } }
   val progress by animateFloatAsState(
@@ -55,7 +61,34 @@ fun DonutChart(
       modifier = Modifier.size(size),
       contentAlignment = Alignment.Center
     ) {
-      Canvas(modifier = Modifier.fillMaxSize()) {
+      Canvas(
+        modifier = Modifier
+          .fillMaxSize()
+          .pointerInput(slices, total, onSliceSelected) {
+            if (onSliceSelected != null) {
+              val canvasSize = this.size
+              detectTapGestures { tap ->
+                val center = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+                val dx = tap.x - center.x
+                val dy = tap.y - center.y
+                val radius = sqrt(dx * dx + dy * dy)
+                val outerRadius = canvasSize.minDimension / 2f
+                val innerRadius = outerRadius - strokeWidth.toPx()
+                if (radius in innerRadius..outerRadius && total > 0.0) {
+                  val angle = ((Math.toDegrees(atan2(dy, dx).toDouble()) + 450.0) % 360.0)
+                  var accumulatedAngle = 0.0
+                  val tappedIndex = slices.indexOfFirst { slice ->
+                    val sweep = (slice.value / total) * 360.0
+                    val containsAngle = angle >= accumulatedAngle && angle < accumulatedAngle + sweep
+                    accumulatedAngle += sweep
+                    containsAngle
+                  }
+                  if (tappedIndex >= 0) onSliceSelected(tappedIndex)
+                }
+              }
+            }
+          }
+      ) {
         val strokePx = strokeWidth.toPx()
         val arcSize = Size(size.toPx() - strokePx, size.toPx() - strokePx)
         val topLeft = Offset(strokePx / 2f, strokePx / 2f)
@@ -72,7 +105,7 @@ fun DonutChart(
           )
         } else {
           var startAngle = -90f
-          for (slice in slices) {
+          for ((index, slice) in slices.withIndex()) {
             val sweep = ((slice.value / total) * 360.0).toFloat() * progress
             if (sweep > 0f) {
               drawArc(
@@ -82,7 +115,10 @@ fun DonutChart(
                 useCenter = false,
                 topLeft = topLeft,
                 size = arcSize,
-                style = Stroke(width = strokePx, cap = StrokeCap.Butt)
+                style = Stroke(
+                  width = strokePx + if (selectedSliceIndex == index) 4.dp.toPx() else 0f,
+                  cap = StrokeCap.Butt
+                )
               )
               startAngle += sweep
             }

@@ -17,8 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import kotlin.math.ceil
-import kotlin.math.ln
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -38,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.AccountWithBalance
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.LoanRecord
+import com.example.domain.calculator.LoanPrepaymentCalculator
 import com.example.ui.components.CurrencyFormatter
 import com.example.ui.components.NumberInputField
 import java.text.SimpleDateFormat
@@ -841,8 +840,9 @@ private fun LoanDetailDialog(
         HorizontalDivider()
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Prepayment & Foreclosure Simulator
-        LoanPrepaymentSimulatorSection(loan = loan)
+        if (!loan.isFullyPaid) {
+          LoanPrepaymentSimulatorSection(loan = loan)
+        }
 
         Spacer(modifier = Modifier.height(14.dp))
         HorizontalDivider()
@@ -1201,37 +1201,17 @@ private fun getLoanCategoryColor(category: String): Color {
 private fun LoanPrepaymentSimulatorSection(loan: LoanRecord) {
   var prepayText by remember { mutableStateOf("50000") }
   val prepayAmount = prepayText.toDoubleOrNull() ?: 0.0
-
   val remainingMonths = (loan.tenureMonths - loan.paidEmisCount).coerceAtLeast(1)
   val currentPrincipal = loan.remainingPrincipal
-  val monthlyRate = (loan.annualInterestRate / 100.0) / 12.0
-  val emi = loan.emiAmount
-
-  // Calculation of original interest for remaining tenure
-  val originalRemainingInterest = (remainingMonths * emi - currentPrincipal).coerceAtLeast(0.0)
-
-  // Simulated metrics
-  val newPrincipal = (currentPrincipal - prepayAmount).coerceAtLeast(0.0)
-
-  val (simulatedMonths, interestSaved, isForeclosed) = remember(newPrincipal, prepayAmount, currentPrincipal) {
-    if (prepayAmount <= 0.0) {
-      Triple(remainingMonths, 0.0, false)
-    } else if (newPrincipal <= 0.0) {
-      // Foreclosed
-      Triple(0, originalRemainingInterest, true)
-    } else {
-      if (monthlyRate > 0.0 && (newPrincipal * monthlyRate) < emi) {
-        val n = ceil(-ln(1.0 - (newPrincipal * monthlyRate / emi)) / ln(1.0 + monthlyRate)).toInt()
-        val newInterest = (n * emi - newPrincipal).coerceAtLeast(0.0)
-        val saved = (originalRemainingInterest - newInterest).coerceAtLeast(0.0)
-        Triple(n, saved, false)
-      } else {
-        Triple(remainingMonths, 0.0, false)
-      }
-    }
+  val result = remember(loan, prepayAmount) {
+    LoanPrepaymentCalculator.calculate(
+      remainingPrincipal = currentPrincipal,
+      annualInterestRate = loan.annualInterestRate,
+      monthlyEmi = loan.emiAmount,
+      remainingMonths = remainingMonths,
+      extraPrepayment = prepayAmount
+    )
   }
-
-  val monthsSaved = (remainingMonths - simulatedMonths).coerceAtLeast(0)
 
   Card(
     shape = RoundedCornerShape(16.dp),
@@ -1305,7 +1285,13 @@ private fun LoanPrepaymentSimulatorSection(loan: LoanRecord) {
       Spacer(modifier = Modifier.height(12.dp))
 
       // Impact Result Cards
-      if (isForeclosed) {
+      if (!result.isValid) {
+        Text(
+          "Unable to estimate savings because the current EMI does not pay off the remaining balance within the tracked tenure.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.error
+        )
+      } else if (result.isForeclosed) {
         Surface(
           shape = RoundedCornerShape(12.dp),
           color = Color(0xFF10B981).copy(alpha = 0.18f),
@@ -1326,7 +1312,7 @@ private fun LoanPrepaymentSimulatorSection(loan: LoanRecord) {
                 fontSize = 13.sp
               )
               Text(
-                "You become debt-free immediately and save ${CurrencyFormatter.format(interestSaved)} in interest!",
+                "You become debt-free immediately and save ${CurrencyFormatter.format(result.interestSaved)} in estimated interest!",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface
               )
@@ -1352,14 +1338,14 @@ private fun LoanPrepaymentSimulatorSection(loan: LoanRecord) {
               )
               Spacer(modifier = Modifier.height(2.dp))
               Text(
-                if (monthsSaved > 0) "$monthsSaved Months" else "0 Months",
+                if (result.monthsSaved > 0) "${result.monthsSaved} Months" else "0 Months",
                 style = MaterialTheme.typography.titleMedium.copy(
                   fontWeight = FontWeight.Bold,
-                  color = if (monthsSaved > 0) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurface
+                  color = if (result.monthsSaved > 0) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurface
                 )
               )
               Text(
-                "New tenure: $simulatedMonths mos",
+                "New tenure: ${result.monthsAfter} mos",
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -1380,10 +1366,10 @@ private fun LoanPrepaymentSimulatorSection(loan: LoanRecord) {
               )
               Spacer(modifier = Modifier.height(2.dp))
               Text(
-                CurrencyFormatter.format(interestSaved),
+                CurrencyFormatter.format(result.interestSaved),
                 style = MaterialTheme.typography.titleMedium.copy(
                   fontWeight = FontWeight.Bold,
-                  color = if (interestSaved > 0) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurface
+                  color = if (result.interestSaved > 0) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurface
                 )
               )
               Text(
@@ -1394,6 +1380,13 @@ private fun LoanPrepaymentSimulatorSection(loan: LoanRecord) {
             }
           }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+          "Estimate assumes the same EMI and excludes lender prepayment fees or rate changes.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
       }
     }
   }

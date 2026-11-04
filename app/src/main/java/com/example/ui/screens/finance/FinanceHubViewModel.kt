@@ -6,11 +6,14 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.CreditCardBillReminder
+import com.example.data.local.entity.DebtRecord
 import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
+import com.example.data.local.entity.LoanRecord
 import com.example.data.local.entity.TripRecord
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -60,9 +63,10 @@ data class FinanceUiState(
 class FinanceHubViewModel(application: Application) : AndroidViewModel(application) {
 
   private val repository = com.example.data.repository.FinanceRepository.getInstance(application)
-  private val dao = AppDatabase.getDatabase(application).financeDao()
-  private val loanDao = AppDatabase.getDatabase(application).loanDao()
-  private val debtDao = AppDatabase.getDatabase(application).debtDao()
+  private val database = AppDatabase.getDatabase(application)
+  private val dao = database.financeDao()
+  private val loanDao = database.loanDao()
+  private val debtDao = database.debtDao()
 
   private val _uiState = MutableStateFlow(FinanceUiState())
   val uiState: StateFlow<FinanceUiState> = _uiState.asStateFlow()
@@ -630,7 +634,9 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
       loans = allLoans.value,
       debts = allDebts.value,
       subscriptions = subscriptions.value,
-      creditCardReminders = creditCardBillReminders.value
+      creditCardReminders = creditCardBillReminders.value,
+      monthlyBudgetLimit = monthlyBudgetLimit.value,
+      userUpiId = prefs.getString("user_upi_id", "") ?: ""
     )
   }
 
@@ -677,85 +683,224 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
           _uiState.update { it.copy(toastMessage = result.message) }
         }
         is BackupParseResult.Success -> {
-          val payload = result.payload
-          if (replaceExisting) {
-            dao.deleteAllCustomCategories()
-            creditCardBillReminders.value.forEach {
-              CreditCardBillNotificationScheduler.cancel(getApplication(), it.accountId)
+          try {
+            restorePayload(result.payload, replaceExisting)
+            _uiState.update {
+              it.copy(
+                showBackupModal = false,
+                showPasteJsonDialog = false,
+                toastMessage = "Universal backup restored: ${result.summary}!"
+              )
             }
-            dao.deleteAllCreditCardBillReminders()
-            dao.deleteAllBankAccounts()
-            dao.deleteAllTrips()
-            dao.deleteAllExpenses()
-            dao.deleteAllSubscriptions()
-            loanDao.deleteAllLoans()
-            debtDao.deleteAllDebts()
-
-            if (payload.categories.isNotEmpty()) dao.insertCategories(payload.categories)
-            if (payload.bankAccounts.isNotEmpty()) dao.insertBankAccounts(payload.bankAccounts)
-            if (payload.trips.isNotEmpty()) dao.insertTrips(payload.trips)
-            if (payload.expenses.isNotEmpty()) dao.insertExpenses(payload.expenses)
-            payload.loans.forEach {
-              val newId = loanDao.insertLoan(it)
-              CreditCardBillNotificationScheduler.scheduleLoanReminder(getApplication(), it.copy(id = newId))
+          } catch (error: Exception) {
+            _uiState.update {
+              it.copy(toastMessage = "Backup restore failed: ${error.localizedMessage ?: "Unable to write data"}")
             }
-            payload.debts.forEach {
-              val newId = debtDao.insertDebt(it)
-              if (it.dueDateTimestamp != null && it.dueDateTimestamp > 0L) {
-                CreditCardBillNotificationScheduler.scheduleDebtReminder(getApplication(), it.copy(id = newId))
-              }
-            }
-            if (payload.subscriptions.isNotEmpty()) dao.insertSubscriptions(payload.subscriptions)
-            payload.creditCardReminders.forEach { dao.insertCreditCardBillReminder(it) }
-          } else {
-            // Merge strategy
-            val currentCats = categories.value.map { it.name.lowercase().trim() }.toSet()
-            val newCats = payload.categories.filter { it.name.lowercase().trim() !in currentCats }
-            if (newCats.isNotEmpty()) dao.insertCategories(newCats)
-
-            val currentAccs = bankAccounts.value.map { it.accountNumber.trim() }.toSet()
-            val newAccs = payload.bankAccounts.filter { it.accountNumber.trim() !in currentAccs }
-            if (newAccs.isNotEmpty()) dao.insertBankAccounts(newAccs)
-
-            val currentTrips = trips.value.map { it.tripName.lowercase().trim() }.toSet()
-            val newTrips = payload.trips.filter { it.tripName.lowercase().trim() !in currentTrips }
-            if (newTrips.isNotEmpty()) dao.insertTrips(newTrips)
-
-            if (payload.expenses.isNotEmpty()) dao.insertExpenses(payload.expenses)
-
-            val currentLoans = allLoans.value.map { it.loanName.lowercase().trim() }.toSet()
-            payload.loans.filter { it.loanName.lowercase().trim() !in currentLoans }.forEach {
-              val newId = loanDao.insertLoan(it)
-              CreditCardBillNotificationScheduler.scheduleLoanReminder(getApplication(), it.copy(id = newId))
-            }
-
-            val currentDebts = allDebts.value.map { "${it.personName.lowercase().trim()}_${it.amount}_${it.type}" }.toSet()
-            payload.debts.filter { "${it.personName.lowercase().trim()}_${it.amount}_${it.type}" !in currentDebts }.forEach {
-              val newId = debtDao.insertDebt(it)
-              if (it.dueDateTimestamp != null && it.dueDateTimestamp > 0L) {
-                CreditCardBillNotificationScheduler.scheduleDebtReminder(getApplication(), it.copy(id = newId))
-              }
-            }
-
-            val currentSubs = subscriptions.value.map { it.title.lowercase().trim() }.toSet()
-            val newSubs = payload.subscriptions.filter { it.title.lowercase().trim() !in currentSubs }
-            if (newSubs.isNotEmpty()) dao.insertSubscriptions(newSubs)
-
-            val currentCCs = creditCardBillReminders.value.map { it.accountId }.toSet()
-            payload.creditCardReminders.filter { it.accountId !in currentCCs }.forEach {
-              dao.insertCreditCardBillReminder(it)
-            }
-          }
-
-          _uiState.update {
-            it.copy(
-              showBackupModal = false,
-              showPasteJsonDialog = false,
-              toastMessage = "Universal backup restored: ${result.summary}!"
-            )
           }
         }
       }
     }
+  }
+
+  private suspend fun restorePayload(payload: FinanceBackupPayload, replaceExisting: Boolean) {
+    val oldReminders = dao.getAllCreditCardBillReminders().first()
+    val oldLoans = loanDao.getAllLoans().first()
+    val oldDebts = debtDao.getAllDebts().first()
+    val existingCategories = dao.getAllCategories().first()
+    val existingAccounts = dao.getAllBankAccounts().first()
+    val existingTrips = dao.getAllTrips().first()
+    val existingLoans = oldLoans
+    val existingDebts = oldDebts
+    val existingSubscriptions = dao.getAllSubscriptions().first()
+    val existingReminders = oldReminders
+    val context = getApplication<Application>()
+
+    database.withTransaction {
+      if (replaceExisting) {
+        dao.deleteAllCreditCardBillReminders()
+        dao.deleteAllExpenses()
+        dao.deleteAllSubscriptions()
+        dao.deleteAllTrips()
+        debtDao.deleteAllDebts()
+        loanDao.deleteAllLoans()
+        dao.deleteAllBankAccounts()
+        dao.deleteAllCategories()
+      }
+
+      fun accountKey(account: BankAccount) = listOf(
+        account.bankName.trim().lowercase(),
+        account.accountType.trim().lowercase(),
+        account.accountNumber.trim().lowercase(),
+        if (account.accountNumber.isBlank()) account.holderName.trim().lowercase() else ""
+      ).joinToString("|")
+      val accountsByIdentity = (if (replaceExisting) emptyList() else existingAccounts)
+        .associateBy(::accountKey)
+      val accountIdMap = mutableMapOf<Long, Long>()
+      val accountNamesById = mutableMapOf<String, Long>()
+      if (!replaceExisting) {
+        existingAccounts.forEach { account ->
+          accountNamesById[account.bankName.trim().lowercase()] = account.id
+          if (account.id > 0L) accountIdMap[account.id] = account.id
+        }
+      }
+      payload.bankAccounts.forEach { account ->
+        val existing = if (!replaceExisting) {
+          accountsByIdentity[accountKey(account)]
+        } else null
+        val targetId = existing?.id ?: dao.insertBankAccount(
+          if (replaceExisting) account else account.copy(id = 0L)
+        )
+        if (account.id > 0L) accountIdMap[account.id] = targetId
+        accountNamesById[account.bankName.trim().lowercase()] = targetId
+      }
+
+      val categoryNames = (if (replaceExisting) emptyList() else existingCategories)
+        .map { it.name.trim().lowercase() }.toMutableSet()
+      payload.categories.forEach { category ->
+        if (categoryNames.add(category.name.trim().lowercase())) {
+          dao.insertCategory(if (replaceExisting) category else category.copy(id = 0L))
+        }
+      }
+
+      fun tripKey(trip: TripRecord) = listOf(
+        trip.tripName.trim().lowercase(),
+        trip.destination.trim().lowercase(),
+        trip.startDate.trim(),
+        trip.endDate.trim()
+      ).joinToString("|")
+      val tripsByIdentity = (if (replaceExisting) emptyList() else existingTrips)
+        .associateBy(::tripKey)
+      val tripIdMap = mutableMapOf<Long, Long>()
+      if (!replaceExisting) existingTrips.forEach { if (it.id > 0L) tripIdMap[it.id] = it.id }
+      payload.trips.forEach { trip ->
+        val existing = if (replaceExisting) null else tripsByIdentity[tripKey(trip)]
+        val targetId = existing?.id ?: dao.insertTrip(if (replaceExisting) trip else trip.copy(id = 0L))
+        if (trip.id > 0L) tripIdMap[trip.id] = targetId
+      }
+
+      fun loanKey(loan: LoanRecord) = listOf(
+        loan.loanName.trim().lowercase(),
+        loan.loanCategory.trim().lowercase(),
+        loan.principalAmount,
+        loan.annualInterestRate,
+        loan.tenureMonths,
+        loan.emiAmount,
+        loan.startDate.trim()
+      ).joinToString("|")
+      val loansByIdentity = (if (replaceExisting) emptyList() else existingLoans)
+        .associateBy(::loanKey)
+      val loanIdMap = mutableMapOf<Long, Long>()
+      if (!replaceExisting) existingLoans.forEach { if (it.id > 0L) loanIdMap[it.id] = it.id }
+      payload.loans.forEach { loan ->
+        val existing = if (replaceExisting) null else loansByIdentity[loanKey(loan)]
+        val targetId = existing?.id ?: loanDao.insertLoan(
+          loan.copy(
+            id = if (replaceExisting) loan.id else 0L,
+            bankAccountId = loan.bankAccountId?.let { accountIdMap[it] }
+              ?: accountNamesById[loan.bankAccountName.trim().lowercase()]
+          )
+        )
+        if (loan.id > 0L) loanIdMap[loan.id] = targetId
+      }
+
+      fun debtKey(debt: DebtRecord) =
+        listOf(
+          debt.personName.trim().lowercase(),
+          debt.amount,
+          debt.type.trim().uppercase(),
+          debt.dateTimestamp,
+          debt.dueDateTimestamp,
+          debt.isSettled,
+          debt.settledDateTimestamp,
+          debt.bankAccountName.trim().lowercase(),
+          debt.notes.trim()
+        ).joinToString("|")
+      val debtsByKey = (if (replaceExisting) emptyList() else existingDebts).associateBy(::debtKey)
+      val debtIdMap = mutableMapOf<Long, Long>()
+      if (!replaceExisting) existingDebts.forEach { if (it.id > 0L) debtIdMap[it.id] = it.id }
+      payload.debts.forEach { debt ->
+        val existing = if (replaceExisting) null else debtsByKey[debtKey(debt)]
+        val targetId = existing?.id ?: debtDao.insertDebt(
+          debt.copy(
+            id = if (replaceExisting) debt.id else 0L,
+            bankAccountId = debt.bankAccountId?.let { accountIdMap[it] }
+              ?: accountNamesById[debt.bankAccountName.trim().lowercase()]
+          )
+        )
+        if (debt.id > 0L) debtIdMap[debt.id] = targetId
+      }
+
+      payload.expenses.forEach { expense ->
+        dao.insertExpense(
+          expense.copy(
+            id = if (replaceExisting) expense.id else 0L,
+            bankAccountId = expense.bankAccountId?.let { accountIdMap[it] }
+              ?: accountNamesById[expense.bankAccountName.trim().lowercase()],
+            tripId = expense.tripId?.let { tripIdMap[it] },
+            loanId = expense.loanId?.let { loanIdMap[it] },
+            debtId = expense.debtId?.let { debtIdMap[it] }
+          )
+        )
+      }
+
+      fun subscriptionKey(subscription: SubscriptionRecord) = listOf(
+        subscription.name.trim().lowercase(),
+        subscription.amount,
+        subscription.categoryName.trim().lowercase(),
+        subscription.billingCycle.trim().uppercase(),
+        subscription.dueDayOfMonth,
+        subscription.dueMonth,
+        subscription.dueDayOfWeek,
+        subscription.bankAccountName.trim().lowercase(),
+        subscription.lastPaidTimestamp,
+        subscription.notes.trim()
+      ).joinToString("|")
+      val subscriptionsByIdentity = (if (replaceExisting) emptyList() else existingSubscriptions)
+        .associateBy(::subscriptionKey)
+      payload.subscriptions.forEach { subscription ->
+        val existing = if (replaceExisting) null else subscriptionsByIdentity[subscriptionKey(subscription)]
+        if (existing == null) {
+          dao.insertSubscription(
+            subscription.copy(
+              id = if (replaceExisting) subscription.id else 0L,
+              bankAccountId = subscription.bankAccountId?.let { accountIdMap[it] }
+                ?: accountNamesById[subscription.bankAccountName.trim().lowercase()]
+            )
+          )
+        }
+      }
+
+      val reminderAccountIds = (if (replaceExisting) emptyList() else existingReminders)
+        .map { it.accountId }.toMutableSet()
+      payload.creditCardReminders.forEach { reminder ->
+        val accountName = payload.creditCardReminderAccountNames[reminder.accountId].orEmpty()
+        val targetAccountId = accountIdMap[reminder.accountId]
+          ?: accountNamesById[accountName.trim().lowercase()]
+        if (targetAccountId != null && (replaceExisting || reminderAccountIds.add(targetAccountId))) {
+          dao.insertCreditCardBillReminder(reminder.copy(accountId = targetAccountId))
+        }
+      }
+    }
+
+    if (replaceExisting) {
+      val restoredBudget = payload.monthlyBudgetLimit ?: 50_000.0
+      prefs.edit()
+        .putFloat("monthly_budget_limit", restoredBudget.toFloat())
+        .apply()
+      _monthlyBudgetLimit.value = restoredBudget
+
+      val preferencesEditor = prefs.edit()
+      if (payload.userUpiId != null) {
+        preferencesEditor.putString("user_upi_id", payload.userUpiId)
+      } else {
+        preferencesEditor.remove("user_upi_id")
+      }
+      preferencesEditor.apply()
+    }
+
+    oldReminders.forEach { CreditCardBillNotificationScheduler.cancel(context, it.accountId) }
+    oldDebts.forEach { CreditCardBillNotificationScheduler.cancelDebt(context, it.id) }
+    oldLoans.forEach { CreditCardBillNotificationScheduler.cancelLoan(context, it.id) }
+    CreditCardBillNotificationScheduler.rescheduleAll(context)
   }
 }

@@ -3706,6 +3706,7 @@ private fun MonthlyCategorySpendingChartCard(
           }
         }
       } else {
+        var selectedSliceIndex by remember(categorySpend) { mutableStateOf<Int?>(null) }
         val chartSlices = remember(categorySpend) {
           val fallbackColors = listOf(
             Color(0xFFEF4444), Color(0xFF3B82F6), Color(0xFF10B981),
@@ -3735,8 +3736,13 @@ private fun MonthlyCategorySpendingChartCard(
             slices = chartSlices,
             size = 170.dp,
             strokeWidth = 24.dp,
-            centerTitle = CurrencyFormatter.formatWhole(totalSpent),
-            centerSubtitle = "Total Spent"
+            centerTitle = selectedSliceIndex?.let { chartSlices.getOrNull(it) }
+              ?.let { CurrencyFormatter.formatWhole(it.value) }
+              ?: CurrencyFormatter.formatWhole(totalSpent),
+            centerSubtitle = selectedSliceIndex?.let { categorySpend.getOrNull(it)?.categoryName }
+              ?: "Total Spent",
+            selectedSliceIndex = selectedSliceIndex,
+            onSliceSelected = { selectedSliceIndex = it }
           )
         }
 
@@ -3749,7 +3755,13 @@ private fun MonthlyCategorySpendingChartCard(
           categorySpend.forEachIndexed { idx, item ->
             val sliceColor = chartSlices.getOrNull(idx)?.color ?: MaterialTheme.colorScheme.primary
             Row(
-              modifier = Modifier.fillMaxWidth(),
+              modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable {
+                  selectedSliceIndex = if (selectedSliceIndex == idx) null else idx
+                }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically
             ) {

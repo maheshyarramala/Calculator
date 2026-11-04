@@ -30,6 +30,9 @@ interface FinanceDao {
   @Query("DELETE FROM expense_categories WHERE isCustom = 1")
   suspend fun deleteAllCustomCategories()
 
+  @Query("DELETE FROM expense_categories")
+  suspend fun deleteAllCategories()
+
   // --- Expenses ---
   @Query("SELECT * FROM expenses ORDER BY dateTimestamp DESC")
   fun getAllExpenses(): Flow<List<ExpenseRecord>>

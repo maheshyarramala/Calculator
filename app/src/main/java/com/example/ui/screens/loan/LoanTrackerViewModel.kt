@@ -185,6 +185,19 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
           emiNumber = info.emiNumber,
           loanName = info.loanName
         )
+        loanDao.getLoanById(info.loanId)?.let { updatedLoan ->
+          if (updatedLoan.isFullyPaid) {
+            com.example.domain.notification.CreditCardBillNotificationScheduler.cancelLoan(
+              getApplication(),
+              updatedLoan.id
+            )
+          } else {
+            com.example.domain.notification.CreditCardBillNotificationScheduler.scheduleLoanReminder(
+              getApplication(),
+              updatedLoan
+            )
+          }
+        }
         _userMessage.value = info.message
       }.onFailure { err ->
         _userMessage.value = err.message ?: "Failed to record EMI payment"
@@ -204,6 +217,12 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
       val result = repository.undoPayLoanEmi(targetLoanId, targetExpenseId)
       lastPaidEmi = null
       result.onSuccess { msg ->
+        loanDao.getLoanById(targetLoanId)?.let { updatedLoan ->
+          com.example.domain.notification.CreditCardBillNotificationScheduler.scheduleLoanReminder(
+            getApplication(),
+            updatedLoan
+          )
+        }
         _userMessage.value = msg
       }.onFailure { err ->
         _userMessage.value = err.message ?: "Failed to undo EMI payment"

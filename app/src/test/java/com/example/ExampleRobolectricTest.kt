@@ -53,11 +53,77 @@ class ExampleRobolectricTest {
       )
     )
 
+    val sampleExpenses = listOf(
+      com.example.data.local.entity.ExpenseRecord(
+        id = 21,
+        title = "Loan payment",
+        amount = 350.0,
+        categoryName = "Bills & Utilities",
+        bankAccountId = 1,
+        bankAccountName = "Chase Bank",
+        tripId = 1,
+        loanId = 31,
+        debtId = 41
+      )
+    )
+    val sampleLoans = listOf(
+      com.example.data.local.entity.LoanRecord(
+        id = 31,
+        loanName = "Car loan",
+        principalAmount = 12000.0,
+        annualInterestRate = 8.5,
+        tenureMonths = 36,
+        emiAmount = 379.0,
+        startDate = "2026-01-01",
+        bankAccountId = 1,
+        bankAccountName = "Chase Bank"
+      )
+    )
+    val sampleDebts = listOf(
+      com.example.data.local.entity.DebtRecord(
+        id = 41,
+        personName = "Alex",
+        amount = 250.0,
+        dueDateTimestamp = 1_800_000_000_000L,
+        bankAccountId = 1,
+        bankAccountName = "Chase Bank"
+      )
+    )
+    val sampleSubscriptions = listOf(
+      com.example.data.local.entity.SubscriptionRecord(
+        id = 51,
+        name = "Internet",
+        amount = 60.0,
+        billingCycle = "MONTHLY",
+        dueDayOfMonth = 15,
+        categoryName = "Bills & Utilities",
+        bankAccountId = 1,
+        bankAccountName = "Chase Bank",
+        lastPaidTimestamp = 1_700_000_000_000L
+      )
+    )
+    val sampleCardReminders = listOf(
+      com.example.data.local.entity.CreditCardBillReminder(
+        accountId = 1,
+        amount = 140.0,
+        dueDateEpochDay = 20_000L,
+        paidDateEpochDay = -1L,
+        notificationsEnabled = true
+      )
+    )
+
     // Export to JSON
     val json = com.example.domain.backup.FinanceBackupManager.exportToJson(
       categories = sampleCategories,
       bankAccounts = sampleBanks,
-      trips = sampleTrips
+      trips = sampleTrips,
+      expenses = sampleExpenses,
+      loans = sampleLoans,
+      debts = sampleDebts,
+      subscriptions = sampleSubscriptions,
+      creditCardReminders = sampleCardReminders,
+      monthlyBudgetLimit = 42_000.0,
+      userUpiId = "jane@okaxis"
     )
 
     org.junit.Assert.assertNotNull(json)
@@ -79,6 +145,34 @@ class ExampleRobolectricTest {
     assertEquals(1, payload.trips.size)
     assertEquals("Tokyo Spring", payload.trips[0].tripName)
     assertEquals(150000.0, payload.trips[0].budget, 0.01)
+    assertEquals(1, payload.expenses.size)
+    assertEquals(1L, payload.expenses[0].bankAccountId)
+    assertEquals(31L, payload.expenses[0].loanId)
+    assertEquals(41L, payload.expenses[0].debtId)
+    assertEquals(31L, payload.loans[0].id)
+    assertEquals(1L, payload.loans[0].bankAccountId)
+    assertEquals(41L, payload.debts[0].id)
+    assertEquals(1L, payload.debts[0].bankAccountId)
+    assertEquals("Internet", payload.subscriptions[0].name)
+    assertEquals("MONTHLY", payload.subscriptions[0].billingCycle)
+    assertEquals(1L, payload.subscriptions[0].bankAccountId)
+    assertEquals(1L, payload.creditCardReminders[0].accountId)
+    assertEquals("Chase Bank", payload.creditCardReminderAccountNames[1L])
+    assertEquals(42_000.0, payload.monthlyBudgetLimit!!, 0.001)
+    assertEquals("jane@okaxis", payload.userUpiId)
+
+    val subscriptionsOnly = com.example.domain.backup.FinanceBackupManager.parseFromJson(
+      com.example.domain.backup.FinanceBackupManager.exportToJson(
+        categories = emptyList(),
+        bankAccounts = emptyList(),
+        trips = emptyList(),
+        subscriptions = sampleSubscriptions
+      )
+    )
+    org.junit.Assert.assertTrue(
+      "Subscription-only backup must parse",
+      subscriptionsOnly is com.example.domain.backup.BackupParseResult.Success
+    )
 
     // Test invalid JSON handling
     val invalidResult = com.example.domain.backup.FinanceBackupManager.parseFromJson("not valid json")

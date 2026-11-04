@@ -3,6 +3,7 @@ package com.example.ui.screens.debt
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
@@ -244,11 +245,16 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
   private val prefs = application.getSharedPreferences("omni_calc_finance_prefs", Context.MODE_PRIVATE)
   private val _userUpiId = MutableStateFlow(prefs.getString("user_upi_id", "") ?: "")
   val userUpiId: StateFlow<String> = _userUpiId.asStateFlow()
+  private val upiPreferenceListener =
+    android.content.SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
+      if (key == "user_upi_id") {
+        _userUpiId.value = sharedPreferences.getString("user_upi_id", "") ?: ""
+      }
+    }.also(prefs::registerOnSharedPreferenceChangeListener)
 
   fun setUserUpiId(upiId: String) {
     val clean = upiId.trim()
     prefs.edit().putString("user_upi_id", clean).apply()
-    _userUpiId.value = clean
     _userUpiId.value = clean
   }
 
@@ -264,7 +270,16 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
 
     val reminderMessage = if (debt.type == "LENT") {
       if (configuredUpi.isNotBlank()) {
-        val upiLink = "upi://pay?pa=$configuredUpi&pn=OmniCalc&am=${String.format(Locale.US, "%.2f", debt.amount)}&cu=INR&tn=Repayment%20for%20Udhaar"
+        val upiLink = Uri.Builder()
+          .scheme("upi")
+          .authority("pay")
+          .appendQueryParameter("pa", configuredUpi)
+          .appendQueryParameter("pn", "OmniCalc")
+          .appendQueryParameter("am", String.format(Locale.US, "%.2f", debt.amount))
+          .appendQueryParameter("cu", "INR")
+          .appendQueryParameter("tn", "Repayment for Udhaar")
+          .build()
+          .toString()
         "Hi ${debt.personName},\n\nFriendly reminder regarding the $formattedAmt lent on $dateStr$dueDateStr.\n\n⚡ Pay back instantly in 1-tap via UPI:\n$upiLink\n\n(Works directly in Google Pay, PhonePe, Paytm, or BHIM)\n\nThank you! 🙏"
       } else {
         "Hi ${debt.personName},\n\nThis is a gentle reminder regarding the $formattedAmt lent on $dateStr$dueDateStr.\n\nPlease settle it when convenient. Thank you! 🙏"
@@ -279,5 +294,10 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
       putExtra(Intent.EXTRA_TEXT, reminderMessage)
     }
     context.startActivity(Intent.createChooser(shareIntent, "Send Payment Reminder via"))
+  }
+
+  override fun onCleared() {
+    prefs.unregisterOnSharedPreferenceChangeListener(upiPreferenceListener)
+    super.onCleared()
   }
 }

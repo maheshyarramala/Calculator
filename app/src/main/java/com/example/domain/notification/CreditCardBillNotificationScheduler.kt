@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 object CreditCardBillNotificationScheduler {
   private const val CHANNEL_ID = "credit_card_bill_due"
@@ -40,7 +42,7 @@ object CreditCardBillNotificationScheduler {
 
     createNotificationChannel(context)
     val alarmManager = context.getSystemService(AlarmManager::class.java)
-    listOf(3, 0).forEach { daysBefore ->
+    listOf(1, 0).forEach { daysBefore ->
       val alertDate = LocalDate.ofEpochDay(reminder.dueDateEpochDay).minusDays(daysBefore.toLong())
       val triggerAt = alertDate.atTime(LocalTime.of(9, 0))
         .atZone(ZoneId.systemDefault())
@@ -58,7 +60,7 @@ object CreditCardBillNotificationScheduler {
 
   fun cancel(context: Context, accountId: Long) {
     val alarmManager = context.getSystemService(AlarmManager::class.java)
-    listOf(3, 0).forEach { daysBefore ->
+    listOf(1, 0).forEach { daysBefore ->
       val intent = Intent(context, CreditCardBillNotificationReceiver::class.java).apply {
         action = ACTION_SHOW_BILL_REMINDER
         data = Uri.parse("omni-calc://card-bill/$accountId/$daysBefore")
@@ -235,35 +237,38 @@ object CreditCardBillNotificationScheduler {
     createNotificationChannel(context)
     val alarmManager = context.getSystemService(AlarmManager::class.java)
 
-    // Schedule monthly reminder: 2 days before the recurring day of month
-    val today = LocalDate.now()
-    val dueDay = try {
-      val parsed = LocalDate.parse(loan.startDate)
-      parsed.dayOfMonth
-    } catch (e: Exception) {
-      1
-    }
+    // Schedule a reminder the day before and on the recurring due date.
+    val dueDay = parseLoanDueDay(loan.startDate)
+    val now = System.currentTimeMillis()
+    val monthStart = LocalDate.now().withDayOfMonth(1)
+    val nextReminder = (0L..2L)
+      .flatMap { monthOffset ->
+        val month = monthStart.plusMonths(monthOffset)
+        val dueDate = month.withDayOfMonth(minOf(dueDay, month.lengthOfMonth()))
+        listOf(1, 0).map { daysBefore ->
+          val triggerAt = dueDate.minusDays(daysBefore.toLong()).atTime(LocalTime.of(9, 30))
+            .atZone(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+          triggerAt to daysBefore
+        }
+      }
+      .filter { it.first > now }
+      .minByOrNull { it.first }
 
-    val targetMonthDate = if (today.dayOfMonth > dueDay) today.plusMonths(1).withDayOfMonth(minOf(dueDay, today.plusMonths(1).lengthOfMonth()))
-    else today.withDayOfMonth(minOf(dueDay, today.lengthOfMonth()))
-
-    val alertDate = targetMonthDate.minusDays(2)
-    val triggerAt = alertDate.atTime(LocalTime.of(9, 30))
-      .atZone(ZoneId.systemDefault())
-      .toInstant()
-      .toEpochMilli()
-
-    if (triggerAt > System.currentTimeMillis()) {
+    if (nextReminder != null) {
+      val (triggerAt, daysBefore) = nextReminder
       val intent = Intent(context, CreditCardBillNotificationReceiver::class.java).apply {
         action = ACTION_SHOW_LOAN_REMINDER
-        data = Uri.parse("omni-calc://loan-emi/${loan.id}")
+        data = Uri.parse("omni-calc://loan-emi/${loan.id}/$daysBefore")
         putExtra(EXTRA_LOAN_ID, loan.id)
         putExtra(EXTRA_LOAN_NAME, loan.loanName)
         putExtra(EXTRA_EMI_AMOUNT, loan.emiAmount)
+        putExtra(EXTRA_DAYS_BEFORE, daysBefore)
       }
       val pendingIntent = PendingIntent.getBroadcast(
         context,
-        (loan.id.hashCode() + 50000),
+        loan.id.hashCode() * 10 + daysBefore + 50000,
         intent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
       )
@@ -271,21 +276,48 @@ object CreditCardBillNotificationScheduler {
     }
   }
 
+  private fun parseLoanDueDay(startDate: String): Int {
+    val formatters = listOf(
+      DateTimeFormatter.ISO_LOCAL_DATE,
+      DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.getDefault()),
+      DateTimeFormatter.ofPattern("dd/MM/uuuu", Locale.getDefault()),
+      DateTimeFormatter.ofPattern("dd-MM-uuuu", Locale.getDefault())
+    )
+    return formatters.firstNotNullOfOrNull { formatter ->
+      runCatching { LocalDate.parse(startDate, formatter).dayOfMonth }.getOrNull()
+    } ?: 1
+  }
+
   fun cancelLoan(context: Context, loanId: Long) {
     val alarmManager = context.getSystemService(AlarmManager::class.java)
-    val intent = Intent(context, CreditCardBillNotificationReceiver::class.java).apply {
+    listOf(1, 0).forEach { daysBefore ->
+      val intent = Intent(context, CreditCardBillNotificationReceiver::class.java).apply {
+        action = ACTION_SHOW_LOAN_REMINDER
+        data = Uri.parse("omni-calc://loan-emi/$loanId/$daysBefore")
+      }
+      val pendingIntent = PendingIntent.getBroadcast(
+        context,
+        loanId.hashCode() * 10 + daysBefore + 50000,
+        intent,
+        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+      )
+      if (pendingIntent != null) {
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+      }
+    }
+    val legacyIntent = Intent(context, CreditCardBillNotificationReceiver::class.java).apply {
       action = ACTION_SHOW_LOAN_REMINDER
       data = Uri.parse("omni-calc://loan-emi/$loanId")
     }
-    val pendingIntent = PendingIntent.getBroadcast(
+    PendingIntent.getBroadcast(
       context,
-      (loanId.hashCode() + 50000),
-      intent,
+      loanId.hashCode() + 50000,
+      legacyIntent,
       PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-    )
-    if (pendingIntent != null) {
-      alarmManager.cancel(pendingIntent)
-      pendingIntent.cancel()
+    )?.let {
+      alarmManager.cancel(it)
+      it.cancel()
     }
   }
 
@@ -339,7 +371,8 @@ object CreditCardBillNotificationScheduler {
     context: Context,
     loanId: Long,
     loanName: String,
-    emiAmount: Double
+    emiAmount: Double,
+    daysBefore: Int
   ) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
       context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -350,7 +383,8 @@ object CreditCardBillNotificationScheduler {
     createNotificationChannel(context)
 
     val title = "Upcoming Loan EMI: $loanName"
-    val text = "${CurrencyFormatter.format(emiAmount)} installment is due in 2 days."
+    val dueText = if (daysBefore == 0) "due today." else "due tomorrow."
+    val text = "${CurrencyFormatter.format(emiAmount)} installment is $dueText"
 
     val contentIntent = PendingIntent.getActivity(
       context,
@@ -429,6 +463,7 @@ object CreditCardBillNotificationScheduler {
   internal fun loanId(intent: Intent): Long = intent.getLongExtra(EXTRA_LOAN_ID, -1L)
   internal fun loanName(intent: Intent): String = intent.getStringExtra(EXTRA_LOAN_NAME).orEmpty()
   internal fun emiAmount(intent: Intent): Double = intent.getDoubleExtra(EXTRA_EMI_AMOUNT, 0.0)
+  internal fun loanDaysBefore(intent: Intent): Int = intent.getIntExtra(EXTRA_DAYS_BEFORE, 0)
 }
 
 class CreditCardBillNotificationReceiver : BroadcastReceiver() {
@@ -458,8 +493,10 @@ class CreditCardBillNotificationReceiver : BroadcastReceiver() {
           context,
           CreditCardBillNotificationScheduler.loanId(intent),
           CreditCardBillNotificationScheduler.loanName(intent),
-          CreditCardBillNotificationScheduler.emiAmount(intent)
+          CreditCardBillNotificationScheduler.emiAmount(intent),
+          CreditCardBillNotificationScheduler.loanDaysBefore(intent)
         )
+        CreditCardBillNotificationScheduler.rescheduleAll(context.applicationContext)
       }
       else -> {
         CreditCardBillNotificationScheduler.rescheduleAll(context.applicationContext)
