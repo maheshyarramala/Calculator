@@ -44,7 +44,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.domain.splitbill.*
-import com.example.ui.components.NumberInputField
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,22 +59,20 @@ fun SplitBillScreen(
 
   // Calculate dynamic breakdowns and debt settlements using DebtSimplifier
   val breakdowns = remember(
-    state.splitMode,
     state.participants,
     state.items,
     state.taxAmount,
     state.tipAmount,
-    state.discountAmount,
-    state.manualBillTotal
+    state.discountAmount
   ) {
     DebtSimplifier.calculateBreakdowns(
-      mode = state.splitMode,
+      mode = SplitMode.ITEMIZED,
       participants = state.participants,
       items = state.items,
       tax = state.taxAmount,
       tip = state.tipAmount,
       discount = state.discountAmount,
-      manualBillTotal = state.manualBillTotal
+      manualBillTotal = 0.0
     )
   }
 
@@ -145,7 +142,7 @@ fun SplitBillScreen(
           overflow = TextOverflow.Ellipsis
         )
         Text(
-          text = "${state.participants.size} participants • ${state.splitMode.title} split",
+          text = "${state.participants.size} participants",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           maxLines = 1,
@@ -172,36 +169,6 @@ fun SplitBillScreen(
           Spacer(modifier = Modifier.width(4.dp))
           Text("Scan Receipt", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
         }
-      }
-    }
-
-    Spacer(modifier = Modifier.height(10.dp))
-
-    // Keep the split choices focused on equal sharing or per-item diner selection.
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      listOf(SplitMode.EQUAL, SplitMode.ITEMIZED).forEach { mode ->
-        FilterChip(
-          selected = state.splitMode == mode,
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-            viewModel.setSplitMode(mode)
-          },
-          leadingIcon = {
-            Icon(
-              if (mode == SplitMode.EQUAL) Icons.Default.Balance else Icons.Default.RestaurantMenu,
-              contentDescription = null,
-              modifier = Modifier.size(16.dp)
-            )
-          },
-          label = {
-            Text(
-              text = if (mode == SplitMode.EQUAL) "Equal" else "Items",
-              fontSize = 10.5.sp,
-              maxLines = 1,
-              softWrap = false
-            )
-          }
-        )
       }
     }
 
@@ -266,51 +233,21 @@ fun SplitBillScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         val diff = totalPaid - totalBill
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Text(
-              "Tax: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", state.taxAmount)}",
-              fontSize = 11.sp,
-              fontWeight = FontWeight.Medium
-            )
-            Text(
-              "Tip: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", state.tipAmount)}",
-              fontSize = 11.sp,
-              fontWeight = FontWeight.Medium
-            )
+        Text(
+          text = when {
+            totalBill <= 0.0 -> "No Items"
+            Math.abs(diff) < 0.005 -> "Fully Paid ✓"
+            diff < 0.0 -> "Owed: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", -diff)}"
+            else -> "Overpaid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", diff)}"
+          },
+          fontSize = 11.sp,
+          fontWeight = FontWeight.Bold,
+          color = when {
+            totalBill <= 0.0 -> MaterialTheme.colorScheme.onSurfaceVariant
+            Math.abs(diff) < 0.005 -> Color(0xFF059669)
+            else -> Color(0xFFDC2626)
           }
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            if (state.discountAmount > 0) {
-              Text(
-                "Discount: -${state.currencySymbol}${String.format(Locale.US, "%,.2f", state.discountAmount)}",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF10B981)
-              )
-            }
-            Text(
-              text = when {
-                totalBill <= 0.0 -> "No Items"
-                Math.abs(diff) < 0.005 -> "Fully Paid ✓"
-                diff < 0.0 -> "Owed: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", -diff)}"
-                else -> "Overpaid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", diff)}"
-              },
-              fontSize = 11.sp,
-              fontWeight = FontWeight.Bold,
-              color = when {
-                totalBill <= 0.0 -> MaterialTheme.colorScheme.onSurfaceVariant
-                Math.abs(diff) < 0.005 -> Color(0xFF059669)
-                else -> Color(0xFFDC2626)
-              }
-            )
-          }
-        }
+        )
       }
     }
 
@@ -375,102 +312,12 @@ private fun ItemsAndBillTab(
   onAddItemClick: () -> Unit
 ) {
   val haptic = LocalHapticFeedback.current
-  var taxInput by remember { mutableStateOf(amountInputText(state.taxAmount)) }
-  var tipInput by remember { mutableStateOf(amountInputText(state.tipAmount)) }
-  var discountInput by remember { mutableStateOf(amountInputText(state.discountAmount)) }
-
-  LaunchedEffect(state.taxAmount) {
-    if (taxInput.toDoubleOrNull() != state.taxAmount && !taxInput.endsWith(".")) {
-      taxInput = amountInputText(state.taxAmount)
-    }
-  }
-  LaunchedEffect(state.tipAmount) {
-    if (tipInput.toDoubleOrNull() != state.tipAmount && !tipInput.endsWith(".")) {
-      tipInput = amountInputText(state.tipAmount)
-    }
-  }
-  LaunchedEffect(state.discountAmount) {
-    if (discountInput.toDoubleOrNull() != state.discountAmount && !discountInput.endsWith(".")) {
-      discountInput = amountInputText(state.discountAmount)
-    }
-  }
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
     verticalArrangement = Arrangement.spacedBy(10.dp),
     contentPadding = PaddingValues(bottom = 80.dp)
   ) {
-    if (state.splitMode == SplitMode.EQUAL) {
-      item {
-        Card(
-          shape = RoundedCornerShape(14.dp),
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Bill Base Total", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
-            NumberInputField(
-              value = state.manualBillTotal.toString().removeSuffix(".0"),
-              onValueChange = { viewModel.setManualBillTotal(it.toDoubleOrNull() ?: 0.0) },
-              label = "Enter bill subtotal",
-              prefix = state.currencySymbol
-            )
-          }
-        }
-      }
-    }
-
-    // Additional Taxes, Tip & Discount Sliders
-    item {
-      Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("Tax, Tip & Discounts", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            OutlinedTextField(
-              value = taxInput,
-              onValueChange = {
-                taxInput = it
-                viewModel.setTaxAmount(it.toDoubleOrNull() ?: 0.0)
-              },
-              label = { Text("Tax (${state.currencySymbol})", fontSize = 11.sp) },
-              singleLine = true,
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-              modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-              value = tipInput,
-              onValueChange = {
-                tipInput = it
-                viewModel.setTipAmount(it.toDoubleOrNull() ?: 0.0)
-              },
-              label = { Text("Tip (${state.currencySymbol})", fontSize = 11.sp) },
-              singleLine = true,
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-              modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-              value = discountInput,
-              onValueChange = {
-                discountInput = it
-                viewModel.setDiscountAmount(it.toDoubleOrNull() ?: 0.0)
-              },
-              label = { Text("Discount", fontSize = 11.sp) },
-              singleLine = true,
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-              modifier = Modifier.weight(1f)
-            )
-          }
-        }
-      }
-    }
-
     // Items Section Header
     item {
       Column(modifier = Modifier.fillMaxWidth()) {
@@ -506,7 +353,7 @@ private fun ItemsAndBillTab(
     }
 
     // Empty state when no items exist
-    if (state.splitMode == SplitMode.ITEMIZED && state.items.isEmpty()) {
+    if (state.items.isEmpty()) {
       item {
         Card(
           shape = RoundedCornerShape(16.dp),
@@ -810,8 +657,7 @@ private fun DinersAndClaimsTab(
       item {
         ShareDistributionChart(
           breakdowns = breakdowns,
-          currencySymbol = state.currencySymbol,
-          splitMode = state.splitMode
+          currencySymbol = state.currencySymbol
         )
       }
     }
@@ -920,7 +766,7 @@ private fun DinersAndClaimsTab(
               horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
               Text(
-                text = "${if (state.splitMode == SplitMode.ITEMIZED) "Food/Drink" else "Subtotal"}: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.subtotal)}",
+                text = "Food/Drink: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.subtotal)}",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -960,14 +806,6 @@ private fun DinersAndClaimsTab(
           }
 
           Spacer(modifier = Modifier.height(8.dp))
-          if (state.splitMode == SplitMode.EQUAL) {
-            Text(
-              text = "Equal share: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.totalToPay)}",
-              style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-              color = MaterialTheme.colorScheme.primary
-            )
-          }
-
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
           Spacer(modifier = Modifier.height(8.dp))
 
@@ -1025,8 +863,7 @@ private fun DinersAndClaimsTab(
 @Composable
 private fun ShareDistributionChart(
   breakdowns: List<PersonBreakdown>,
-  currencySymbol: String,
-  splitMode: SplitMode
+  currencySymbol: String
 ) {
   val total = breakdowns.sumOf { it.totalToPay }
   Card(

@@ -12,12 +12,10 @@ data class SplitBillUiState(
   val billTitle: String = "Split Bill",
   val currencyCode: String = "INR",
   val currencySymbol: String = "₹",
-  val splitMode: SplitMode = SplitMode.ITEMIZED,
   val participants: List<Participant> = listOf(
     Participant(id = "p1", name = "You (Me)", avatarColorHex = "#4F46E5", paidAmount = 0.0)
   ),
   val items: List<ReceiptItem> = emptyList(),
-  val manualBillTotal: Double = 0.0,
   val taxAmount: Double = 0.0,
   val tipAmount: Double = 0.0,
   val discountAmount: Double = 0.0,
@@ -44,14 +42,6 @@ class SplitBillViewModel : ViewModel() {
 
   fun setCurrency(code: String, symbol: String) {
     _uiState.update { it.copy(currencyCode = code, currencySymbol = symbol) }
-  }
-
-  fun setSplitMode(mode: SplitMode) {
-    _uiState.update { it.copy(splitMode = mode) }
-  }
-
-  fun setManualBillTotal(amount: Double) {
-    _uiState.update { it.copy(manualBillTotal = nonNegative(amount)) }
   }
 
   fun setTaxAmount(tax: Double) {
@@ -194,7 +184,6 @@ class SplitBillViewModel : ViewModel() {
         taxAmount = parsed.tax,
         tipAmount = parsed.tip,
         discountAmount = parsed.discount,
-        splitMode = SplitMode.ITEMIZED,
         showOcrDialog = false
       )
     }
