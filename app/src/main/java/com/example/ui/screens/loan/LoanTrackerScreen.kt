@@ -91,8 +91,8 @@ fun LoanTrackerScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(padding),
-      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp)
+      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 100.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
       // 1. Hero Dashboard Card
       item {
