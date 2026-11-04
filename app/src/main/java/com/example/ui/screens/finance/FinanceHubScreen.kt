@@ -4472,12 +4472,18 @@ private fun SubscriptionItemCard(
             onClick = onMarkPaid,
             enabled = !isPaidThisCycle,
             shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             modifier = Modifier.height(28.dp)
           ) {
             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(13.dp))
             Spacer(modifier = Modifier.width(3.dp))
-            Text(if (isPaidThisCycle) "Paid" else "Mark Paid", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(
+              if (isPaidThisCycle) "Paid" else "Mark Paid",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Bold,
+              maxLines = 1,
+              softWrap = false
+            )
           }
 
           Spacer(modifier = Modifier.width(4.dp))

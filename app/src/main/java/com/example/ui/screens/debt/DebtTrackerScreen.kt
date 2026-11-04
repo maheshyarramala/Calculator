@@ -360,7 +360,8 @@ private fun DebtSummaryOverviewCard(
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(18.dp)
+        .padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -391,8 +392,6 @@ private fun DebtSummaryOverviewCard(
         }
       }
 
-      Spacer(modifier = Modifier.height(14.dp))
-
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -404,11 +403,14 @@ private fun DebtSummaryOverviewCard(
           border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.3f)),
           modifier = Modifier.weight(1f)
         ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+          Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
               Box(
                 modifier = Modifier
-                  .size(24.dp)
+                  .size(22.dp)
                   .clip(CircleShape)
                   .background(Color(0xFF059669).copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
@@ -417,28 +419,35 @@ private fun DebtSummaryOverviewCard(
                   Icons.Default.ArrowDownward,
                   contentDescription = null,
                   tint = Color(0xFF059669),
-                  modifier = Modifier.size(15.dp)
+                  modifier = Modifier.size(13.dp)
                 )
               }
-              Spacer(modifier = Modifier.width(6.dp))
+              Spacer(modifier = Modifier.width(5.dp))
               Text(
                 text = "People Owe Me",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF059669)
+                color = Color(0xFF059669),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
               )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
               text = CurrencyFormatter.format(totalLent),
-              fontSize = 18.sp,
+              fontSize = 16.sp,
               fontWeight = FontWeight.Black,
-              color = Color(0xFF059669)
+              color = Color(0xFF059669),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
             Text(
               text = "Total Receivable",
-              fontSize = 10.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
+              fontSize = 9.5.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
           }
         }
@@ -450,11 +459,14 @@ private fun DebtSummaryOverviewCard(
           border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.3f)),
           modifier = Modifier.weight(1f)
         ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+          Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
               Box(
                 modifier = Modifier
-                  .size(24.dp)
+                  .size(22.dp)
                   .clip(CircleShape)
                   .background(Color(0xFFDC2626).copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
@@ -463,28 +475,35 @@ private fun DebtSummaryOverviewCard(
                   Icons.Default.ArrowUpward,
                   contentDescription = null,
                   tint = Color(0xFFDC2626),
-                  modifier = Modifier.size(15.dp)
+                  modifier = Modifier.size(13.dp)
                 )
               }
-              Spacer(modifier = Modifier.width(6.dp))
+              Spacer(modifier = Modifier.width(5.dp))
               Text(
                 text = "People I Owe",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color(0xFFDC2626)
+                color = Color(0xFFDC2626),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
               )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
               text = CurrencyFormatter.format(totalBorrowed),
-              fontSize = 18.sp,
+              fontSize = 16.sp,
               fontWeight = FontWeight.Black,
-              color = Color(0xFFDC2626)
+              color = Color(0xFFDC2626),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
             Text(
               text = "Total Payable",
-              fontSize = 10.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
+              fontSize = 9.5.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
           }
         }
@@ -665,22 +684,22 @@ private fun DebtItemCard(
             OutlinedButton(
               onClick = onSendReminder,
               shape = RoundedCornerShape(10.dp),
-              contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
               Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(15.dp))
               Spacer(modifier = Modifier.width(4.dp))
-              Text("Reminder", fontSize = 12.sp)
+              Text("Reminder", fontSize = 12.sp, maxLines = 1, softWrap = false)
             }
 
             // Settle button
             FilledTonalButton(
               onClick = onMarkSettled,
               shape = RoundedCornerShape(10.dp),
-              contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
               Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(4.dp))
-              Text("Settle", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+              Text("Settle", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
             }
           } else {
             Surface(

@@ -264,9 +264,9 @@ private fun LoanDashboardCard(
             end = Offset(1000f, 1000f)
           )
         )
-        .padding(20.dp)
+        .padding(16.dp)
     ) {
-      Column {
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween,
@@ -293,7 +293,7 @@ private fun LoanDashboardCard(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
               text = "Total Principal Remaining",
-              style = MaterialTheme.typography.titleMedium.copy(
+              style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.3.sp
               ),
@@ -315,113 +315,75 @@ private fun LoanDashboardCard(
               modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
               color = Color.White,
               maxLines = 1,
-              overflow = TextOverflow.Ellipsis
+              softWrap = false
             )
           }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Large Principal Remaining
         Text(
           text = CurrencyFormatter.format(totalRemainingPrincipal),
-          style = MaterialTheme.typography.headlineLarge.copy(
+          style = MaterialTheme.typography.headlineMedium.copy(
             fontWeight = FontWeight.Black,
             letterSpacing = (-0.5).sp
           ),
-          color = Color.White
+          color = Color.White,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Two Stat Badges: Monthly EMI Outflow & Principal Paid
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-          // Monthly Outflow Badge
           Surface(
             shape = RoundedCornerShape(14.dp),
             color = Color.White.copy(alpha = 0.12f),
             border = BorderStroke(1.dp, Color(0xFFF87171).copy(alpha = 0.35f)),
             modifier = Modifier.weight(1f)
           ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(28.dp)
-                  .clip(CircleShape)
-                  .background(Color(0xFFDC2626).copy(alpha = 0.35f)),
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  Icons.Default.CalendarMonth,
-                  contentDescription = null,
-                  tint = Color(0xFFF87171),
-                  modifier = Modifier.size(16.dp)
-                )
-              }
-              Spacer(modifier = Modifier.width(8.dp))
-              Column {
-                Text(
-                  text = "Monthly EMI Outflow",
-                  fontSize = 10.sp,
-                  fontWeight = FontWeight.Medium,
-                  color = Color.White.copy(alpha = 0.75f)
-                )
-                Text(
-                  text = CurrencyFormatter.format(monthlyOutflow),
-                  fontSize = 13.sp,
-                  fontWeight = FontWeight.ExtraBold,
-                  color = Color(0xFFF87171)
-                )
-              }
+            Column(modifier = Modifier.padding(10.dp)) {
+              Text(
+                text = "Monthly EMI Outflow",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.75f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+              Text(
+                text = CurrencyFormatter.format(monthlyOutflow),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFFF87171),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
             }
           }
 
-          // Principal Paid Badge
           Surface(
             shape = RoundedCornerShape(14.dp),
             color = Color.White.copy(alpha = 0.12f),
             border = BorderStroke(1.dp, Color(0xFF34D399).copy(alpha = 0.35f)),
             modifier = Modifier.weight(1f)
           ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(28.dp)
-                  .clip(CircleShape)
-                  .background(Color(0xFF059669).copy(alpha = 0.35f)),
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  Icons.Default.CheckCircle,
-                  contentDescription = null,
-                  tint = Color(0xFF34D399),
-                  modifier = Modifier.size(16.dp)
-                )
-              }
-              Spacer(modifier = Modifier.width(8.dp))
-              Column {
-                Text(
-                  text = "Principal Paid",
-                  fontSize = 10.sp,
-                  fontWeight = FontWeight.Medium,
-                  color = Color.White.copy(alpha = 0.75f)
-                )
-                Text(
-                  text = CurrencyFormatter.format(totalPaid),
-                  fontSize = 13.sp,
-                  fontWeight = FontWeight.ExtraBold,
-                  color = Color(0xFF34D399)
-                )
-              }
+            Column(modifier = Modifier.padding(10.dp)) {
+              Text(
+                text = "Principal Paid",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.75f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+              Text(
+                text = CurrencyFormatter.format(totalPaid),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF34D399),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
             }
           }
         }
@@ -743,13 +705,22 @@ private fun LoanItemCard(
           ) {
             Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(15.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Undo EMI (#${loan.paidEmisCount})", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+              "Undo EMI (#${loan.paidEmisCount})",
+              fontSize = 11.5.sp,
+              fontWeight = FontWeight.SemiBold,
+              maxLines = 1,
+              softWrap = false
+            )
           }
         } else {
           Text(
             text = "Tenure: ${loan.tenureMonths} Mos (${loan.startDate})",
             fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
           )
         }
 
@@ -757,11 +728,11 @@ private fun LoanItemCard(
           FilledTonalButton(
             onClick = onPayEmi,
             shape = RoundedCornerShape(10.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
           ) {
             Icon(Icons.Default.Payment, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Pay Monthly EMI", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Pay Monthly EMI", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
           }
         } else {
           Surface(
@@ -920,11 +891,12 @@ private fun LoanDetailDialog(
             onClick = {
               onPayEmi(selectedBankId, selectedAccount?.account?.bankName ?: "")
               onDismiss()
-            }
+            },
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
           ) {
             Icon(Icons.Default.Payment, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Pay Monthly EMI")
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Pay Monthly EMI", maxLines = 1, softWrap = false, fontSize = 12.sp)
           }
         } else {
           Button(onClick = onDismiss) {
