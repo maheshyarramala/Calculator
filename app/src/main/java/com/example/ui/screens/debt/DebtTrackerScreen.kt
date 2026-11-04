@@ -77,8 +77,8 @@ fun DebtTrackerScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(padding),
-      contentPadding = PaddingValues(16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp)
+      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
       // 1. Dual Summary Card: Receivable (Green) vs Payable (Red)
       item {
@@ -369,7 +369,10 @@ private fun DebtSummaryOverviewCard(
       ) {
         Text(
           text = "Personal Lend & Borrow",
-          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+          modifier = Modifier.weight(1f, fill = false),
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
         )
         // Net balance tag
         Surface(
@@ -381,7 +384,9 @@ private fun DebtSummaryOverviewCard(
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = if (netBalance >= 0) Color(0xFF059669) else Color(0xFFDC2626),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
           )
         }
       }

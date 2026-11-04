@@ -90,8 +90,8 @@ fun LoanTrackerScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(padding),
-      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp)
+      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
       // 1. Hero Dashboard Card
       item {
@@ -272,7 +272,10 @@ private fun LoanDashboardCard(
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
+          Row(
+            modifier = Modifier.weight(1f, fill = false),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
             Box(
               modifier = Modifier
                 .size(30.dp)
@@ -294,7 +297,9 @@ private fun LoanDashboardCard(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.3.sp
               ),
-              color = Color(0xFFE0E7FF)
+              color = Color(0xFFE0E7FF),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
           }
 
@@ -308,7 +313,9 @@ private fun LoanDashboardCard(
               fontSize = 11.sp,
               fontWeight = FontWeight.SemiBold,
               modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-              color = Color.White
+              color = Color.White,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
           }
         }

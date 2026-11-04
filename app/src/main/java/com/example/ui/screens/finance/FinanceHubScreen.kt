@@ -112,6 +112,8 @@ fun FinanceHubScreen(
   var preselectedTripIdForExpense by remember { mutableStateOf<Long?>(null) }
   var accountForDetails by remember { mutableStateOf<BankAccount?>(null) }
   var accountPendingDelete by remember { mutableStateOf<BankAccount?>(null) }
+  var editingExpense by remember { mutableStateOf<ExpenseRecord?>(null) }
+  var subscriptionPendingPayment by remember { mutableStateOf<SubscriptionRecord?>(null) }
   var showTransferDialog by remember { mutableStateOf(false) }
 
   LaunchedEffect(uiState.toastMessage) {
@@ -215,6 +217,30 @@ fun FinanceHubScreen(
       onDismiss = { viewModel.setShowAddIncome(false) },
       onConfirm = { title, amount, category, accountId, accountName, notes ->
         viewModel.addIncome(title, amount, category, accountId, accountName, notes)
+      }
+    )
+  }
+
+  editingExpense?.let { expense ->
+    EditExpenseDialog(
+      expense = expense,
+      categories = categories,
+      onDismiss = { editingExpense = null },
+      onConfirm = { title, amount, category ->
+        viewModel.updateExpense(expense, title, amount, category)
+        editingExpense = null
+      }
+    )
+  }
+
+  subscriptionPendingPayment?.let { subscription ->
+    MarkSubscriptionPaidDialog(
+      sub = subscription,
+      bankAccounts = bankAccounts,
+      onDismiss = { subscriptionPendingPayment = null },
+      onConfirm = { account ->
+        viewModel.markSubscriptionPaid(subscription, account)
+        subscriptionPendingPayment = null
       }
     )
   }
@@ -504,12 +530,13 @@ fun FinanceHubScreen(
                 }
               }
             }
-          }
+          },
+          onEditExpense = { editingExpense = it }
         )
         FinanceTab.SUBSCRIPTIONS -> SubscriptionsSection(
           subscriptions = subscriptions,
           onAddSubscriptionClick = { viewModel.setShowAddSubscription(true) },
-          onMarkPaid = { viewModel.markSubscriptionPaid(it) },
+          onMarkPaid = { subscriptionPendingPayment = it },
           onDeleteSubscription = { viewModel.deleteSubscription(it) }
         )
         FinanceTab.DEBTS -> {
@@ -745,7 +772,8 @@ private fun ExpensesSection(
   onTransferClick: () -> Unit,
   onAddCategoryClick: () -> Unit,
   onDeleteCategory: (ExpenseCategory) -> Unit,
-  onDeleteExpense: (ExpenseRecord) -> Unit
+  onDeleteExpense: (ExpenseRecord) -> Unit,
+  onEditExpense: (ExpenseRecord) -> Unit
 ) {
   val haptic = LocalHapticFeedback.current
 
@@ -764,8 +792,8 @@ private fun ExpensesSection(
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp)
+    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 88.dp),
+    verticalArrangement = Arrangement.spacedBy(12.dp)
   ) {
     // Total Net Balance Dashboard Banner
     item(key = "total_net_balance_card") {
@@ -1393,7 +1421,8 @@ private fun ExpensesSection(
         ExpenseItemCard(
           expense = expense,
           categories = categories,
-          onDelete = { onDeleteExpense(expense) }
+          onDelete = { onDeleteExpense(expense) },
+          onEdit = { onEditExpense(expense) }
         )
       }
     }
@@ -1404,7 +1433,8 @@ private fun ExpensesSection(
 private fun ExpenseItemCard(
   expense: ExpenseRecord,
   categories: List<ExpenseCategory>,
-  onDelete: () -> Unit
+  onDelete: () -> Unit,
+  onEdit: () -> Unit
 ) {
   val matchedCat = remember(expense.categoryName, categories) {
     categories.find { it.name.equals(expense.categoryName, ignoreCase = true) }
@@ -1540,20 +1570,126 @@ private fun ExpenseItemCard(
           fontSize = 14.sp,
           color = amountColor
         )
-        IconButton(
-          onClick = onDelete,
-          modifier = Modifier.size(28.dp)
-        ) {
-          Icon(
-            Icons.Default.DeleteOutline,
-            contentDescription = "Delete transaction",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp)
-          )
+        Row {
+          if (!isTransfer) {
+            IconButton(
+              onClick = onEdit,
+              modifier = Modifier.size(28.dp)
+            ) {
+              Icon(
+                Icons.Default.Edit,
+                contentDescription = "Edit transaction",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+              )
+            }
+          }
+          IconButton(
+            onClick = onDelete,
+            modifier = Modifier.size(28.dp)
+          ) {
+            Icon(
+              Icons.Default.DeleteOutline,
+              contentDescription = "Delete transaction",
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(18.dp)
+            )
+          }
         }
       }
     }
   }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditExpenseDialog(
+  expense: ExpenseRecord,
+  categories: List<ExpenseCategory>,
+  onDismiss: () -> Unit,
+  onConfirm: (title: String, amount: Double, category: String) -> Unit
+) {
+  var title by remember(expense.id) { mutableStateOf(expense.title) }
+  var amountText by remember(expense.id) { mutableStateOf(expense.amount.toString()) }
+  var selectedCategory by remember(expense.id) { mutableStateOf(expense.categoryName) }
+  var categoryDropdownExpanded by remember { mutableStateOf(false) }
+  val availableCategories = remember(categories, expense.categoryName) {
+    (categories.map { it.name } + expense.categoryName).distinct()
+  }
+  val amount = amountText.toDoubleOrNull()
+  val canSave = title.isNotBlank() && amount != null && amount.isFinite() && amount > 0.0
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Edit Transaction") },
+    text = {
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+      ) {
+        OutlinedTextField(
+          value = title,
+          onValueChange = { title = it },
+          label = { Text("Title") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+          value = amountText,
+          onValueChange = { amountText = it },
+          label = { Text("Amount (₹)") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+        ExposedDropdownMenuBox(
+          expanded = categoryDropdownExpanded,
+          onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
+        ) {
+          OutlinedTextField(
+            value = selectedCategory,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Category") },
+            trailingIcon = {
+              ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryDropdownExpanded)
+            },
+            modifier = Modifier
+              .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+              .fillMaxWidth()
+          )
+          ExposedDropdownMenu(
+            expanded = categoryDropdownExpanded,
+            onDismissRequest = { categoryDropdownExpanded = false }
+          ) {
+            availableCategories.forEach { category ->
+              DropdownMenuItem(
+                text = { Text(category) },
+                onClick = {
+                  selectedCategory = category
+                  categoryDropdownExpanded = false
+                }
+              )
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {
+      TextButton(
+        onClick = {
+          val parsedAmount = amount ?: return@TextButton
+          onConfirm(title.trim(), parsedAmount, selectedCategory)
+        },
+        enabled = canSave
+      ) {
+        Text("Update")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
 }
 
 @Composable
@@ -4020,6 +4156,56 @@ private fun MonthlyBudgetCard(
 // RECURRING SUBSCRIPTIONS & MONTHLY BILLS SECTION
 // -------------------------------------------------------------
 @Composable
+private fun MarkSubscriptionPaidDialog(
+  sub: SubscriptionRecord,
+  bankAccounts: List<BankAccount>,
+  onDismiss: () -> Unit,
+  onConfirm: (BankAccount?) -> Unit
+) {
+  var selectedBank by remember(sub.id, bankAccounts) {
+    mutableStateOf(bankAccounts.firstOrNull { it.id == sub.bankAccountId } ?: bankAccounts.firstOrNull())
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Pay Subscription: ${sub.name}") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Select the account or wallet used to pay ${CurrencyFormatter.format(sub.amount)}:")
+        if (bankAccounts.isNotEmpty()) {
+          LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(bankAccounts, key = { it.id }) { account ->
+              FilterChip(
+                selected = selectedBank?.id == account.id,
+                onClick = { selectedBank = account },
+                label = { Text(account.bankName, fontSize = 11.sp) }
+              )
+            }
+          }
+        } else {
+          Text(
+            "No accounts are available. The payment will be recorded without an account.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = { onConfirm(selectedBank) },
+        enabled = bankAccounts.isEmpty() || selectedBank != null
+      ) {
+        Text("Confirm Payment")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
+}
+
+@Composable
 private fun SubscriptionsSection(
   subscriptions: List<SubscriptionRecord>,
   onAddSubscriptionClick: () -> Unit,
@@ -4040,8 +4226,8 @@ private fun SubscriptionsSection(
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
-    verticalArrangement = Arrangement.spacedBy(14.dp)
+    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 88.dp),
+    verticalArrangement = Arrangement.spacedBy(12.dp)
   ) {
     item(key = "subscriptions_header") {
       Card(

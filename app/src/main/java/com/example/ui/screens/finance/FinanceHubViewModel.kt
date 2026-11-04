@@ -391,6 +391,36 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
+  fun updateExpense(
+    expense: ExpenseRecord,
+    title: String,
+    amount: Double,
+    category: String
+  ) {
+    val cleanTitle = title.trim()
+    if (cleanTitle.isBlank() || !amount.isFinite() || amount <= 0.0 || category.isBlank()) {
+      showToast("Enter a title, valid amount, and category.")
+      return
+    }
+
+    viewModelScope.launch {
+      try {
+        dao.insertExpense(
+          expense.copy(
+            title = cleanTitle,
+            amount = amount,
+            categoryName = category
+          )
+        )
+        _uiState.update { it.copy(toastMessage = "Transaction updated") }
+      } catch (error: Exception) {
+        _uiState.update {
+          it.copy(toastMessage = "Could not update transaction: ${error.localizedMessage ?: "Unknown error"}")
+        }
+      }
+    }
+  }
+
   // --- Bank Account Actions ---
   fun addBankAccount(
     bankName: String,
@@ -544,24 +574,48 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
-  fun markSubscriptionPaid(sub: SubscriptionRecord) {
+  fun markSubscriptionPaid(sub: SubscriptionRecord, bankAccount: BankAccount?) {
     viewModelScope.launch {
-      val paidAt = System.currentTimeMillis()
-      dao.insertExpense(
-        ExpenseRecord(
-          title = "${sub.name} Bill",
-          amount = sub.amount,
-          categoryName = sub.categoryName,
-          type = "EXPENSE",
-          bankAccountId = sub.bankAccountId,
-          bankAccountName = sub.bankAccountName,
-          dateTimestamp = paidAt,
-          notes = "Auto-logged from recurring subscription"
-        )
-      )
-      dao.insertSubscription(sub.copy(lastPaidTimestamp = paidAt))
-      _uiState.update { it.copy(toastMessage = "Paid ₹${sub.amount.toLong()} for ${sub.name} & recorded in ledger!") }
+      try {
+        val paidAt = System.currentTimeMillis()
+        val accountId = bankAccount?.id
+        val accountName = bankAccount?.bankName.orEmpty()
+        database.withTransaction {
+          dao.insertExpense(
+            ExpenseRecord(
+              title = "${sub.name} Bill",
+              amount = sub.amount,
+              categoryName = sub.categoryName,
+              type = "EXPENSE",
+              bankAccountId = accountId,
+              bankAccountName = accountName,
+              dateTimestamp = paidAt,
+              notes = "Auto-logged from recurring subscription"
+            )
+          )
+          dao.insertSubscription(
+            sub.copy(
+              bankAccountId = accountId,
+              bankAccountName = accountName,
+              lastPaidTimestamp = paidAt
+            )
+          )
+        }
+        _uiState.update {
+          it.copy(toastMessage = "Paid ₹${sub.amount.toLong()} for ${sub.name} & recorded in ledger!")
+        }
+      } catch (error: Exception) {
+        _uiState.update {
+          it.copy(toastMessage = "Could not record subscription payment: ${error.localizedMessage ?: "Unknown error"}")
+        }
+      }
     }
+  }
+
+  fun markSubscriptionPaid(sub: SubscriptionRecord) {
+    val account = bankAccounts.value.firstOrNull { it.id == sub.bankAccountId }
+      ?: bankAccounts.value.firstOrNull()
+    markSubscriptionPaid(sub, account)
   }
 
   // --- Trip Category Caps Actions ---
