@@ -78,7 +78,7 @@ fun AppInfoModalDialog(
                 "No app is available to open this link."
               )
             }) {
-              Text("Instagram: @mahes.yarramala")
+              Text("Instagram: @mahesh.yarramala")
             }
           }
 
