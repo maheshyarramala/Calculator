@@ -58,6 +58,8 @@ import com.example.ui.screens.utility.UtilityScreen
 import com.example.ui.screens.utility.UtilityTab
 import com.example.ui.screens.utility.UtilityViewModel
 import com.example.ui.screens.home.HomeScreen
+import com.example.ui.components.AppInfoModalDialog
+import com.example.ui.components.AppInfoType
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyRow
@@ -111,6 +113,8 @@ fun MainScreen(
   var showFavoritesSheet by rememberSaveable { mutableStateOf(false) }
   var showHubSheet by rememberSaveable { mutableStateOf(false) }
   var showThemeSheet by rememberSaveable { mutableStateOf(false) }
+  var menuExpanded by remember { mutableStateOf(false) }
+  var showAppInfoDialog by remember { mutableStateOf<AppInfoType?>(null) }
   var isPrivacyMode by remember { mutableStateOf(CurrencyFormatter.isPrivacyModeEnabled) }
   val saveableStateHolder = rememberSaveableStateHolder()
 
@@ -124,6 +128,13 @@ fun MainScreen(
   val historyViewModel: HistoryViewModel = viewModel()
 
   val haptic = LocalHapticFeedback.current
+
+  showAppInfoDialog?.let { info ->
+    AppInfoModalDialog(
+      type = info,
+      onDismiss = { showAppInfoDialog = null }
+    )
+  }
 
   // BackHandler: return to the first bottom tab from secondary destinations.
   BackHandler(enabled = currentDestination != MainDestination.FINANCE) {
@@ -256,15 +267,70 @@ fun MainScreen(
           }
         },
         actions = {
-          // Favorites Button (Dedicated section)
-          FilledTonalIconButton(
-            onClick = {
-              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-              showFavoritesSheet = true
-            },
-            modifier = Modifier.testTag("favorites_top_button")
-          ) {
-            Icon(Icons.Default.Star, contentDescription = "Favorites and Pinned")
+          Box {
+            IconButton(
+              onClick = {
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+                menuExpanded = true
+              },
+              modifier = Modifier.testTag("top_overflow_menu_button")
+            ) {
+              Icon(Icons.Default.MoreVert, contentDescription = "More options")
+            }
+            DropdownMenu(
+              expanded = menuExpanded,
+              onDismissRequest = { menuExpanded = false }
+            ) {
+              DropdownMenuItem(
+                text = { Text("Favorites") },
+                onClick = {
+                  menuExpanded = false
+                  showFavoritesSheet = true
+                }
+              )
+              DropdownMenuItem(
+                text = { Text("About") },
+                onClick = {
+                  menuExpanded = false
+                  showAppInfoDialog = AppInfoType.ABOUT
+                }
+              )
+              DropdownMenuItem(
+                text = { Text("Terms & Conditions") },
+                onClick = {
+                  menuExpanded = false
+                  showAppInfoDialog = AppInfoType.TERMS
+                }
+              )
+              DropdownMenuItem(
+                text = { Text("Privacy Policy") },
+                onClick = {
+                  menuExpanded = false
+                  showAppInfoDialog = AppInfoType.PRIVACY
+                }
+              )
+              DropdownMenuItem(
+                text = { Text("Feedback") },
+                onClick = {
+                  menuExpanded = false
+                  showAppInfoDialog = AppInfoType.CONTACT
+                }
+              )
+              DropdownMenuItem(
+                text = { Text("Contact Us") },
+                onClick = {
+                  menuExpanded = false
+                  showAppInfoDialog = AppInfoType.CONTACT
+                }
+              )
+              DropdownMenuItem(
+                text = { Text("Donate") },
+                onClick = {
+                  menuExpanded = false
+                  showAppInfoDialog = AppInfoType.DONATE
+                }
+              )
+            }
           }
 
           // History Button (Dedicated section)
