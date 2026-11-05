@@ -25,8 +25,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 object CreditCardBillNotificationScheduler {
   private const val CHANNEL_ID = "credit_card_bill_due"
@@ -238,7 +236,7 @@ object CreditCardBillNotificationScheduler {
     val alarmManager = context.getSystemService(AlarmManager::class.java)
 
     // Schedule a reminder the day before and on the recurring due date.
-    val dueDay = parseLoanDueDay(loan.startDate)
+    val dueDay = loan.dueDayOfMonth.coerceIn(1, 31)
     val now = System.currentTimeMillis()
     val monthStart = LocalDate.now().withDayOfMonth(1)
     val nextReminder = (0L..2L)
@@ -274,18 +272,6 @@ object CreditCardBillNotificationScheduler {
       )
       alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
     }
-  }
-
-  private fun parseLoanDueDay(startDate: String): Int {
-    val formatters = listOf(
-      DateTimeFormatter.ISO_LOCAL_DATE,
-      DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.getDefault()),
-      DateTimeFormatter.ofPattern("dd/MM/uuuu", Locale.getDefault()),
-      DateTimeFormatter.ofPattern("dd-MM-uuuu", Locale.getDefault())
-    )
-    return formatters.firstNotNullOfOrNull { formatter ->
-      runCatching { LocalDate.parse(startDate, formatter).dayOfMonth }.getOrNull()
-    } ?: 1
   }
 
   fun cancelLoan(context: Context, loanId: Long) {

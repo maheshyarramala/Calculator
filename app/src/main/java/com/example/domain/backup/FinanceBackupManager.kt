@@ -144,6 +144,7 @@ object FinanceBackupManager {
       obj.put("emiAmount", loan.emiAmount)
       obj.put("startDate", loan.startDate)
       obj.put("paidEmisCount", loan.paidEmisCount)
+      obj.put("dueDayOfMonth", loan.dueDayOfMonth)
       obj.put("notes", loan.notes)
       if (loan.bankAccountId != null) obj.put("bankAccountId", loan.bankAccountId)
       obj.put("bankAccountName", loan.bankAccountName)
@@ -337,6 +338,7 @@ object FinanceBackupManager {
                 emiAmount = obj.optDouble("emiAmount", 0.0),
                 startDate = obj.optString("startDate", ""),
                 paidEmisCount = obj.optInt("paidEmisCount", 0),
+                dueDayOfMonth = obj.optInt("dueDayOfMonth", 1).coerceIn(1, 31),
                 notes = obj.optString("notes", ""),
                 bankAccountId = bId,
                 bankAccountName = obj.optString("bankAccountName", "")

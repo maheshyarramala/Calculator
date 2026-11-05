@@ -119,7 +119,8 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
     paidEmis: Int = 0,
     notes: String = "",
     bankAccountId: Long? = null,
-    bankAccountName: String = ""
+    bankAccountName: String = "",
+    dueDayOfMonth: Int = 1
   ) {
     viewModelScope.launch {
       val calculatedEmi = customEmi ?: LoanRecord.calculateEmi(principal, annualRate, tenureMonths)
@@ -134,7 +135,8 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
         paidEmisCount = paidEmis.coerceIn(0, tenureMonths),
         notes = notes.trim(),
         bankAccountId = bankAccountId,
-        bankAccountName = bankAccountName
+        bankAccountName = bankAccountName,
+        dueDayOfMonth = dueDayOfMonth.coerceIn(1, 31)
       )
       val insertedId = loanDao.insertLoan(newLoan)
       val createdLoan = newLoan.copy(id = insertedId)

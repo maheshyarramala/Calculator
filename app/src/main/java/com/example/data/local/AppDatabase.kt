@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
     LoanRecord::class,
     DebtRecord::class
   ],
-  version = 8,
+  version = 9,
   exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -101,6 +101,11 @@ abstract class AppDatabase : RoomDatabase() {
         db.execSQL("ALTER TABLE expenses ADD COLUMN debtId INTEGER DEFAULT NULL")
       }
     }
+    private val MIGRATION_8_9 = object : Migration(8, 9) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE loans ADD COLUMN dueDayOfMonth INTEGER NOT NULL DEFAULT 1")
+      }
+    }
 
     @Volatile
     private var INSTANCE: AppDatabase? = null
@@ -116,6 +121,7 @@ abstract class AppDatabase : RoomDatabase() {
           .addMigrations(MIGRATION_5_6)
           .addMigrations(MIGRATION_6_7)
           .addMigrations(MIGRATION_7_8)
+          .addMigrations(MIGRATION_8_9)
           .fallbackToDestructiveMigration(true)
           .addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {

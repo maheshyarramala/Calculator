@@ -1,6 +1,7 @@
 package com.example.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 import kotlin.math.pow
 
@@ -18,7 +19,9 @@ data class LoanRecord(
   val paidEmisCount: Int = 0,
   val notes: String = "",
   val bankAccountId: Long? = null,
-  val bankAccountName: String = ""
+  val bankAccountName: String = "",
+  @ColumnInfo(defaultValue = "1")
+  val dueDayOfMonth: Int = 1
 ) {
   val remainingEmisCount: Int
     get() = maxOf(0, tenureMonths - paidEmisCount)

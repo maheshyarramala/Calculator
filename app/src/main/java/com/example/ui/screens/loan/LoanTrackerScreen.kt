@@ -193,7 +193,7 @@ fun LoanTrackerScreen(
     AddLoanDialog(
       bankAccounts = state.bankAccounts,
       onDismiss = { viewModel.setShowAddLoanDialog(false) },
-      onConfirm = { name, category, principal, rate, tenure, customEmi, startDate, paidCount, notes, bankId, bankName ->
+      onConfirm = { name, category, principal, rate, tenure, customEmi, startDate, paidCount, notes, bankId, bankName, dueDayOfMonth ->
         viewModel.addLoan(
           name = name,
           category = category,
@@ -205,7 +205,8 @@ fun LoanTrackerScreen(
           paidEmis = paidCount,
           notes = notes,
           bankAccountId = bankId,
-          bankAccountName = bankName
+          bankAccountName = bankName,
+          dueDayOfMonth = dueDayOfMonth
         )
       }
     )
@@ -589,6 +590,21 @@ private fun LoanItemCard(
               ) {
                 Text(
                   text = "${loan.annualInterestRate}% p.a.",
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.Medium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                  maxLines = 1,
+                  softWrap = false
+                )
+              }
+
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+              ) {
+                Text(
+                  text = "Due day ${loan.dueDayOfMonth}",
                   fontSize = 10.sp,
                   fontWeight = FontWeight.Medium,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1037,7 +1053,8 @@ private fun AddLoanDialog(
     paidCount: Int,
     notes: String,
     bankId: Long?,
-    bankName: String
+    bankName: String,
+    dueDayOfMonth: Int
   ) -> Unit
 ) {
   var loanName by rememberSaveable { mutableStateOf("") }
@@ -1046,12 +1063,14 @@ private fun AddLoanDialog(
   var interestRateText by rememberSaveable { mutableStateOf("10.5") }
   var tenureMonthsText by rememberSaveable { mutableStateOf("36") }
   var initialPaidEmisText by rememberSaveable { mutableStateOf("0") }
+  var dueDayOfMonthText by rememberSaveable { mutableStateOf("1") }
   var notes by rememberSaveable { mutableStateOf("") }
   var selectedBankId by rememberSaveable { mutableStateOf<Long?>(bankAccounts.firstOrNull()?.account?.id) }
 
   val principalVal = principalText.toDoubleOrNull() ?: 0.0
   val rateVal = interestRateText.toDoubleOrNull() ?: 0.0
   val tenureVal = tenureMonthsText.toIntOrNull() ?: 0
+  val dueDayOfMonth = dueDayOfMonthText.toIntOrNull()?.takeIf { it in 1..31 }
 
   val calculatedEmi = remember(principalVal, rateVal, tenureVal) {
     LoanRecord.calculateEmi(principalVal, rateVal, tenureVal)
@@ -1066,6 +1085,8 @@ private fun AddLoanDialog(
       Column(
         modifier = Modifier
           .fillMaxWidth()
+          .heightIn(max = 480.dp)
+          .verticalScroll(rememberScrollState())
           .padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
       ) {
@@ -1186,6 +1207,24 @@ private fun AddLoanDialog(
         )
 
         OutlinedTextField(
+          value = dueDayOfMonthText,
+          onValueChange = {
+            if (it.length <= 2 && it.all { char -> char.isDigit() }) dueDayOfMonthText = it
+          },
+          label = { Text("EMI Due Date (Day of Month, 1-31)") },
+          placeholder = { Text("e.g. 5 or 10") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+          modifier = Modifier.fillMaxWidth(),
+          singleLine = true,
+          isError = dueDayOfMonth == null,
+          supportingText = if (dueDayOfMonth == null) {
+            { Text("Enter a day from 1 to 31") }
+          } else {
+            null
+          }
+        )
+
+        OutlinedTextField(
           value = notes,
           onValueChange = { notes = it },
           label = { Text("Notes (Account No, Lender name, etc.)") },
@@ -1209,11 +1248,12 @@ private fun AddLoanDialog(
               initialPaidEmisText.toIntOrNull() ?: 0,
               notes,
               selectedBankId,
-              selectedAccount?.account?.bankName ?: ""
+              selectedAccount?.account?.bankName ?: "",
+              dueDayOfMonth ?: return@Button
             )
           }
         },
-        enabled = loanName.isNotBlank() && principalVal > 0 && tenureVal > 0
+        enabled = loanName.isNotBlank() && principalVal > 0 && tenureVal > 0 && dueDayOfMonth != null
       ) {
         Text("Save Loan")
       }
