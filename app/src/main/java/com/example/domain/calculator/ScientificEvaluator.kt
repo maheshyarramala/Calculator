@@ -157,9 +157,23 @@ object ScientificEvaluator {
           if (arg < 0) throw ArithmeticException("Square root of negative number")
           sqrt(arg)
         }
-        "sin" -> sin(if (isRadians) arg else Math.toRadians(arg))
-        "cos" -> cos(if (isRadians) arg else Math.toRadians(arg))
-        "tan" -> tan(if (isRadians) arg else Math.toRadians(arg))
+        "sin" -> {
+          val rad = if (isRadians) arg else Math.toRadians(arg)
+          val s = sin(rad)
+          if (abs(s) < 1e-15) 0.0 else s
+        }
+        "cos" -> {
+          val rad = if (isRadians) arg else Math.toRadians(arg)
+          val c = cos(rad)
+          if (abs(c) < 1e-15) 0.0 else c
+        }
+        "tan" -> {
+          val rad = if (isRadians) arg else Math.toRadians(arg)
+          val c = cos(rad)
+          if (abs(c) < 1e-15) throw ArithmeticException("Tangent is undefined")
+          val t = tan(rad)
+          if (abs(t) < 1e-15) 0.0 else t
+        }
         "log" -> {
           if (arg <= 0) throw ArithmeticException("Log of non-positive number")
           log10(arg)

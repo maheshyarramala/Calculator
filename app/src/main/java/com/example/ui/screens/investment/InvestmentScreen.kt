@@ -1,6 +1,7 @@
 package com.example.ui.screens.investment
 import com.example.ui.theme.performConfiguredHapticFeedback
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -432,11 +433,28 @@ fun InvestmentScreen(
       if (state.selectedTab == InvestmentTab.TRADE) {
         item {
           val isProfit = tradeResult.netPnl >= 0.0
+          val profitGreen = Color(0xFF10B981)
+          val lossRed = Color(0xFFEF4444)
           Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
-              containerColor = if (!isTradeInputValid) MaterialTheme.colorScheme.surfaceVariant
-                else if (isProfit) Color(0xFFECFDF5) else Color(0xFFFEF2F2)
+              containerColor = if (!isTradeInputValid) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+              } else if (isProfit) {
+                profitGreen.copy(alpha = 0.1f)
+              } else {
+                lossRed.copy(alpha = 0.1f)
+              }
+            ),
+            border = BorderStroke(
+              1.dp,
+              if (!isTradeInputValid) {
+                MaterialTheme.colorScheme.outlineVariant
+              } else if (isProfit) {
+                profitGreen.copy(alpha = 0.35f)
+              } else {
+                lossRed.copy(alpha = 0.35f)
+              }
             ),
             modifier = Modifier.fillMaxWidth()
           ) {
@@ -446,7 +464,7 @@ fun InvestmentScreen(
                   else if (isProfit) "ESTIMATED NET PROFIT" else "ESTIMATED NET LOSS",
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                 color = if (!isTradeInputValid) MaterialTheme.colorScheme.onSurfaceVariant
-                  else if (isProfit) Color(0xFF065F46) else Color(0xFF991B1B)
+                  else if (isProfit) profitGreen else lossRed
               )
               if (isTradeInputValid) {
                 Text(
@@ -455,11 +473,11 @@ fun InvestmentScreen(
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 32.sp
                   ),
-                  color = if (isProfit) Color(0xFF059669) else Color(0xFFDC2626)
+                  color = if (isProfit) profitGreen else lossRed
                 )
               }
               Spacer(modifier = Modifier.height(14.dp))
-              HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+              HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
               Spacer(modifier = Modifier.height(14.dp))
 
               if (isTradeInputValid) {

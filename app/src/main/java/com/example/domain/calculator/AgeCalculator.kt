@@ -47,10 +47,10 @@ object AgeCalculator {
 
     val bornDayOfWeek = birthDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
 
-    // Next Birthday calculation
-    var nextBirthday = birthDate.withYear(targetDate.year)
+    // Next Birthday calculation (safely handling Feb 29 for non-leap years)
+    var nextBirthday = safeWithYear(birthDate, targetDate.year)
     if (nextBirthday.isBefore(targetDate) || nextBirthday.isEqual(targetDate)) {
-      nextBirthday = birthDate.withYear(targetDate.year + 1)
+      nextBirthday = safeWithYear(birthDate, targetDate.year + 1)
     }
 
     val daysToNextBirthday = ChronoUnit.DAYS.between(targetDate, nextBirthday)
@@ -61,7 +61,7 @@ object AgeCalculator {
     val upcoming = mutableListOf<UpcomingBirthday>()
     for (i in 0 until 5) {
       val targetYr = nextBirthday.year + i
-      val bday = birthDate.withYear(targetYr)
+      val bday = safeWithYear(birthDate, targetYr)
       val dayName = bday.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
       val turningAge = targetYr - birthDate.year
       upcoming.add(UpcomingBirthday(targetYr, bday, dayName, turningAge))
@@ -86,5 +86,13 @@ object AgeCalculator {
       nextBirthdayDayOfWeek = nextBdayDayOfWeek,
       upcomingBirthdays = upcoming
     )
+  }
+
+  private fun safeWithYear(date: LocalDate, year: Int): LocalDate {
+    return if (date.monthValue == 2 && date.dayOfMonth == 29 && !java.time.Year.isLeap(year.toLong())) {
+      LocalDate.of(year, 2, 28)
+    } else {
+      date.withYear(year)
+    }
   }
 }

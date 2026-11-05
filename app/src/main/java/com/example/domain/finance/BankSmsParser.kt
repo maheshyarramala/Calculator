@@ -20,8 +20,18 @@ object BankSmsParser {
     Pattern.CASE_INSENSITIVE
   )
 
-  private val vpaOrMerchantPattern = Pattern.compile(
-    """(?:to|at|towards|from|info:?|vpa)\s+([A-Za-z0-9._@-]+(?:\s+[A-Za-z0-9._-]+)?)""",
+  private val expenseMerchantPattern = Pattern.compile(
+    """(?:to|at|towards|info:?|vpa)\s+(?!a/c|acct|account|bank)([A-Za-z0-9._@-]+(?:\s+[A-Za-z0-9._-]+)?)""",
+    Pattern.CASE_INSENSITIVE
+  )
+
+  private val incomeSenderPattern = Pattern.compile(
+    """(?:from)\s+(?!a/c|acct|account|bank)([A-Za-z0-9._@-]+(?:\s+[A-Za-z0-9._-]+)?)""",
+    Pattern.CASE_INSENSITIVE
+  )
+
+  private val fallbackMerchantPattern = Pattern.compile(
+    """(?:to|at|towards|from|info:?|vpa)\s+(?!a/c|acct|account|bank)([A-Za-z0-9._@-]+(?:\s+[A-Za-z0-9._-]+)?)""",
     Pattern.CASE_INSENSITIVE
   )
 
@@ -45,9 +55,16 @@ object BankSmsParser {
       !lower.contains("debited")
 
     var merchant = "UPI / Bank Txn"
-    val vpaMatcher = vpaOrMerchantPattern.matcher(clean)
-    if (vpaMatcher.find()) {
-      val rawMerchant = vpaMatcher.group(1)?.trim().orEmpty()
+    val merchantMatcher = if (isIncome) {
+      val incMatcher = incomeSenderPattern.matcher(clean)
+      if (incMatcher.find()) incMatcher else fallbackMerchantPattern.matcher(clean)
+    } else {
+      val expMatcher = expenseMerchantPattern.matcher(clean)
+      if (expMatcher.find()) expMatcher else fallbackMerchantPattern.matcher(clean)
+    }
+
+    if (merchantMatcher.find() || merchantMatcher.reset().find()) {
+      val rawMerchant = merchantMatcher.group(1)?.trim().orEmpty()
       merchant = rawMerchant
         .substringBefore("@")
         .replace(Regex("[^A-Za-z0-9 ]"), " ")

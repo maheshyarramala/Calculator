@@ -130,6 +130,35 @@ object InvestmentCalculators {
     val dpCharge = if (isIntraday) 0.0 else dpChargeOnDeliverySell
     val totalCharges = brokerage + stt + exchangeTxnCharge + sebiCharge + stampDuty + gst + dpCharge
 
+    // Calculate exact breakeven price where Net PnL is 0 after factoring in sell-side charges
+    var low = buyPrice
+    var high = buyPrice * 2.0
+    var exactBreakeven = buyPrice + totalCharges / quantity
+    for (step in 0 until 24) {
+      val mid = (low + high) / 2.0
+      val testSellTurnover = mid * quantity
+      val testGross = testSellTurnover - buyTurnover
+      val testB = if (isIntraday) {
+        (buyTurnover * 0.0003).coerceAtMost(brokerageFlatOrMax) +
+          (testSellTurnover * 0.0003).coerceAtMost(brokerageFlatOrMax)
+      } else 0.0
+      val testTurnover = buyTurnover + testSellTurnover
+      val testStt = if (isIntraday) testSellTurnover * 0.00025 else testTurnover * 0.001
+      val testEx = testTurnover * 0.0000297
+      val testSebi = testTurnover * 0.000001
+      val testStamp = if (isIntraday) buyTurnover * 0.00003 else buyTurnover * 0.00015
+      val testGst = (testB + testEx + testSebi) * 0.18
+      val testDp = if (isIntraday) 0.0 else dpChargeOnDeliverySell
+      val testCharges = testB + testStt + testEx + testSebi + testStamp + testGst + testDp
+      val net = testGross - testCharges
+      if (net >= 0.0) {
+        exactBreakeven = mid
+        high = mid
+      } else {
+        low = mid
+      }
+    }
+
     return TradeChargeBreakdown(
       grossPnl = grossPnl,
       brokerage = brokerage,
@@ -141,7 +170,7 @@ object InvestmentCalculators {
       dpCharge = dpCharge,
       totalCharges = totalCharges,
       netPnl = grossPnl - totalCharges,
-      breakevenPerShare = buyPrice + totalCharges / quantity
+      breakevenPerShare = exactBreakeven
     )
   }
 

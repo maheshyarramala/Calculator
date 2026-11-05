@@ -69,6 +69,7 @@ import java.time.format.ResolverStyle
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import com.example.ui.components.CreditCardBillReminderDialog
 import com.example.ui.components.CurrencyFormatter
 import com.example.ui.components.NumberInputField
 import android.net.Uri
@@ -113,6 +114,8 @@ fun FinanceHubScreen(
   var editingExpense by remember { mutableStateOf<ExpenseRecord?>(null) }
   var subscriptionPendingPayment by remember { mutableStateOf<SubscriptionRecord?>(null) }
   var showTransferDialog by remember { mutableStateOf(false) }
+  var showCreditCardReminderDialog by remember { mutableStateOf(false) }
+  var editingCreditCardAccountId by remember { mutableStateOf<Long?>(null) }
 
   LaunchedEffect(uiState.toastMessage) {
     uiState.toastMessage?.let { msg ->
@@ -279,9 +282,11 @@ fun FinanceHubScreen(
       .firstOrNull { it.account.id == account.id }
       ?.currentBalance
       ?: account.openingBalance
+    val cardReminder = creditCardBillReminders.firstOrNull { it.accountId == account.id }
     AccountDetailsDialog(
       account = account,
       currentBalance = currentBalance,
+      billReminder = cardReminder,
       onDismiss = { accountForDetails = null },
       onDelete = {
         accountForDetails = null
@@ -290,6 +295,39 @@ fun FinanceHubScreen(
       onShowTransactions = {
         viewModel.setSelectedAccountFilter(account.id)
         accountForDetails = null
+      },
+      onSetBillReminder = {
+        val targetId = account.id
+        accountForDetails = null
+        editingCreditCardAccountId = targetId
+        showCreditCardReminderDialog = true
+      },
+      onMarkBillPaid = cardReminder?.let { rem ->
+        {
+          viewModel.markCreditCardBillPaid(rem)
+          accountForDetails = null
+        }
+      }
+    )
+  }
+
+  if (showCreditCardReminderDialog) {
+    val cardAccounts = remember(bankAccounts) {
+      bankAccounts.filter { it.accountType.equals("Credit Card", ignoreCase = true) }
+    }
+    CreditCardBillReminderDialog(
+      cardAccounts = cardAccounts,
+      reminders = creditCardBillReminders,
+      editingAccountId = editingCreditCardAccountId,
+      onDismiss = {
+        showCreditCardReminderDialog = false
+        editingCreditCardAccountId = null
+      },
+      onSave = { reminder ->
+        val accName = cardAccounts.firstOrNull { it.id == reminder.accountId }?.bankName ?: "Credit Card"
+        viewModel.saveCreditCardBillReminder(reminder, accName)
+        showCreditCardReminderDialog = false
+        editingCreditCardAccountId = null
       }
     )
   }
@@ -533,7 +571,14 @@ fun FinanceHubScreen(
               }
             }
           },
-          onEditExpense = { editingExpense = it }
+          onEditExpense = { editingExpense = it },
+          onSetCreditCardBill = { accountId ->
+            editingCreditCardAccountId = accountId
+            showCreditCardReminderDialog = true
+          },
+          onMarkCreditCardBillPaid = { reminder ->
+            viewModel.markCreditCardBillPaid(reminder)
+          }
         )
         FinanceTab.SUBSCRIPTIONS -> SubscriptionsSection(
           subscriptions = subscriptions,
@@ -576,29 +621,178 @@ fun FinanceHubScreen(
 private fun AccountDetailsDialog(
   account: BankAccount,
   currentBalance: Double,
+  billReminder: CreditCardBillReminder? = null,
   onDismiss: () -> Unit,
   onDelete: () -> Unit,
-  onShowTransactions: () -> Unit
+  onShowTransactions: () -> Unit,
+  onSetBillReminder: (() -> Unit)? = null,
+  onMarkBillPaid: (() -> Unit)? = null
 ) {
+  val isCreditCard = account.accountType.equals("Credit Card", ignoreCase = true)
+  val todayEpochDay = LocalDate.now().toEpochDay()
+  val isBillPaid = billReminder?.paidDateEpochDay?.let { it >= 0L } == true
+  val daysUntilDue = billReminder?.let { (it.dueDateEpochDay - todayEpochDay).toInt() }
+
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text(account.bankName) },
+    title = {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        Icon(
+          if (isCreditCard) Icons.Default.CreditCard else Icons.Default.AccountBalance,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.size(24.dp)
+        )
+        Text(account.bankName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      }
+    },
     text = {
-      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(account.accountType, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Surface(
+          shape = RoundedCornerShape(6.dp),
+          color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        ) {
+          Text(
+            account.accountType,
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+          )
+        }
+
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text("Opening balance")
+          Text("Opening balance", color = MaterialTheme.colorScheme.onSurfaceVariant)
           Text(CurrencyFormatter.formatWhole(account.openingBalance), fontWeight = FontWeight.SemiBold)
         }
+
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text("Current balance")
-          Text(CurrencyFormatter.format(currentBalance), fontWeight = FontWeight.Bold)
+          Text(if (isCreditCard) "Outstanding balance" else "Current balance", color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            CurrencyFormatter.format(currentBalance),
+            fontWeight = FontWeight.Bold,
+            color = if (isCreditCard) {
+              if (currentBalance < 0) Color(0xFFEF4444) else Color(0xFF10B981)
+            } else {
+              if (currentBalance >= 0) Color(0xFF10B981) else Color(0xFFEF4444)
+            }
+          )
+        }
+
+        if (isCreditCard) {
+          HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+          Text(
+            "Credit Card Bill Details",
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.primary
+          )
+
+          if (billReminder != null) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Text("Bill Amount", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(CurrencyFormatter.format(billReminder.amount), fontWeight = FontWeight.Bold)
+            }
+
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Text("Due Date", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(
+                LocalDate.ofEpochDay(billReminder.dueDateEpochDay).format(
+                  DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)
+                ),
+                fontWeight = FontWeight.Medium
+              )
+            }
+
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text("Status", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = when {
+                  isBillPaid -> Color(0xFF10B981).copy(alpha = 0.15f)
+                  daysUntilDue != null && daysUntilDue <= 3 -> Color(0xFFEF4444).copy(alpha = 0.15f)
+                  else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                }
+              ) {
+                Text(
+                  text = when {
+                    isBillPaid -> "Paid ✓"
+                    daysUntilDue == 0 -> "Due Today"
+                    daysUntilDue == 1 -> "Due Tomorrow"
+                    daysUntilDue != null && daysUntilDue < 0 -> "${-daysUntilDue} days overdue"
+                    else -> "Due in ${daysUntilDue ?: 0} days"
+                  },
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = when {
+                    isBillPaid -> Color(0xFF10B981)
+                    daysUntilDue != null && daysUntilDue <= 3 -> Color(0xFFEF4444)
+                    else -> MaterialTheme.colorScheme.primary
+                  },
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+              }
+            }
+
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              onSetBillReminder?.let {
+                OutlinedButton(
+                  onClick = it,
+                  modifier = Modifier.weight(1f),
+                  contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                  Text("Update Bill", fontSize = 12.sp, maxLines = 1)
+                }
+              }
+
+              if (!isBillPaid && onMarkBillPaid != null) {
+                Button(
+                  onClick = onMarkBillPaid,
+                  modifier = Modifier.weight(1f),
+                  contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                  Text("Mark Paid", fontSize = 12.sp, maxLines = 1)
+                }
+              }
+            }
+          } else {
+            Text(
+              "No bill reminder set for this card yet.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            onSetBillReminder?.let {
+              OutlinedButton(
+                onClick = it,
+                modifier = Modifier.fillMaxWidth()
+              ) {
+                Icon(Icons.Default.AddAlarm, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Set Bill Amount & Due Date")
+              }
+            }
+          }
         }
       }
     },
@@ -775,7 +969,9 @@ private fun ExpensesSection(
   onAddCategoryClick: () -> Unit,
   onDeleteCategory: (ExpenseCategory) -> Unit,
   onDeleteExpenses: (List<ExpenseRecord>) -> Unit,
-  onEditExpense: (ExpenseRecord) -> Unit
+  onEditExpense: (ExpenseRecord) -> Unit,
+  onSetCreditCardBill: (Long) -> Unit,
+  onMarkCreditCardBillPaid: (CreditCardBillReminder) -> Unit
 ) {
   val haptic = LocalHapticFeedback.current
 
@@ -794,6 +990,9 @@ private fun ExpensesSection(
       .sortedBy { it.lowercase() }
   }
 
+  val creditCardAccounts = remember(accountsWithBalances) {
+    accountsWithBalances.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) }
+  }
   var selectedTransactionType by rememberSaveable { mutableStateOf<String?>(null) }
   var selectedTransactionCategory by rememberSaveable { mutableStateOf<String?>(null) }
   var expensePendingDelete by remember { mutableStateOf<ExpenseRecord?>(null) }
@@ -1202,24 +1401,43 @@ private fun ExpensesSection(
                 Spacer(modifier = Modifier.height(8.dp))
                 Surface(
                   shape = RoundedCornerShape(10.dp),
-                  color = billStatusColor.copy(alpha = 0.1f),
-                  modifier = Modifier.fillMaxWidth()
+                  color = billStatusColor.copy(alpha = 0.12f),
+                  border = BorderStroke(1.dp, billStatusColor.copy(alpha = 0.25f)),
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                      haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                      onSetCreditCardBill(accWithBal.account.id)
+                    }
                 ) {
                   Column(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                   ) {
-                    Text(
-                      "Credit Card Bill",
-                      fontSize = 9.sp,
-                      fontWeight = FontWeight.SemiBold,
-                      color = billStatusColor,
-                      maxLines = 1
-                    )
+                    Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically
+                    ) {
+                      Text(
+                        "Credit Card Bill",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = billStatusColor,
+                        maxLines = 1
+                      )
+                      Icon(
+                        Icons.Default.EditCalendar,
+                        contentDescription = "Edit bill",
+                        modifier = Modifier.size(12.dp),
+                        tint = billStatusColor
+                      )
+                    }
                     if (billReminder == null) {
                       Text(
-                        "Reminder not set",
+                        "+ Set bill & due date",
                         fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
                         color = billStatusColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1232,18 +1450,37 @@ private fun ExpensesSection(
                         color = billStatusColor,
                         maxLines = 1
                       )
-                      Text(
-                        when {
-                          isBillPaid -> "Paid"
-                          daysUntilDue == 0 -> "Due today"
-                          daysUntilDue == 1 -> "Due tomorrow"
-                          daysUntilDue != null && daysUntilDue < 0 -> "${-daysUntilDue} days overdue"
-                          else -> "Due in ${daysUntilDue ?: 0} days"
-                        },
-                        fontSize = 10.sp,
-                        color = billStatusColor,
-                        maxLines = 1
-                      )
+                      Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                      ) {
+                        Text(
+                          when {
+                            isBillPaid -> "Paid ✓"
+                            daysUntilDue == 0 -> "Due today!"
+                            daysUntilDue == 1 -> "Due tomorrow"
+                            daysUntilDue != null && daysUntilDue < 0 -> "${-daysUntilDue}d overdue"
+                            else -> "Due in ${daysUntilDue ?: 0} days"
+                          },
+                          fontSize = 10.sp,
+                          fontWeight = FontWeight.SemiBold,
+                          color = billStatusColor,
+                          maxLines = 1
+                        )
+                        if (!isBillPaid) {
+                          Text(
+                            "Mark Paid",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable {
+                              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+                              onMarkCreditCardBillPaid(billReminder)
+                            }
+                          )
+                        }
+                      }
                     }
                   }
                 }
@@ -1283,6 +1520,182 @@ private fun ExpensesSection(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary
               )
+            }
+          }
+        }
+      }
+    }
+
+    // Dedicated Credit Card Bill & Outstandings Tracker Section
+    if (creditCardAccounts.isNotEmpty()) {
+      item(key = "credit_card_bills_tracker_widget") {
+        Card(
+          shape = RoundedCornerShape(18.dp),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+          elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("credit_card_bills_tracker_widget")
+        ) {
+          Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF6366F1).copy(alpha = 0.15f)),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Icon(
+                    Icons.Default.CreditCard,
+                    contentDescription = null,
+                    tint = Color(0xFF6366F1),
+                    modifier = Modifier.size(18.dp)
+                  )
+                }
+                Column {
+                  Text(
+                    "Credit Card Bills & Alerts",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                  Text(
+                    "${creditCardAccounts.size} active card${if (creditCardAccounts.size > 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+
+              FilledTonalButton(
+                onClick = {
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  onSetCreditCardBill(creditCardAccounts.first().account.id)
+                },
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.defaultMinSize(minHeight = 32.dp)
+              ) {
+                Text("+ Set Bill", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+              }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              creditCardAccounts.forEach { accWithBal ->
+                val rem = creditCardBillReminders.firstOrNull { it.accountId == accWithBal.account.id }
+                val isPaid = rem?.paidDateEpochDay?.let { it >= 0L } == true
+                val daysDue = rem?.let { (it.dueDateEpochDay - LocalDate.now().toEpochDay()).toInt() }
+
+                Card(
+                  shape = RoundedCornerShape(12.dp),
+                  colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                  ),
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenAccountDetails(accWithBal.account) }
+                ) {
+                  Row(
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                        accWithBal.account.bankName,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                      )
+                      Spacer(modifier = Modifier.height(2.dp))
+                      Text(
+                        "Outstanding: ${CurrencyFormatter.format(accWithBal.currentBalance)}",
+                        fontSize = 11.sp,
+                        color = if (accWithBal.currentBalance < 0) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+
+                    Column(horizontalAlignment = Alignment.End) {
+                      if (rem != null) {
+                        Text(
+                          CurrencyFormatter.format(rem.amount),
+                          fontWeight = FontWeight.ExtraBold,
+                          fontSize = 13.sp,
+                          color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Row(
+                          verticalAlignment = Alignment.CenterVertically,
+                          horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                          Text(
+                            when {
+                              isPaid -> "Paid ✓"
+                              daysDue == 0 -> "Due Today"
+                              daysDue == 1 -> "Due Tomorrow"
+                              daysDue != null && daysDue < 0 -> "${-daysDue}d overdue"
+                              else -> "Due in ${daysDue ?: 0}d"
+                            },
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = when {
+                              isPaid -> Color(0xFF10B981)
+                              daysDue != null && daysDue <= 3 -> Color(0xFFEF4444)
+                              else -> MaterialTheme.colorScheme.primary
+                            }
+                          )
+                          IconButton(
+                            onClick = { onSetCreditCardBill(accWithBal.account.id) },
+                            modifier = Modifier.size(22.dp)
+                          ) {
+                            Icon(
+                              Icons.Default.Edit,
+                              contentDescription = "Edit reminder",
+                              modifier = Modifier.size(13.dp),
+                              tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                          }
+                          if (!isPaid) {
+                            FilledTonalButton(
+                              onClick = {
+                                haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+                                onMarkCreditCardBillPaid(rem)
+                              },
+                              shape = RoundedCornerShape(6.dp),
+                              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                              modifier = Modifier.defaultMinSize(minHeight = 24.dp)
+                            ) {
+                              Text("Pay", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                          }
+                        }
+                      } else {
+                        OutlinedButton(
+                          onClick = { onSetCreditCardBill(accWithBal.account.id) },
+                          shape = RoundedCornerShape(8.dp),
+                          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 3.dp),
+                          modifier = Modifier.defaultMinSize(minHeight = 28.dp)
+                        ) {
+                          Text("+ Set Bill", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         }

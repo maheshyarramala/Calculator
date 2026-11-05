@@ -181,7 +181,7 @@ class ExampleRobolectricTest {
 
   @Test
   fun `theme and haptic preferences persist across initialization`() {
-    val context = RuntimeEnvironment.getApplication<android.app.Application>()
+    val context = RuntimeEnvironment.getApplication()
     ThemeManager.initialize(context)
 
     try {
