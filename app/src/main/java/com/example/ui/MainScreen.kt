@@ -196,6 +196,11 @@ fun MainScreen(
           financeViewModel.selectTab(FinanceTab.EXPENSES)
           showHubSheet = false
         },
+        CalculatorHubItem("Credit Cards", "Cards, limits & bill alerts", Icons.Default.CreditCard, Color(0xFF6366F1)) {
+          currentDestination = MainDestination.FINANCE
+          financeViewModel.selectTab(FinanceTab.CREDIT_CARDS)
+          showHubSheet = false
+        },
         CalculatorHubItem("Lend & Borrow", "Udhaar & personal debt ledger", Icons.Default.SwapHoriz, Color(0xFF059669)) {
           currentDestination = MainDestination.FINANCE
           financeViewModel.selectTab(FinanceTab.DEBTS)
@@ -465,6 +470,8 @@ private fun AllCalculatorsHubSheet(
   val haptic = LocalHapticFeedback.current
   var searchQuery by rememberSaveable { mutableStateOf("") }
 
+  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
   val filteredItems = remember(items, searchQuery) {
     if (searchQuery.isBlank()) items
     else items.filter {
@@ -475,13 +482,15 @@ private fun AllCalculatorsHubSheet(
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
+    sheetState = sheetState,
+    modifier = Modifier.fillMaxHeight(),
     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
   ) {
     Column(
       modifier = Modifier
-        .fillMaxWidth()
+        .fillMaxSize()
         .padding(horizontal = 20.dp)
-        .padding(bottom = 36.dp)
+        .padding(bottom = 24.dp)
     ) {
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -548,7 +557,9 @@ private fun AllCalculatorsHubSheet(
           columns = GridCells.Fixed(2),
           horizontalArrangement = Arrangement.spacedBy(10.dp),
           verticalArrangement = Arrangement.spacedBy(10.dp),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f)
         ) {
           items(filteredItems) { item ->
             Card(

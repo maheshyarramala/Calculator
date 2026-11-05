@@ -32,6 +32,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 enum class FinanceTab(val title: String) {
   EXPENSES("Expenses & Accounts"),
+  CREDIT_CARDS("Credit Cards"),
   SUBSCRIPTIONS("Recurring & Bills"),
   DEBTS("Lend & Borrow"),
   TRIPS("Trip Manager")
@@ -447,6 +448,40 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
         )
       )
       _uiState.update { it.copy(showAddBankDialog = false, toastMessage = "Account '$bankName' added!") }
+    }
+  }
+
+  fun addCreditCard(
+    bankName: String,
+    currentOutstanding: Double,
+    billAmount: Double?,
+    dueDateEpochDay: Long?,
+    accountNumber: String = "",
+    notes: String = ""
+  ) {
+    if (bankName.isBlank()) return
+    viewModelScope.launch {
+      val accId = dao.insertBankAccount(
+        BankAccount(
+          bankName = bankName.trim(),
+          accountType = "Credit Card",
+          accountNumber = accountNumber.trim(),
+          openingBalance = -kotlin.math.abs(currentOutstanding),
+          balance = -kotlin.math.abs(currentOutstanding),
+          notes = notes.trim()
+        )
+      )
+      if (billAmount != null && billAmount > 0 && dueDateEpochDay != null) {
+        val reminder = CreditCardBillReminder(
+          accountId = accId,
+          amount = billAmount,
+          dueDateEpochDay = dueDateEpochDay,
+          notificationsEnabled = true
+        )
+        dao.insertCreditCardBillReminder(reminder)
+        CreditCardBillNotificationScheduler.schedule(getApplication(), reminder, bankName.trim())
+      }
+      _uiState.update { it.copy(toastMessage = "Credit card '$bankName' added!") }
     }
   }
 

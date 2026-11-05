@@ -177,31 +177,38 @@ private fun SimpleInterestSection(viewModel: InterestCalculatorViewModel) {
           suffix = "%"
         )
 
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          NumberInputField(
-            value = state.siTime,
-            onValueChange = { viewModel.updateSi(time = it) },
-            label = "Time Duration",
-            modifier = Modifier.weight(1.2f)
-          )
+        NumberInputField(
+          value = state.siTime,
+          onValueChange = { viewModel.updateSi(time = it) },
+          label = "Time Duration",
+          modifier = Modifier.fillMaxWidth()
+        )
 
-          Column(modifier = Modifier.weight(1f)) {
-            Text("Unit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-              InterestCalculator.TimeUnit.values().forEach { unit ->
-                FilterChip(
-                  selected = state.siTimeUnit == unit,
-                  onClick = {
-                    haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    viewModel.updateSi(unit = unit)
-                  },
-                  label = { Text(unit.title.take(2), fontSize = 11.sp) }
-                )
-              }
+        Column(modifier = Modifier.fillMaxWidth()) {
+          Text("Time Unit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Spacer(modifier = Modifier.height(4.dp))
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            InterestCalculator.TimeUnit.values().forEach { unit ->
+              FilterChip(
+                selected = state.siTimeUnit == unit,
+                onClick = {
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  viewModel.updateSi(unit = unit)
+                },
+                label = {
+                  Text(
+                    text = unit.title,
+                    fontSize = 12.sp,
+                    fontWeight = if (state.siTimeUnit == unit) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                  )
+                },
+                modifier = Modifier.weight(1f)
+              )
             }
           }
         }

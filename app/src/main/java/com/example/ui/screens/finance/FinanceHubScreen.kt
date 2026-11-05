@@ -62,6 +62,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import java.util.Calendar
 import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -116,6 +119,7 @@ fun FinanceHubScreen(
   var showTransferDialog by remember { mutableStateOf(false) }
   var showCreditCardReminderDialog by remember { mutableStateOf(false) }
   var editingCreditCardAccountId by remember { mutableStateOf<Long?>(null) }
+  var showAddCreditCardDialog by remember { mutableStateOf(false) }
 
   LaunchedEffect(uiState.toastMessage) {
     uiState.toastMessage?.let { msg ->
@@ -262,6 +266,16 @@ fun FinanceHubScreen(
       onDismiss = { viewModel.setShowAddBank(false) },
       onConfirm = { name, type, openingBal, num, ifsc, holder, notes ->
         viewModel.addBankAccount(name, type, openingBal, num, ifsc, holder, notes)
+      }
+    )
+  }
+
+  if (showAddCreditCardDialog) {
+    AddCreditCardDialog(
+      onDismiss = { showAddCreditCardDialog = false },
+      onConfirm = { name, outstanding, bill, dueDate, num, notes ->
+        viewModel.addCreditCard(name, outstanding, bill, dueDate, num, notes)
+        showAddCreditCardDialog = false
       }
     )
   }
@@ -422,6 +436,19 @@ fun FinanceHubScreen(
             Icon(Icons.Default.Add, contentDescription = "Log Expense")
           }
         }
+        FinanceTab.CREDIT_CARDS -> {
+          FloatingActionButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+              showAddCreditCardDialog = true
+            },
+            containerColor = Color(0xFFE11D48),
+            contentColor = Color.White,
+            modifier = Modifier.testTag("add_credit_card_fab")
+          ) {
+            Icon(Icons.Default.AddCard, contentDescription = "Add Credit Card")
+          }
+        }
         FinanceTab.SUBSCRIPTIONS -> {
           FloatingActionButton(
             onClick = {
@@ -504,15 +531,17 @@ fun FinanceHubScreen(
         }
       }
 
-      // Modern Tab Bar (Expenses & Accounts, Subscriptions, Trip Manager)
-      TabRow(
+      // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Trip Manager)
+      ScrollableTabRow(
         selectedTabIndex = uiState.selectedTab.ordinal,
+        edgePadding = 12.dp,
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         modifier = Modifier.fillMaxWidth().testTag("finance_tabs")
       ) {
         FinanceTab.values().forEach { tab ->
           val icon = when (tab) {
             FinanceTab.EXPENSES -> Icons.AutoMirrored.Filled.ReceiptLong
+            FinanceTab.CREDIT_CARDS -> Icons.Default.CreditCard
             FinanceTab.SUBSCRIPTIONS -> Icons.Default.EventRepeat
             FinanceTab.DEBTS -> Icons.Default.SwapHoriz
             FinanceTab.TRIPS -> Icons.Default.FlightTakeoff
@@ -578,6 +607,25 @@ fun FinanceHubScreen(
           },
           onMarkCreditCardBillPaid = { reminder ->
             viewModel.markCreditCardBillPaid(reminder)
+          }
+        )
+        FinanceTab.CREDIT_CARDS -> CreditCardsSection(
+          cardAccounts = accountsWithBalances.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) },
+          reminders = creditCardBillReminders,
+          onAddCardClick = { showAddCreditCardDialog = true },
+          onSetBillReminder = { accountId ->
+            editingCreditCardAccountId = accountId
+            showCreditCardReminderDialog = true
+          },
+          onMarkBillPaid = { reminder ->
+            viewModel.markCreditCardBillPaid(reminder)
+          },
+          onShowTransactions = { accountId ->
+            viewModel.setSelectedAccountFilter(accountId)
+            viewModel.selectTab(FinanceTab.EXPENSES)
+          },
+          onDeleteCard = { account ->
+            accountPendingDelete = account
           }
         )
         FinanceTab.SUBSCRIPTIONS -> SubscriptionsSection(
@@ -3813,6 +3861,7 @@ private fun AddIncomeDialog(
   )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AddAccountDialog(
   onDismiss: () -> Unit,
@@ -3856,15 +3905,16 @@ private fun AddAccountDialog(
         )
 
         Text("Account Type:", style = MaterialTheme.typography.bodySmall)
-        Row(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(6.dp),
           modifier = Modifier.fillMaxWidth()
         ) {
           types.forEach { type ->
             FilterChip(
               selected = accountType == type,
               onClick = { accountType = type },
-              label = { Text(type, fontSize = 11.sp) }
+              label = { Text(type, fontSize = 12.sp) }
             )
           }
         }
@@ -5553,5 +5603,575 @@ private fun parseCategoryCaps(jsonStr: String): Map<String, Double> {
     map
   } catch (e: Exception) {
     emptyMap()
+  }
+}
+
+@Composable
+private fun CreditCardsSection(
+  cardAccounts: List<AccountWithBalance>,
+  reminders: List<CreditCardBillReminder>,
+  onAddCardClick: () -> Unit,
+  onSetBillReminder: (Long) -> Unit,
+  onMarkBillPaid: (CreditCardBillReminder) -> Unit,
+  onShowTransactions: (Long) -> Unit,
+  onDeleteCard: (BankAccount) -> Unit,
+  modifier: Modifier = Modifier
+) {
+  val totalOutstanding = cardAccounts.sumOf { kotlin.math.abs(it.currentBalance) }
+  val todayEpoch = LocalDate.now().toEpochDay()
+  val unpaidReminders = reminders.filter { it.paidDateEpochDay < 0L }
+  val totalUnpaidBills = unpaidReminders.sumOf { it.amount }
+  val nextDueReminder = unpaidReminders.minByOrNull { it.dueDateEpochDay }
+
+  LazyColumn(
+    modifier = modifier.fillMaxSize(),
+    contentPadding = PaddingValues(16.dp),
+    verticalArrangement = Arrangement.spacedBy(16.dp)
+  ) {
+    item {
+      // Header Summary Card
+      Card(
+        modifier = Modifier.fillMaxWidth().testTag("credit_cards_summary_card"),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(18.dp)
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column {
+              Text(
+                "Total Credit Outstanding",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Text(
+                text = CurrencyFormatter.format(totalOutstanding),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (totalOutstanding > 0) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurface
+              )
+            }
+            FilledTonalButton(
+              onClick = onAddCardClick,
+              shape = RoundedCornerShape(12.dp),
+              modifier = Modifier.testTag("add_card_button")
+            ) {
+              Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(Modifier.width(6.dp))
+              Text("Add Card", fontWeight = FontWeight.SemiBold)
+            }
+          }
+
+          Spacer(Modifier.height(14.dp))
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+          Spacer(Modifier.height(14.dp))
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                "Active Cards",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Text(
+                "${cardAccounts.size} Cards",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+              )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                "Pending Bills",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Text(
+                text = CurrencyFormatter.format(totalUnpaidBills),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (totalUnpaidBills > 0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurface
+              )
+            }
+
+            Column(modifier = Modifier.weight(1.2f)) {
+              Text(
+                "Next Due Date",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              val dueText = if (nextDueReminder != null) {
+                val diff = (nextDueReminder.dueDateEpochDay - todayEpoch).toInt()
+                when {
+                  diff < 0 -> "Overdue (${-diff}d ago)"
+                  diff == 0 -> "Due Today!"
+                  else -> "In $diff days (${LocalDate.ofEpochDay(nextDueReminder.dueDateEpochDay).dayOfMonth} ${LocalDate.ofEpochDay(nextDueReminder.dueDateEpochDay).month.name.take(3)})"
+                }
+              } else {
+                "No pending bills"
+              }
+              Text(
+                dueText,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+          }
+        }
+      }
+    }
+
+    if (cardAccounts.isEmpty()) {
+      item {
+        Card(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+          shape = RoundedCornerShape(20.dp),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+          ),
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+        ) {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+          ) {
+            Box(
+              modifier = Modifier
+                .size(64.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                Icons.Default.CreditCard,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(36.dp)
+              )
+            }
+            Text(
+              "No Credit Cards Added",
+              style = MaterialTheme.typography.titleLarge,
+              fontWeight = FontWeight.Bold
+            )
+            Text(
+              "Track your credit cards, outstanding balances, statement due dates, bill payment reminders, and keep your credit score healthy.",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+            Button(
+              onClick = onAddCardClick,
+              shape = RoundedCornerShape(12.dp),
+              modifier = Modifier.testTag("empty_add_card_button")
+            ) {
+              Icon(Icons.Default.Add, contentDescription = null)
+              Spacer(Modifier.width(8.dp))
+              Text("Add Your First Credit Card", fontWeight = FontWeight.SemiBold)
+            }
+          }
+        }
+      }
+    } else {
+      items(cardAccounts, key = { it.account.id }) { accWithBal ->
+        val reminder = reminders.firstOrNull { it.accountId == accWithBal.account.id }
+        val outstanding = kotlin.math.abs(accWithBal.currentBalance)
+        val isPaid = reminder?.paidDateEpochDay?.let { it >= 0L } == true
+
+        Card(
+          modifier = Modifier.fillMaxWidth().testTag("credit_card_${accWithBal.account.id}"),
+          shape = RoundedCornerShape(20.dp),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+          ),
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+          elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+          Column(modifier = Modifier.fillMaxWidth()) {
+            // Top Card Art Header
+            Box(
+              modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                  Brush.horizontalGradient(
+                    colors = listOf(Color(0xFF1E293B), Color(0xFF334155), Color(0xFF1E1B4B))
+                  )
+                )
+                .padding(18.dp)
+            ) {
+              Column {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                      Icons.Default.CreditCard,
+                      contentDescription = null,
+                      tint = Color.White,
+                      modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                      accWithBal.account.bankName,
+                      style = MaterialTheme.typography.titleMedium,
+                      fontWeight = FontWeight.Bold,
+                      color = Color.White
+                    )
+                  }
+                  IconButton(
+                    onClick = { onDeleteCard(accWithBal.account) },
+                    modifier = Modifier.size(32.dp)
+                  ) {
+                    Icon(
+                      Icons.Default.DeleteOutline,
+                      contentDescription = "Delete Card",
+                      tint = Color.White.copy(alpha = 0.7f),
+                      modifier = Modifier.size(18.dp)
+                    )
+                  }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.Bottom
+                ) {
+                  Column {
+                    Text(
+                      "CARD NUMBER",
+                      fontSize = 9.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = Color.White.copy(alpha = 0.6f),
+                      letterSpacing = 1.sp
+                    )
+                    Text(
+                      if (accWithBal.account.accountNumber.isNotBlank())
+                        "•••• •••• •••• " + accWithBal.account.accountNumber.takeLast(4)
+                      else "•••• •••• •••• ••••",
+                      style = MaterialTheme.typography.titleSmall,
+                      fontWeight = FontWeight.Medium,
+                      color = Color.White,
+                      fontFamily = FontFamily.Monospace
+                    )
+                  }
+
+                  Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                      "OUTSTANDING DUES",
+                      fontSize = 9.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = Color.White.copy(alpha = 0.6f),
+                      letterSpacing = 1.sp
+                    )
+                    Text(
+                      CurrencyFormatter.format(outstanding),
+                      style = MaterialTheme.typography.titleLarge,
+                      fontWeight = FontWeight.Bold,
+                      color = if (outstanding > 0) Color(0xFFFDA4AF) else Color(0xFF6EE7B7)
+                    )
+                  }
+                }
+              }
+            }
+
+            // Bill Reminder & Status Section
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+              verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+              if (reminder != null) {
+                val dueDate = LocalDate.ofEpochDay(reminder.dueDateEpochDay)
+                val daysUntilDue = (reminder.dueDateEpochDay - todayEpoch).toInt()
+
+                Surface(
+                  shape = RoundedCornerShape(12.dp),
+                  color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                  border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Row(
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                          "Statement Bill: ",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                          CurrencyFormatter.format(reminder.amount),
+                          style = MaterialTheme.typography.bodyMedium,
+                          fontWeight = FontWeight.Bold
+                        )
+                      }
+                      Spacer(Modifier.height(2.dp))
+                      Text(
+                        "Due Date: ${dueDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault()))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+
+                    // Status Badge
+                    if (isPaid) {
+                      AssistChip(
+                        onClick = { onSetBillReminder(accWithBal.account.id) },
+                        label = { Text("Paid ✓", fontSize = 11.sp, color = Color(0xFF10B981)) },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFF10B981).copy(alpha = 0.15f)),
+                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f))
+                      )
+                    } else if (daysUntilDue < 0) {
+                      AssistChip(
+                        onClick = { onMarkBillPaid(reminder) },
+                        label = { Text("Overdue (${-daysUntilDue}d)", fontSize = 11.sp, color = Color(0xFFEF4444)) },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFFEF4444).copy(alpha = 0.15f)),
+                        border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.4f))
+                      )
+                    } else if (daysUntilDue == 0) {
+                      AssistChip(
+                        onClick = { onMarkBillPaid(reminder) },
+                        label = { Text("Due Today!", fontSize = 11.sp, color = Color(0xFFF97316)) },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFFF97316).copy(alpha = 0.15f)),
+                        border = BorderStroke(1.dp, Color(0xFFF97316).copy(alpha = 0.4f))
+                      )
+                    } else {
+                      AssistChip(
+                        onClick = { onMarkBillPaid(reminder) },
+                        label = { Text("Due in ${daysUntilDue}d", fontSize = 11.sp, color = Color(0xFF3B82F6)) },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFF3B82F6).copy(alpha = 0.15f)),
+                        border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.4f))
+                      )
+                    }
+                  }
+                }
+              }
+
+              // Action Buttons Row
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                OutlinedButton(
+                  onClick = { onShowTransactions(accWithBal.account.id) },
+                  shape = RoundedCornerShape(10.dp),
+                  modifier = Modifier.weight(1f).testTag("card_txns_btn_${accWithBal.account.id}")
+                ) {
+                  Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp))
+                  Spacer(Modifier.width(4.dp))
+                  Text("Transactions", fontSize = 12.sp)
+                }
+
+                if (reminder != null && !isPaid) {
+                  Button(
+                    onClick = { onMarkBillPaid(reminder) },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    modifier = Modifier.weight(1f).testTag("card_pay_bill_btn_${accWithBal.account.id}")
+                  ) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Pay Bill", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                  }
+                } else {
+                  FilledTonalButton(
+                    onClick = { onSetBillReminder(accWithBal.account.id) },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f).testTag("card_set_bill_btn_${accWithBal.account.id}")
+                  ) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (reminder == null) "Set Bill" else "Edit Bill", fontSize = 12.sp)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddCreditCardDialog(
+  onDismiss: () -> Unit,
+  onConfirm: (name: String, outstanding: Double, billAmount: Double?, dueDateEpochDay: Long?, num: String, notes: String) -> Unit
+) {
+  var cardName by remember { mutableStateOf("") }
+  var outstandingStr by remember { mutableStateOf("") }
+  var billAmountStr by remember { mutableStateOf("") }
+  var lastFourDigits by remember { mutableStateOf("") }
+  var notes by remember { mutableStateOf("") }
+
+  val today = LocalDate.now()
+  var selectedDueDateEpochDay by remember { mutableStateOf(today.plusDays(15).toEpochDay()) }
+  var showDatePicker by remember { mutableStateOf(false) }
+
+  val datePickerState = rememberDatePickerState(
+    initialSelectedDateMillis = LocalDate.ofEpochDay(selectedDueDateEpochDay)
+      .atStartOfDay(ZoneOffset.UTC)
+      .toInstant()
+      .toEpochMilli()
+  )
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.CreditCard, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(8.dp))
+        Text("Add Credit Card")
+      }
+    },
+    text = {
+      Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        OutlinedTextField(
+          value = cardName,
+          onValueChange = { cardName = it },
+          label = { Text("Card / Bank Name *") },
+          placeholder = { Text("e.g. HDFC Millennia, SBI SimplyCLICK") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth().testTag("credit_card_name_input")
+        )
+
+        OutlinedTextField(
+          value = outstandingStr,
+          onValueChange = { input ->
+            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) outstandingStr = input
+          },
+          label = { Text("Current Outstanding Dues (₹)") },
+          placeholder = { Text("0.00") },
+          prefix = { Text("₹ ") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth().testTag("credit_card_outstanding_input")
+        )
+
+        OutlinedTextField(
+          value = billAmountStr,
+          onValueChange = { input ->
+            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) billAmountStr = input
+          },
+          label = { Text("Latest Statement Bill (₹) (Optional)") },
+          placeholder = { Text("Leave blank if no bill generated yet") },
+          prefix = { Text("₹ ") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth().testTag("credit_card_bill_amount_input")
+        )
+
+        OutlinedButton(
+          onClick = { showDatePicker = true },
+          modifier = Modifier.fillMaxWidth().testTag("credit_card_due_date_btn")
+        ) {
+          Icon(Icons.Default.Event, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(Modifier.width(8.dp))
+          Text(
+            "Due Date: ${LocalDate.ofEpochDay(selectedDueDateEpochDay).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault()))}"
+          )
+        }
+
+        OutlinedTextField(
+          value = lastFourDigits,
+          onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) lastFourDigits = it },
+          label = { Text("Last 4 Digits of Card (Optional)") },
+          placeholder = { Text("e.g. 4321") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth().testTag("credit_card_digits_input")
+        )
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Benefits / Notes (Optional)") },
+          placeholder = { Text("e.g. 5% cashback on Amazon & Flipkart") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val outstanding = outstandingStr.toDoubleOrNull() ?: 0.0
+          val bill = billAmountStr.toDoubleOrNull()
+          onConfirm(
+            cardName,
+            outstanding,
+            bill,
+            if (bill != null && bill > 0) selectedDueDateEpochDay else null,
+            lastFourDigits,
+            notes
+          )
+        },
+        enabled = cardName.isNotBlank(),
+        modifier = Modifier.testTag("confirm_add_credit_card_button")
+      ) {
+        Text("Add Card")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
+
+  if (showDatePicker) {
+    DatePickerDialog(
+      onDismissRequest = { showDatePicker = false },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            datePickerState.selectedDateMillis?.let { dateMillis ->
+              selectedDueDateEpochDay = Instant.ofEpochMilli(dateMillis)
+                .atZone(ZoneOffset.UTC)
+                .toLocalDate()
+                .toEpochDay()
+            }
+            showDatePicker = false
+          }
+        ) { Text("Confirm") }
+      },
+      dismissButton = {
+        TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+      }
+    ) {
+      DatePicker(state = datePickerState)
+    }
   }
 }
