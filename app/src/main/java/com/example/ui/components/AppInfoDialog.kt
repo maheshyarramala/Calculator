@@ -74,7 +74,7 @@ fun AppInfoModalDialog(
             Button(onClick = {
               launchExternalIntent(
                 context,
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/mahes.yarramala")),
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/mahesh.yarramala")),
                 "No app is available to open this link."
               )
             }) {
