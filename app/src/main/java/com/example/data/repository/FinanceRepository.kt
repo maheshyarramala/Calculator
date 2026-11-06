@@ -23,6 +23,7 @@ import java.util.Calendar
 
 class FinanceRepository private constructor(context: Context) {
 
+  private val appContext = context.applicationContext
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val database = AppDatabase.getDatabase(context.applicationContext)
   private val financeDao = database.financeDao()
@@ -68,10 +69,24 @@ class FinanceRepository private constructor(context: Context) {
   )
 
   /**
-   * Centralized real-time Total Net Balance across all accounts.
+   * Centralized real-time Main Cash & Bank Balance across liquid accounts (Cash, Savings, Current, Checking).
+   * Credit card debts are kept strictly separate from liquid cash funds.
    */
   val totalNetBalance: StateFlow<Double> = combine(accountsWithBalances) { (list) ->
-    list.sumOf { it.currentBalance }
+    list.filter { !it.account.accountType.equals("Credit Card", ignoreCase = true) }
+      .sumOf { it.currentBalance }
+  }.stateIn(
+    scope = scope,
+    started = SharingStarted.Eagerly,
+    initialValue = 0.0
+  )
+
+  /**
+   * Centralized real-time Total Credit Card Outstanding Debt.
+   */
+  val totalCreditCardDue: StateFlow<Double> = combine(accountsWithBalances) { (list) ->
+    list.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) }
+      .sumOf { kotlin.math.abs(it.currentBalance) }
   }.stateIn(
     scope = scope,
     started = SharingStarted.Eagerly,
@@ -378,6 +393,63 @@ class FinanceRepository private constructor(context: Context) {
       )
       Result.success("Settled! Repaid from ${targetAcc.account.bankName}")
     }
+  }
+
+  /**
+   * Pays a credit card bill safely as a liability transfer:
+   * 1. Deducts payment amount from selected Bank/Cash account (TRANSFER_OUT).
+   * 2. Reduces credit card outstanding debt (TRANSFER_IN).
+   * 3. Total Expenses is UNCHANGED (since purchases were already recorded as expenses).
+   * 4. Updates Credit Card Bill Reminder status to Paid and cancels alarms.
+   */
+  suspend fun payCreditCardBill(
+    cardAccountId: Long,
+    fromBankAccountId: Long,
+    amount: Double,
+    notes: String = ""
+  ): Result<String> = withContext(Dispatchers.IO) {
+    if (amount <= 0.0) {
+      return@withContext Result.failure(Exception("Payment amount must be greater than zero."))
+    }
+    val accounts = accountsWithBalances.value
+    val cardAcc = accounts.find { it.account.id == cardAccountId }
+      ?: return@withContext Result.failure(Exception("Credit card account not found."))
+    val fromAcc = accounts.find { it.account.id == fromBankAccountId }
+      ?: return@withContext Result.failure(Exception("Payment bank account not found."))
+
+    val timestamp = System.currentTimeMillis()
+    // 1. Deduct from Main Cash/Bank account (TRANSFER_OUT - does not affect Total Expenses)
+    financeDao.insertExpense(
+      ExpenseRecord(
+        title = "Credit Card Bill: ${cardAcc.account.bankName}",
+        amount = amount,
+        categoryName = "Bills & Utilities",
+        type = "TRANSFER_OUT",
+        bankAccountId = fromBankAccountId,
+        bankAccountName = fromAcc.account.bankName,
+        dateTimestamp = timestamp,
+        notes = notes.ifEmpty { "Paid bill for ${cardAcc.account.bankName}" }
+      )
+    )
+    // 2. Reduce Credit Card liability (TRANSFER_IN - reduces card dues, does not affect Total Income)
+    financeDao.insertExpense(
+      ExpenseRecord(
+        title = "Bill Payment Received (${fromAcc.account.bankName})",
+        amount = amount,
+        categoryName = "Bills & Utilities",
+        type = "TRANSFER_IN",
+        bankAccountId = cardAccountId,
+        bankAccountName = cardAcc.account.bankName,
+        dateTimestamp = timestamp,
+        notes = "Bill payment from ${fromAcc.account.bankName}"
+      )
+    )
+    // 3. Mark bill reminder as paid
+    val today = java.time.LocalDate.now().toEpochDay()
+    financeDao.markCreditCardBillPaid(cardAccountId, today)
+    com.example.domain.notification.CreditCardBillNotificationScheduler.cancel(appContext, cardAccountId)
+
+    Result.success("Paid ${cardAcc.account.bankName} bill of ₹${com.example.ui.components.CurrencyFormatter.formatWhole(amount)} from ${fromAcc.account.bankName}")
   }
 
   companion object {

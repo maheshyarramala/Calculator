@@ -120,6 +120,8 @@ fun FinanceHubScreen(
   var showCreditCardReminderDialog by remember { mutableStateOf(false) }
   var editingCreditCardAccountId by remember { mutableStateOf<Long?>(null) }
   var showAddCreditCardDialog by remember { mutableStateOf(false) }
+  var payingCreditCardAccount by remember { mutableStateOf<BankAccount?>(null) }
+  var payingCreditCardReminder by remember { mutableStateOf<CreditCardBillReminder?>(null) }
 
   LaunchedEffect(uiState.toastMessage) {
     uiState.toastMessage?.let { msg ->
@@ -280,6 +282,23 @@ fun FinanceHubScreen(
     )
   }
 
+  payingCreditCardAccount?.let { cardAccount ->
+    PayCreditCardBillDialog(
+      cardAccount = cardAccount,
+      reminder = payingCreditCardReminder,
+      bankAccounts = bankAccounts,
+      onDismiss = {
+        payingCreditCardAccount = null
+        payingCreditCardReminder = null
+      },
+      onConfirm = { fromBankAccountId, amount ->
+        viewModel.payCreditCardBill(cardAccount.id, fromBankAccountId, amount)
+        payingCreditCardAccount = null
+        payingCreditCardReminder = null
+      }
+    )
+  }
+
   editingAccountForOpeningBalance?.let { account ->
     EditOpeningBalanceDialog(
       account = account,
@@ -318,7 +337,8 @@ fun FinanceHubScreen(
       },
       onMarkBillPaid = cardReminder?.let { rem ->
         {
-          viewModel.markCreditCardBillPaid(rem)
+          payingCreditCardAccount = account
+          payingCreditCardReminder = rem
           accountForDetails = null
         }
       }
@@ -489,11 +509,11 @@ fun FinanceHubScreen(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 4.dp),
+          .padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column(modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
           Text(
             text = "Finance & Money",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -516,14 +536,14 @@ fun FinanceHubScreen(
             viewModel.setShowBackupModal(true)
           },
           shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-          modifier = Modifier.defaultMinSize(minHeight = 36.dp).testTag("backup_restore_header_btn")
+          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+          modifier = Modifier.height(34.dp).testTag("backup_restore_header_btn")
         ) {
-          Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(5.dp))
+          Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(15.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text(
-            text = "Backup / Restore",
-            fontSize = 12.sp,
+            text = "Backup",
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             softWrap = false
@@ -606,7 +626,13 @@ fun FinanceHubScreen(
             showCreditCardReminderDialog = true
           },
           onMarkCreditCardBillPaid = { reminder ->
-            viewModel.markCreditCardBillPaid(reminder)
+            val cardAcc = bankAccounts.find { it.id == reminder.accountId }
+            if (cardAcc != null) {
+              payingCreditCardAccount = cardAcc
+              payingCreditCardReminder = reminder
+            } else {
+              viewModel.markCreditCardBillPaid(reminder)
+            }
           }
         )
         FinanceTab.CREDIT_CARDS -> CreditCardsSection(
@@ -618,7 +644,13 @@ fun FinanceHubScreen(
             showCreditCardReminderDialog = true
           },
           onMarkBillPaid = { reminder ->
-            viewModel.markCreditCardBillPaid(reminder)
+            val cardAcc = bankAccounts.find { it.id == reminder.accountId }
+            if (cardAcc != null) {
+              payingCreditCardAccount = cardAcc
+              payingCreditCardReminder = reminder
+            } else {
+              viewModel.markCreditCardBillPaid(reminder)
+            }
           },
           onShowTransactions = { accountId ->
             viewModel.setSelectedAccountFilter(accountId)
@@ -1041,6 +1073,9 @@ private fun ExpensesSection(
   val creditCardAccounts = remember(accountsWithBalances) {
     accountsWithBalances.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) }
   }
+  val bankAndCashAccounts = remember(accountsWithBalances) {
+    accountsWithBalances.filter { !it.account.accountType.equals("Credit Card", ignoreCase = true) }
+  }
   var selectedTransactionType by rememberSaveable { mutableStateOf<String?>(null) }
   var selectedTransactionCategory by rememberSaveable { mutableStateOf<String?>(null) }
   var expensePendingDelete by remember { mutableStateOf<ExpenseRecord?>(null) }
@@ -1324,14 +1359,8 @@ private fun ExpensesSection(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
-        items(accountsWithBalances, key = { it.account.id }) { accWithBal ->
+        items(bankAndCashAccounts, key = { it.account.id }) { accWithBal ->
           val isSelected = selectedAccountFilterId == accWithBal.account.id
-          val isCreditCard = accWithBal.account.accountType.equals("Credit Card", ignoreCase = true)
-          val billReminder = if (isCreditCard) {
-            creditCardBillReminders.firstOrNull { it.accountId == accWithBal.account.id }
-          } else {
-            null
-          }
           Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
@@ -1402,7 +1431,9 @@ private fun ExpensesSection(
                 text = accWithBal.account.bankName,
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
               )
 
               Spacer(modifier = Modifier.height(4.dp))
@@ -1434,105 +1465,6 @@ private fun ExpensesSection(
                 fontWeight = FontWeight.ExtraBold,
                 color = if (accWithBal.currentBalance >= 0) Color(0xFF059669) else Color(0xFFDC2626)
               )
-
-              if (isCreditCard) {
-                val daysUntilDue = billReminder?.let {
-                  (it.dueDateEpochDay - LocalDate.now().toEpochDay()).toInt()
-                }
-                val isBillPaid = billReminder?.paidDateEpochDay?.let { it >= 0L } == true
-                val billStatusColor = when {
-                  billReminder == null -> MaterialTheme.colorScheme.onSurfaceVariant
-                  isBillPaid -> Color(0xFF059669)
-                  daysUntilDue != null && daysUntilDue <= 3 -> Color(0xFFDC2626)
-                  else -> MaterialTheme.colorScheme.primary
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                  shape = RoundedCornerShape(10.dp),
-                  color = billStatusColor.copy(alpha = 0.12f),
-                  border = BorderStroke(1.dp, billStatusColor.copy(alpha = 0.25f)),
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                      haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                      onSetCreditCardBill(accWithBal.account.id)
-                    }
-                ) {
-                  Column(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                  ) {
-                    Row(
-                      modifier = Modifier.fillMaxWidth(),
-                      horizontalArrangement = Arrangement.SpaceBetween,
-                      verticalAlignment = Alignment.CenterVertically
-                    ) {
-                      Text(
-                        "Credit Card Bill",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = billStatusColor,
-                        maxLines = 1
-                      )
-                      Icon(
-                        Icons.Default.EditCalendar,
-                        contentDescription = "Edit bill",
-                        modifier = Modifier.size(12.dp),
-                        tint = billStatusColor
-                      )
-                    }
-                    if (billReminder == null) {
-                      Text(
-                        "+ Set bill & due date",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = billStatusColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                      )
-                    } else {
-                      Text(
-                        CurrencyFormatter.format(billReminder.amount),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = billStatusColor,
-                        maxLines = 1
-                      )
-                      Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                      ) {
-                        Text(
-                          when {
-                            isBillPaid -> "Paid ✓"
-                            daysUntilDue == 0 -> "Due today!"
-                            daysUntilDue == 1 -> "Due tomorrow"
-                            daysUntilDue != null && daysUntilDue < 0 -> "${-daysUntilDue}d overdue"
-                            else -> "Due in ${daysUntilDue ?: 0} days"
-                          },
-                          fontSize = 10.sp,
-                          fontWeight = FontWeight.SemiBold,
-                          color = billStatusColor,
-                          maxLines = 1
-                        )
-                        if (!isBillPaid) {
-                          Text(
-                            "Mark Paid",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable {
-                              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-                              onMarkCreditCardBillPaid(billReminder)
-                            }
-                          )
-                        }
-                      }
-                    }
-                  }
-                }
-              }
             }
           }
         }
@@ -2018,9 +1950,13 @@ private fun ExpensesSection(
       }
     } else {
       items(filteredExpenses, key = { it.id }) { expense ->
+        val isCc = remember(expense.bankAccountId, creditCardAccounts) {
+          creditCardAccounts.any { it.account.id == expense.bankAccountId }
+        }
         ExpenseItemCard(
           expense = expense,
           categories = categories,
+          isCreditCard = isCc,
           onDelete = { expensePendingDelete = expense },
           onEdit = { onEditExpense(expense) }
         )
@@ -2080,6 +2016,7 @@ private fun ExpensesSection(
 private fun ExpenseItemCard(
   expense: ExpenseRecord,
   categories: List<ExpenseCategory>,
+  isCreditCard: Boolean = false,
   onDelete: () -> Unit,
   onEdit: () -> Unit
 ) {
@@ -2098,6 +2035,8 @@ private fun ExpenseItemCard(
   }
   val isTransfer = expense.type == "TRANSFER_IN" || expense.type == "TRANSFER_OUT"
   val isIncome = expense.type == "INCOME" || expense.type == "TRANSFER_IN"
+  val isCcBillPayment = isTransfer && (expense.title.contains("Credit Card Bill", ignoreCase = true) || expense.title.contains("Bill Payment", ignoreCase = true))
+
   val amountColor = when {
     isTransfer -> MaterialTheme.colorScheme.primary
     isIncome -> Color(0xFF059669)
@@ -2129,6 +2068,8 @@ private fun ExpenseItemCard(
             .clip(RoundedCornerShape(10.dp))
             .background(
               when {
+                isCreditCard -> Color(0xFFF43F5E).copy(alpha = 0.15f)
+                isCcBillPayment -> Color(0xFF10B981).copy(alpha = 0.15f)
                 isTransfer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                 isIncome -> Color(0xFF10B981).copy(alpha = 0.15f)
                 else -> catColor.copy(alpha = 0.15f)
@@ -2138,12 +2079,20 @@ private fun ExpenseItemCard(
         ) {
           Icon(
             imageVector = when {
+              isCreditCard -> Icons.Default.CreditCard
+              isCcBillPayment -> Icons.Default.CreditScore
               isTransfer -> Icons.Default.SwapHoriz
               isIncome -> Icons.Default.ArrowDownward
               else -> Icons.Default.Sell
             },
             contentDescription = null,
-            tint = if (isTransfer) MaterialTheme.colorScheme.primary else if (isIncome) Color(0xFF059669) else catColor,
+            tint = when {
+              isCreditCard -> Color(0xFFF43F5E)
+              isCcBillPayment -> Color(0xFF10B981)
+              isTransfer -> MaterialTheme.colorScheme.primary
+              isIncome -> Color(0xFF059669)
+              else -> catColor
+            },
             modifier = Modifier.size(20.dp)
           )
         }
@@ -2175,7 +2124,59 @@ private fun ExpenseItemCard(
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
               )
             }
-            if (expense.bankAccountName.isNotBlank()) {
+            if (isCreditCard) {
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFFF43F5E).copy(alpha = 0.15f),
+                border = BorderStroke(0.5.dp, Color(0xFFF43F5E).copy(alpha = 0.45f))
+              ) {
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                  Icon(
+                    Icons.Default.CreditCard,
+                    contentDescription = null,
+                    tint = Color(0xFFF43F5E),
+                    modifier = Modifier.size(11.dp)
+                  )
+                  Spacer(Modifier.width(3.dp))
+                  Text(
+                    text = "Credit Card • ${expense.bankAccountName}",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFF43F5E),
+                    maxLines = 1
+                  )
+                }
+              }
+            } else if (isCcBillPayment) {
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFF10B981).copy(alpha = 0.15f),
+                border = BorderStroke(0.5.dp, Color(0xFF10B981).copy(alpha = 0.45f))
+              ) {
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                  Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Color(0xFF10B981),
+                    modifier = Modifier.size(11.dp)
+                  )
+                  Spacer(Modifier.width(3.dp))
+                  Text(
+                    text = "CC Bill Payment",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF10B981),
+                    maxLines = 1
+                  )
+                }
+              }
+            } else if (expense.bankAccountName.isNotBlank()) {
               Surface(
                 shape = RoundedCornerShape(6.dp),
                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
@@ -3544,6 +3545,12 @@ private fun AddCategoryDialog(
   )
 }
 
+private enum class ExpensePaymentMethod(val title: String) {
+  CASH("Cash"),
+  BANK("Bank Account"),
+  CREDIT_CARD("Credit Card")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddExpenseDialog(
@@ -3557,15 +3564,49 @@ private fun AddExpenseDialog(
   var title by remember { mutableStateOf("") }
   var amountStr by remember { mutableStateOf("") }
   var selectedCategory by remember { mutableStateOf(categories.firstOrNull()?.name ?: "General") }
-  var selectedAccountId by remember { mutableStateOf(bankAccounts.firstOrNull()?.id) }
   var notes by remember { mutableStateOf("") }
   var selectedTripId by remember { mutableStateOf<Long?>(initialTripId) }
   var categoryDropdownExpanded by remember { mutableStateOf(false) }
   var smsParseMessage by remember { mutableStateOf<String?>(null) }
   val clipboard = LocalClipboardManager.current
 
-  val selectedAccountName = remember(selectedAccountId, bankAccounts) {
-    bankAccounts.find { it.id == selectedAccountId }?.bankName ?: ""
+  // Categorize accounts by liquid cash, bank accounts, and credit cards
+  val cashAccounts = remember(bankAccounts) {
+    bankAccounts.filter { it.accountType.equals("Cash Wallet", ignoreCase = true) || it.bankName.contains("Cash", ignoreCase = true) }
+  }
+  val bankAccountsOnly = remember(bankAccounts) {
+    bankAccounts.filter { !it.accountType.equals("Credit Card", ignoreCase = true) && !it.accountType.equals("Cash Wallet", ignoreCase = true) && !it.bankName.contains("Cash", ignoreCase = true) }
+  }
+  val creditCardAccounts = remember(bankAccounts) {
+    bankAccounts.filter { it.accountType.equals("Credit Card", ignoreCase = true) }
+  }
+
+  var paymentMethod by remember {
+    mutableStateOf(
+      when {
+        creditCardAccounts.isNotEmpty() -> ExpensePaymentMethod.CREDIT_CARD
+        bankAccountsOnly.isNotEmpty() -> ExpensePaymentMethod.BANK
+        else -> ExpensePaymentMethod.CASH
+      }
+    )
+  }
+
+  var selectedAccountId by remember(paymentMethod) {
+    mutableStateOf(
+      when (paymentMethod) {
+        ExpensePaymentMethod.CASH -> cashAccounts.firstOrNull()?.id
+        ExpensePaymentMethod.BANK -> bankAccountsOnly.firstOrNull()?.id ?: bankAccounts.firstOrNull { !it.accountType.equals("Credit Card", ignoreCase = true) }?.id
+        ExpensePaymentMethod.CREDIT_CARD -> creditCardAccounts.firstOrNull()?.id
+      }
+    )
+  }
+
+  val selectedAccountName = remember(selectedAccountId, bankAccounts, paymentMethod) {
+    bankAccounts.find { it.id == selectedAccountId }?.bankName ?: when (paymentMethod) {
+      ExpensePaymentMethod.CASH -> "Cash"
+      ExpensePaymentMethod.CREDIT_CARD -> "Credit Card"
+      ExpensePaymentMethod.BANK -> "Bank Account"
+    }
   }
 
   AlertDialog(
@@ -3574,7 +3615,9 @@ private fun AddExpenseDialog(
     text = {
       Column(
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
       ) {
         OutlinedButton(
           onClick = {
@@ -3589,7 +3632,17 @@ private fun AddExpenseDialog(
                   it.name.equals(parsed.suggestedCategory, ignoreCase = true)
                 }?.let { selectedCategory = it.name }
                 parsed.matchedAccountId?.let { matchedId ->
-                  if (bankAccounts.any { it.id == matchedId }) selectedAccountId = matchedId
+                  val acc = bankAccounts.find { it.id == matchedId }
+                  if (acc != null) {
+                    if (acc.accountType.equals("Credit Card", ignoreCase = true)) {
+                      paymentMethod = ExpensePaymentMethod.CREDIT_CARD
+                    } else if (acc.accountType.equals("Cash Wallet", ignoreCase = true)) {
+                      paymentMethod = ExpensePaymentMethod.CASH
+                    } else {
+                      paymentMethod = ExpensePaymentMethod.BANK
+                    }
+                    selectedAccountId = matchedId
+                  }
                 }
                 notes = parsed.rawNotes
                 smsParseMessage = "Expense details filled from SMS."
@@ -3609,33 +3662,167 @@ private fun AddExpenseDialog(
         OutlinedTextField(
           value = title,
           onValueChange = { title = it },
-          label = { Text("Expense Title") },
-          placeholder = { Text("e.g. Grocery store, Uber, Rent") },
+          label = { Text("Expense Title *") },
+          placeholder = { Text("e.g. Grocery store, Uber, Dinner") },
           singleLine = true,
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("expense_title_input")
         )
 
         OutlinedTextField(
           value = amountStr,
-          onValueChange = { amountStr = it },
-          label = { Text("Amount (₹)") },
+          onValueChange = { input ->
+            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+              amountStr = input
+            }
+          },
+          label = { Text("Amount (₹) *") },
+          prefix = { Text("₹ ") },
           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
           singleLine = true,
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("expense_amount_input")
         )
 
-        // Select Paid From Bank Account
-        if (bankAccounts.isNotEmpty()) {
-          Column {
-            Text("Deduct from Account:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(4.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-              items(bankAccounts) { acc ->
-                FilterChip(
-                  selected = selectedAccountId == acc.id,
-                  onClick = { selectedAccountId = acc.id },
-                  label = { Text(acc.bankName, fontSize = 11.sp) }
+        // Payment Method Selector
+        Column(modifier = Modifier.fillMaxWidth()) {
+          Text(
+            text = "Payment Method *",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold
+          )
+          Spacer(modifier = Modifier.height(6.dp))
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+          ) {
+            ExpensePaymentMethod.values().forEach { method ->
+              FilterChip(
+                selected = paymentMethod == method,
+                onClick = {
+                  paymentMethod = method
+                  selectedAccountId = when (method) {
+                    ExpensePaymentMethod.CASH -> cashAccounts.firstOrNull()?.id
+                    ExpensePaymentMethod.BANK -> bankAccountsOnly.firstOrNull()?.id ?: bankAccounts.firstOrNull { !it.accountType.equals("Credit Card", ignoreCase = true) }?.id
+                    ExpensePaymentMethod.CREDIT_CARD -> creditCardAccounts.firstOrNull()?.id
+                  }
+                },
+                label = {
+                  Text(
+                    text = method.title,
+                    fontSize = 11.sp,
+                    fontWeight = if (paymentMethod == method) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1
+                  )
+                },
+                leadingIcon = {
+                  Icon(
+                    imageVector = when (method) {
+                      ExpensePaymentMethod.CASH -> Icons.Default.Payments
+                      ExpensePaymentMethod.BANK -> Icons.Default.AccountBalance
+                      ExpensePaymentMethod.CREDIT_CARD -> Icons.Default.CreditCard
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                  )
+                },
+                modifier = Modifier.weight(1f)
+              )
+            }
+          }
+
+          Spacer(modifier = Modifier.height(8.dp))
+
+          // Sub-account selection based on chosen payment method
+          when (paymentMethod) {
+            ExpensePaymentMethod.CASH -> {
+              if (cashAccounts.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  items(cashAccounts) { acc ->
+                    FilterChip(
+                      selected = selectedAccountId == acc.id,
+                      onClick = { selectedAccountId = acc.id },
+                      label = { Text(acc.bankName, fontSize = 11.sp) }
+                    )
+                  }
+                }
+              } else {
+                Text(
+                  text = "Logging as physical Cash (Wallet)",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+              }
+            }
+            ExpensePaymentMethod.BANK -> {
+              val availableBanks = if (bankAccountsOnly.isNotEmpty()) bankAccountsOnly else bankAccounts.filter { !it.accountType.equals("Credit Card", ignoreCase = true) }
+              if (availableBanks.isNotEmpty()) {
+                Text(
+                  text = "Select Bank Account:",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  items(availableBanks) { acc ->
+                    FilterChip(
+                      selected = selectedAccountId == acc.id,
+                      onClick = { selectedAccountId = acc.id },
+                      label = { Text(acc.bankName, fontSize = 11.sp) }
+                    )
+                  }
+                }
+              } else {
+                Text(
+                  text = "No bank accounts added yet.",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+            ExpensePaymentMethod.CREDIT_CARD -> {
+              if (creditCardAccounts.isNotEmpty()) {
+                Text(
+                  text = "Select Credit Card:",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  items(creditCardAccounts) { card ->
+                    FilterChip(
+                      selected = selectedAccountId == card.id,
+                      onClick = { selectedAccountId = card.id },
+                      label = { Text(card.bankName, fontSize = 11.sp) },
+                      leadingIcon = {
+                        Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(13.dp))
+                      }
+                    )
+                  }
+                }
+              } else {
+                Surface(
+                  shape = RoundedCornerShape(8.dp),
+                  color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Icon(
+                      Icons.Default.CreditCardOff,
+                      contentDescription = null,
+                      tint = MaterialTheme.colorScheme.error,
+                      modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                      text = "No credit cards found. Add a credit card in the Credit Cards tab to track dues.",
+                      style = MaterialTheme.typography.bodySmall,
+                      fontSize = 11.sp,
+                      color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                  }
+                }
               }
             }
           }
@@ -3706,9 +3893,21 @@ private fun AddExpenseDialog(
       Button(
         onClick = {
           val amt = amountStr.toDoubleOrNull() ?: 0.0
-          onConfirm(title, amt, selectedCategory, selectedAccountId, selectedAccountName, notes, selectedTripId)
+          val finalAccountName = when {
+            selectedAccountId != null -> selectedAccountName
+            paymentMethod == ExpensePaymentMethod.CASH -> "Cash"
+            paymentMethod == ExpensePaymentMethod.CREDIT_CARD -> "Credit Card"
+            else -> "Bank Account"
+          }
+          val finalNotes = if (paymentMethod == ExpensePaymentMethod.CREDIT_CARD && !notes.contains("Credit Card", ignoreCase = true)) {
+            if (notes.isBlank()) "Paid via Credit Card" else "$notes (Paid via Credit Card)"
+          } else {
+            notes
+          }
+          onConfirm(title, amt, selectedCategory, selectedAccountId, finalAccountName, finalNotes, selectedTripId)
         },
-        enabled = title.isNotBlank() && (amountStr.toDoubleOrNull() ?: 0.0) > 0.0
+        enabled = title.isNotBlank() && (amountStr.toDoubleOrNull() ?: 0.0) > 0.0,
+        modifier = Modifier.testTag("confirm_save_expense_button")
       ) {
         Text("Save Expense")
       }
@@ -3875,7 +4074,7 @@ private fun AddAccountDialog(
   var holderName by remember { mutableStateOf("") }
   var notes by remember { mutableStateOf("") }
 
-  val types = listOf("Savings", "Current", "Cash Wallet", "Checking", "Credit Card")
+  val types = listOf("Savings", "Current", "Cash Wallet", "Salary Account")
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -3883,7 +4082,9 @@ private fun AddAccountDialog(
     text = {
       Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
       ) {
         OutlinedTextField(
           value = bankName,
@@ -3891,20 +4092,25 @@ private fun AddAccountDialog(
           label = { Text("Account / Bank Name *") },
           placeholder = { Text("e.g. HDFC Bank, SBI, Cash Wallet") },
           singleLine = true,
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("add_account_name_input")
         )
 
         OutlinedTextField(
           value = openingBalStr,
-          onValueChange = { openingBalStr = it },
+          onValueChange = { input ->
+            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+              openingBalStr = input
+            }
+          },
           label = { Text("Opening Balance (₹) *") },
           placeholder = { Text("Starting balance e.g. 50000") },
+          prefix = { Text("₹ ") },
           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
           singleLine = true,
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("add_account_opening_balance_input")
         )
 
-        Text("Account Type:", style = MaterialTheme.typography.bodySmall)
+        Text("Account Type:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
         FlowRow(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -3943,7 +4149,8 @@ private fun AddAccountDialog(
           val bal = openingBalStr.toDoubleOrNull() ?: 0.0
           onConfirm(bankName, accountType, bal, accountNumber, ifsc, holderName, notes)
         },
-        enabled = bankName.isNotBlank()
+        enabled = bankName.isNotBlank(),
+        modifier = Modifier.testTag("confirm_create_account_button")
       ) {
         Text("Create Account")
       }
@@ -6175,3 +6382,183 @@ private fun AddCreditCardDialog(
     }
   }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PayCreditCardBillDialog(
+  cardAccount: BankAccount,
+  reminder: CreditCardBillReminder?,
+  bankAccounts: List<BankAccount>,
+  onDismiss: () -> Unit,
+  onConfirm: (fromBankAccountId: Long, amount: Double) -> Unit
+) {
+  val liquidAccounts = remember(bankAccounts) {
+    bankAccounts.filter { !it.accountType.equals("Credit Card", ignoreCase = true) }
+  }
+  var selectedFromAccountId by remember { mutableStateOf(liquidAccounts.firstOrNull()?.id) }
+  var amountStr by remember {
+    mutableStateOf(
+      if (reminder != null && reminder.amount > 0) {
+        String.format(java.util.Locale.US, "%.0f", reminder.amount)
+      } else {
+        ""
+      }
+    )
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    icon = {
+      Icon(
+        Icons.Default.CreditScore,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.size(28.dp)
+      )
+    },
+    title = {
+      Text(
+        text = "Pay Credit Card Bill",
+        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+      )
+    },
+    text = {
+      Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+      ) {
+        // Target Card Summary Card
+        Card(
+          shape = RoundedCornerShape(14.dp),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(
+              Icons.Default.CreditCard,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+              Text(
+                text = cardAccount.bankName,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+              )
+              if (reminder != null) {
+                Text(
+                  text = "Bill Due: ₹${CurrencyFormatter.formatWhole(reminder.amount)}",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+          }
+        }
+
+        // Amount Input
+        OutlinedTextField(
+          value = amountStr,
+          onValueChange = { input ->
+            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+              amountStr = input
+            }
+          },
+          label = { Text("Payment Amount (₹) *") },
+          placeholder = { Text("e.g. 5000") },
+          prefix = { Text("₹ ") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("pay_cc_amount_input")
+        )
+
+        // Select Source Bank Account
+        Text(
+          text = "Pay From Bank / Cash Account *",
+          style = MaterialTheme.typography.bodySmall,
+          fontWeight = FontWeight.SemiBold
+        )
+
+        if (liquidAccounts.isEmpty()) {
+          Text(
+            text = "No bank or cash account found. Please add a bank account first.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error
+          )
+        } else {
+          LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(liquidAccounts) { bank ->
+              FilterChip(
+                selected = selectedFromAccountId == bank.id,
+                onClick = { selectedFromAccountId = bank.id },
+                label = { Text(bank.bankName, fontSize = 11.sp) },
+                leadingIcon = {
+                  Icon(
+                    if (bank.accountType.equals("Cash Wallet", ignoreCase = true)) Icons.Default.Payments else Icons.Default.AccountBalance,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                  )
+                }
+              )
+            }
+          }
+        }
+
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(
+              Icons.Default.Info,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "Liability Transfer: Paying your bill deducts from your bank balance and reduces card dues without inflating total expenses.",
+              style = MaterialTheme.typography.bodySmall,
+              fontSize = 11.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val amt = amountStr.toDoubleOrNull() ?: 0.0
+          val fromId = selectedFromAccountId
+          if (amt > 0.0 && fromId != null) {
+            onConfirm(fromId, amt)
+          }
+        },
+        enabled = (amountStr.toDoubleOrNull() ?: 0.0) > 0.0 && selectedFromAccountId != null,
+        modifier = Modifier.testTag("confirm_pay_cc_bill_button")
+      ) {
+        val amt = amountStr.toDoubleOrNull() ?: 0.0
+        Text(if (amt > 0) "Pay ₹${CurrencyFormatter.formatWhole(amt)}" else "Pay Bill")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
+}
+

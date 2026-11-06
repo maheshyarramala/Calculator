@@ -60,6 +60,8 @@ import com.example.ui.screens.utility.UtilityViewModel
 import com.example.ui.screens.home.HomeScreen
 import com.example.ui.components.AppInfoModalDialog
 import com.example.ui.components.AppInfoType
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyRow
@@ -272,15 +274,49 @@ fun MainScreen(
           }
         },
         actions = {
+          // History Button (Dedicated section)
+          IconButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+              showHistorySheet = true
+            },
+            modifier = Modifier.size(38.dp).testTag("history_top_button")
+          ) {
+            Icon(Icons.Default.History, contentDescription = "Saved history", modifier = Modifier.size(20.dp))
+          }
+
+          // Theme Settings Button
+          IconButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+              showThemeSheet = true
+            },
+            modifier = Modifier.size(38.dp).testTag("theme_settings_top_btn")
+          ) {
+            Icon(Icons.Default.Palette, contentDescription = "Theme and Customization", modifier = Modifier.size(20.dp))
+          }
+
+          // Hub Button
+          IconButton(
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
+              showHubSheet = true
+            },
+            modifier = Modifier.size(38.dp).testTag("hub_top_button")
+          ) {
+            Icon(Icons.Default.GridView, contentDescription = "Choose calculator by icon", modifier = Modifier.size(20.dp))
+          }
+
+          // Standard Android Overflow Menu on far-right
           Box {
             IconButton(
               onClick = {
                 haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                 menuExpanded = true
               },
-              modifier = Modifier.testTag("top_overflow_menu_button")
+              modifier = Modifier.size(38.dp).testTag("top_overflow_menu_button")
             ) {
-              Icon(Icons.Default.MoreVert, contentDescription = "More options")
+              Icon(Icons.Default.MoreVert, contentDescription = "More options", modifier = Modifier.size(20.dp))
             }
             DropdownMenu(
               expanded = menuExpanded,
@@ -315,14 +351,7 @@ fun MainScreen(
                 }
               )
               DropdownMenuItem(
-                text = { Text("Feedback") },
-                onClick = {
-                  menuExpanded = false
-                  showAppInfoDialog = AppInfoType.CONTACT
-                }
-              )
-              DropdownMenuItem(
-                text = { Text("Contact Us") },
+                text = { Text("Feedback & Contact") },
                 onClick = {
                   menuExpanded = false
                   showAppInfoDialog = AppInfoType.CONTACT
@@ -336,39 +365,6 @@ fun MainScreen(
                 }
               )
             }
-          }
-
-          // History Button (Dedicated section)
-          FilledTonalIconButton(
-            onClick = {
-              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-              showHistorySheet = true
-            },
-            modifier = Modifier.testTag("history_top_button")
-          ) {
-            Icon(Icons.Default.History, contentDescription = "Saved history")
-          }
-
-          // Theme Settings Button
-          FilledTonalIconButton(
-            onClick = {
-              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-              showThemeSheet = true
-            },
-            modifier = Modifier.testTag("theme_settings_top_btn")
-          ) {
-            Icon(Icons.Default.Palette, contentDescription = "Theme and Customization")
-          }
-
-          // Hub Button
-          FilledTonalIconButton(
-            onClick = {
-              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-              showHubSheet = true
-            },
-            modifier = Modifier.testTag("hub_top_button")
-          ) {
-            Icon(Icons.Default.GridView, contentDescription = "Choose calculator by icon")
           }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -461,7 +457,6 @@ fun MainScreen(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AllCalculatorsHubSheet(
   items: List<CalculatorHubItem>,
@@ -469,8 +464,6 @@ private fun AllCalculatorsHubSheet(
 ) {
   val haptic = LocalHapticFeedback.current
   var searchQuery by rememberSaveable { mutableStateOf("") }
-
-  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
   val filteredItems = remember(items, searchQuery) {
     if (searchQuery.isBlank()) items
@@ -480,133 +473,137 @@ private fun AllCalculatorsHubSheet(
     }
   }
 
-  ModalBottomSheet(
+  Dialog(
     onDismissRequest = onDismiss,
-    sheetState = sheetState,
-    modifier = Modifier.fillMaxHeight(),
-    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    properties = DialogProperties(usePlatformDefaultWidth = false)
   ) {
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(horizontal = 20.dp)
-        .padding(bottom = 24.dp)
+    Surface(
+      modifier = Modifier.fillMaxSize(),
+      color = MaterialTheme.colorScheme.background
     ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Column {
-          Text(
-            text = "Choose Calculator",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-          )
-          Text(
-            text = "Tap any icon to open directly",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-        IconButton(onClick = onDismiss) {
-          Icon(Icons.Default.Close, contentDescription = "Close")
-        }
-      }
-
-      Spacer(modifier = Modifier.height(12.dp))
-
-      // Search bar
-      OutlinedTextField(
-        value = searchQuery,
-        onValueChange = { searchQuery = it },
-        placeholder = { Text("Search by name (tax, car, currency, age...)", fontSize = 13.sp) },
-        leadingIcon = {
-          Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        },
-        trailingIcon = {
-          if (searchQuery.isNotBlank()) {
-            IconButton(onClick = { searchQuery = "" }) {
-              Icon(Icons.Default.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
-            }
-          }
-        },
-        singleLine = true,
-        shape = RoundedCornerShape(14.dp),
+      Column(
         modifier = Modifier
-          .fillMaxWidth()
-          .testTag("hub_search_input")
-      )
-
-      Spacer(modifier = Modifier.height(14.dp))
-
-      if (filteredItems.isEmpty()) {
-        Box(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
-          contentAlignment = Alignment.Center
+          .fillMaxSize()
+          .statusBarsPadding()
+          .navigationBarsPadding()
+          .padding(horizontal = 20.dp, vertical = 14.dp)
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
         ) {
-          Text(
-            text = "No calculator matching \"$searchQuery\"",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp
-          )
+          Column {
+            Text(
+              text = "Choose Calculator",
+              style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+            )
+            Text(
+              text = "Tap any icon to open directly",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+          IconButton(onClick = onDismiss) {
+            Icon(Icons.Default.Close, contentDescription = "Close")
+          }
         }
-      } else {
-        LazyVerticalGrid(
-          columns = GridCells.Fixed(2),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-          verticalArrangement = Arrangement.spacedBy(10.dp),
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Search bar
+        OutlinedTextField(
+          value = searchQuery,
+          onValueChange = { searchQuery = it },
+          placeholder = { Text("Search by name (tax, car, currency, age...)", fontSize = 13.sp) },
+          leadingIcon = {
+            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+          },
+          trailingIcon = {
+            if (searchQuery.isNotBlank()) {
+              IconButton(onClick = { searchQuery = "" }) {
+                Icon(Icons.Default.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
+              }
+            }
+          },
+          singleLine = true,
+          shape = RoundedCornerShape(14.dp),
           modifier = Modifier
             .fillMaxWidth()
-            .weight(1f)
-        ) {
-          items(filteredItems) { item ->
-            Card(
-              onClick = {
-                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                item.onClick()
-              },
-              shape = RoundedCornerShape(16.dp),
-              colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-              ),
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Row(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
+            .testTag("hub_search_input")
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        if (filteredItems.isEmpty()) {
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(vertical = 32.dp),
+            contentAlignment = Alignment.Center
+          ) {
+            Text(
+              text = "No calculator matching \"$searchQuery\"",
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              fontSize = 14.sp
+            )
+          }
+        } else {
+          LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .weight(1f)
+          ) {
+            items(filteredItems) { item ->
+              Card(
+                onClick = {
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  item.onClick()
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                  containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
               ) {
-                Box(
+                Row(
                   modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(item.iconBgColor),
-                  contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                  verticalAlignment = Alignment.CenterVertically
                 ) {
-                  Icon(
-                    item.icon,
-                    contentDescription = item.title,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                  )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                  Text(
-                    text = item.title,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                  )
-                  Text(
-                    text = item.subtitle,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                  )
+                  Box(
+                    modifier = Modifier
+                      .size(44.dp)
+                      .clip(CircleShape)
+                      .background(item.iconBgColor),
+                    contentAlignment = Alignment.Center
+                  ) {
+                    Icon(
+                      item.icon,
+                      contentDescription = item.title,
+                      tint = Color.White,
+                      modifier = Modifier.size(22.dp)
+                    )
+                  }
+                  Spacer(modifier = Modifier.width(10.dp))
+                  Column {
+                    Text(
+                      text = item.title,
+                      fontWeight = FontWeight.Bold,
+                      fontSize = 13.sp,
+                      color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                      text = item.subtitle,
+                      fontSize = 10.sp,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      maxLines = 1
+                    )
+                  }
                 }
               }
             }

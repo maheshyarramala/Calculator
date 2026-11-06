@@ -138,6 +138,7 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     repository.accountsWithBalances
 
   val totalNetBalance: StateFlow<Double> = repository.totalNetBalance
+  val totalCreditCardDue: StateFlow<Double> = repository.totalCreditCardDue
   val totalIncome: StateFlow<Double> = repository.totalIncome
   val totalExpense: StateFlow<Double> = repository.totalExpense
   val currentMonthExpenses: StateFlow<Double> = repository.currentMonthExpenses
@@ -509,12 +510,32 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
-  fun markCreditCardBillPaid(reminder: CreditCardBillReminder) {
+  fun payCreditCardBill(
+    cardAccountId: Long,
+    fromBankAccountId: Long,
+    amount: Double,
+    notes: String = ""
+  ) {
     viewModelScope.launch {
-      val today = LocalDate.now().toEpochDay()
-      dao.markCreditCardBillPaid(reminder.accountId, today)
-      CreditCardBillNotificationScheduler.cancel(getApplication(), reminder.accountId)
-      _uiState.update { it.copy(toastMessage = "Credit card bill marked as paid") }
+      val result = repository.payCreditCardBill(cardAccountId, fromBankAccountId, amount, notes)
+      result.onSuccess { msg ->
+        _uiState.update { it.copy(toastMessage = msg) }
+      }.onFailure { err ->
+        _uiState.update { it.copy(toastMessage = err.message ?: "Failed to pay credit card bill") }
+      }
+    }
+  }
+
+  fun markCreditCardBillPaid(reminder: CreditCardBillReminder, fromBankAccountId: Long? = null) {
+    viewModelScope.launch {
+      if (fromBankAccountId != null && fromBankAccountId > 0) {
+        payCreditCardBill(reminder.accountId, fromBankAccountId, reminder.amount)
+      } else {
+        val today = LocalDate.now().toEpochDay()
+        dao.markCreditCardBillPaid(reminder.accountId, today)
+        CreditCardBillNotificationScheduler.cancel(getApplication(), reminder.accountId)
+        _uiState.update { it.copy(toastMessage = "Credit card bill marked as paid") }
+      }
     }
   }
 
