@@ -284,22 +284,29 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     amount: Double,
     bankAccountId: Long?,
     bankAccountName: String,
-    paymentMethod: String
+    paymentMethod: String,
+    settlementReference: String
   ) {
-    if (!amount.isFinite() || amount <= 0.0) return
+    if (!amount.isFinite() || amount <= 0.0 || settlementReference.isBlank()) return
     viewModelScope.launch {
-      dao.insertExpense(
-        ExpenseRecord(
-          title = "Split bill: ${billTitle.trim().ifBlank { "Group expense" }}",
-          amount = amount,
-          categoryName = "Food & Dining",
-          type = "EXPENSE",
-          bankAccountId = bankAccountId,
-          bankAccountName = bankAccountName,
-          notes = "Settlement recorded from Split Bill. Payment source: $paymentMethod"
+      val ledgerNote = "OMNICAlC_SPLIT_SETTLEMENT:$settlementReference"
+      if (dao.getExpenseByNotes(ledgerNote) != null) return@launch
+      try {
+        dao.insertExpense(
+          ExpenseRecord(
+            title = "Split bill: ${billTitle.trim().ifBlank { "Group expense" }}",
+            amount = amount,
+            categoryName = "Food & Dining",
+            type = "EXPENSE",
+            bankAccountId = bankAccountId,
+            bankAccountName = bankAccountName,
+            notes = "$ledgerNote | Payment source: $paymentMethod"
+          )
         )
-      )
-      _uiState.update { it.copy(toastMessage = "Split-bill payment added to Finance expenses") }
+        _uiState.update { it.copy(toastMessage = "Split-bill payment added to Finance expenses") }
+      } catch (error: Exception) {
+        _uiState.update { it.copy(toastMessage = "Could not record split-bill payment: ${error.localizedMessage ?: "Unknown error"}") }
+      }
     }
   }
 
