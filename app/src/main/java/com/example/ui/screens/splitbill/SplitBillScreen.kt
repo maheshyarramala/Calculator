@@ -57,6 +57,46 @@ fun SplitBillScreen(
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
   val clipboard = LocalClipboardManager.current
+  val isRestored by viewModel.isRestored.collectAsState()
+  val savedBills by viewModel.savedBills.collectAsState()
+  var showBillHistory by remember { mutableStateOf(false) }
+  var showNewBillConfirm by remember { mutableStateOf(false) }
+  LaunchedEffect(state, isRestored) { if (isRestored) viewModel.persistCurrent() }
+
+  if (showNewBillConfirm) {
+    AlertDialog(
+      onDismissRequest = { showNewBillConfirm = false },
+      title = { Text("Start a new bill?") },
+      text = { Text("Your current bill will remain saved in local history. A new blank bill will be created.") },
+      confirmButton = { Button(onClick = { viewModel.startNewBill(); showNewBillConfirm = false }) { Text("New bill") } },
+      dismissButton = { TextButton(onClick = { showNewBillConfirm = false }) { Text("Cancel") } }
+    )
+  }
+
+  if (showBillHistory) {
+    AlertDialog(
+      onDismissRequest = { showBillHistory = false },
+      title = { Text("Saved bills", fontWeight = FontWeight.Bold) },
+      text = {
+        if (savedBills.isEmpty()) Text("No saved bills yet. Your bills are saved automatically on this device.")
+        else LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          items(savedBills, key = { it.id }) { bill ->
+            Card(modifier = Modifier.fillMaxWidth().clickable { viewModel.openSavedBill(bill.id); showBillHistory = false }) {
+              Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                  Text(bill.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                  Text(bill.currencyCode + " · " + java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(java.util.Date(bill.updatedAt)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton(onClick = { viewModel.deleteSavedBill(bill.id) }) { Icon(Icons.Default.DeleteOutline, contentDescription = "Delete saved bill", tint = MaterialTheme.colorScheme.error) }
+              }
+            }
+          }
+        }
+      },
+      confirmButton = { TextButton(onClick = { showBillHistory = false }) { Text("Close") } },
+      dismissButton = { TextButton(onClick = { viewModel.startNewBill(); showBillHistory = false }) { Text("New bill") } }
+    )
+  }
   val financeAccounts by financeViewModel?.bankAccounts?.collectAsState()
     ?: remember { mutableStateOf(emptyList<com.example.data.local.entity.BankAccount>()) }
 
@@ -66,16 +106,18 @@ fun SplitBillScreen(
     state.items,
     state.taxAmount,
     state.tipAmount,
-    state.discountAmount
+    state.discountAmount,
+    state.splitMode,
+    state.manualBillTotal
   ) {
     DebtSimplifier.calculateBreakdowns(
-      mode = SplitMode.ITEMIZED,
+      mode = state.splitMode,
       participants = state.participants,
       items = state.items,
       tax = state.taxAmount,
       tip = state.tipAmount,
       discount = state.discountAmount,
-      manualBillTotal = 0.0
+      manualBillTotal = state.manualBillTotal
     )
   }
 
@@ -153,7 +195,13 @@ fun SplitBillScreen(
         )
       }
 
-      Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+      Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        IconButton(onClick = { showBillHistory = true }) {
+          Icon(Icons.Default.History, contentDescription = "Saved bills")
+        }
+        IconButton(onClick = { showNewBillConfirm = true }) {
+          Icon(Icons.Default.Add, contentDescription = "New bill")
+        }
         // AI Receipt Scan / OCR Button
         FilledTonalButton(
           onClick = {
@@ -326,6 +374,29 @@ private fun ItemsAndBillTab(
     verticalArrangement = Arrangement.spacedBy(10.dp),
     contentPadding = PaddingValues(bottom = 80.dp)
   ) {
+    item {
+      Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("How should the bill be split?", fontWeight = FontWeight.Bold)
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = state.splitMode == SplitMode.ITEMIZED, onClick = { viewModel.setSplitMode(SplitMode.ITEMIZED) }, label = { Text("By items") })
+            FilterChip(selected = state.splitMode == SplitMode.EQUAL, onClick = { viewModel.setSplitMode(SplitMode.EQUAL) }, label = { Text("Equally") })
+          }
+          if (state.splitMode == SplitMode.EQUAL) {
+            OutlinedTextField(
+              value = if (state.manualBillTotal == 0.0) "" else state.manualBillTotal.toString(),
+              onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d{0,2}$"))) viewModel.setManualBillTotal(value.toDoubleOrNull() ?: 0.0) },
+              label = { Text("Total bill amount") },
+              prefix = { Text(state.currencySymbol) },
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+              singleLine = true,
+              modifier = Modifier.fillMaxWidth()
+            )
+            Text("The total is divided evenly between all participants.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+        }
+      }
+    }
     // Items Section Header
     item {
       Column(modifier = Modifier.fillMaxWidth()) {
@@ -419,7 +490,7 @@ private fun ItemsAndBillTab(
     }
 
     // Itemized Line Items Cards
-    items(state.items, key = { it.id }) { item ->
+    if (state.splitMode == SplitMode.ITEMIZED) items(state.items, key = { it.id }) { item ->
       val itemTotal = item.price * item.quantity
       Card(
         shape = RoundedCornerShape(14.dp),
