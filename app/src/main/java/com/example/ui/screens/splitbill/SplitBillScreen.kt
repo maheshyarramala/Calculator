@@ -133,9 +133,6 @@ fun SplitBillScreen(
   val breakdowns = remember(
     state.participants,
     state.items,
-    state.taxAmount,
-    state.tipAmount,
-    state.discountAmount,
     state.splitMode,
     state.manualBillTotal
   ) {
@@ -143,9 +140,9 @@ fun SplitBillScreen(
       mode = state.splitMode,
       participants = state.participants,
       items = state.items,
-      tax = state.taxAmount,
-      tip = state.tipAmount,
-      discount = state.discountAmount,
+      tax = 0.0,
+      tip = 0.0,
+      discount = 0.0,
       manualBillTotal = state.manualBillTotal
     )
   }
@@ -541,30 +538,15 @@ private fun ItemsAndBillTab(
     contentPadding = PaddingValues(bottom = 80.dp)
   ) {
     item {
-      Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("Tax, tip & adjustments", fontWeight = FontWeight.Bold)
-          Text("These amounts are allocated across the group using each person's share.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-              value = amountInputText(state.taxAmount),
-              onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d{0,2}$"))) viewModel.setTaxAmount(value.toDoubleOrNull() ?: 0.0) },
-              label = { Text("Tax / GST") }, prefix = { Text(state.currencySymbol) },
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-              value = amountInputText(state.tipAmount),
-              onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d{0,2}$"))) viewModel.setTipAmount(value.toDoubleOrNull() ?: 0.0) },
-              label = { Text("Tip / service charge") }, prefix = { Text(state.currencySymbol) },
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-              value = amountInputText(state.discountAmount),
-              onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d{0,2}$"))) viewModel.setDiscountAmount(value.toDoubleOrNull() ?: 0.0) },
-              label = { Text("Discount") }, prefix = { Text(state.currencySymbol) },
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth()
-            )
-          }
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+          Text("Your expenses", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+          Text("Add what the group spent.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        FilledTonalButton(onClick = onAddItemClick, shape = RoundedCornerShape(12.dp)) {
+          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(Modifier.width(4.dp))
+          Text("Add item")
         }
       }
     }
