@@ -825,6 +825,7 @@ fun FinanceHubScreen(
           val splitBillViewModel: com.example.ui.screens.splitbill.SplitBillViewModel = viewModel()
           com.example.ui.screens.splitbill.SplitBillScreen(
             viewModel = splitBillViewModel,
+            financeViewModel = viewModel,
             modifier = Modifier.fillMaxSize()
           )
         }
