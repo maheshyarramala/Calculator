@@ -544,24 +544,24 @@ private fun ItemsAndBillTab(
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
           Text("Tax, tip & adjustments", fontWeight = FontWeight.Bold)
           Text("These amounts are allocated across the group using each person's share.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
               value = amountInputText(state.taxAmount),
               onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d{0,2}$"))) viewModel.setTaxAmount(value.toDoubleOrNull() ?: 0.0) },
-              label = { Text("Tax") }, prefix = { Text(state.currencySymbol) },
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f)
+              label = { Text("Tax / GST") }, prefix = { Text(state.currencySymbol) },
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
               value = amountInputText(state.tipAmount),
               onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d{0,2}$"))) viewModel.setTipAmount(value.toDoubleOrNull() ?: 0.0) },
-              label = { Text("Tip") }, prefix = { Text(state.currencySymbol) },
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f)
+              label = { Text("Tip / service charge") }, prefix = { Text(state.currencySymbol) },
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
               value = amountInputText(state.discountAmount),
               onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d{0,2}$"))) viewModel.setDiscountAmount(value.toDoubleOrNull() ?: 0.0) },
               label = { Text("Discount") }, prefix = { Text(state.currencySymbol) },
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f)
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth()
             )
           }
         }
