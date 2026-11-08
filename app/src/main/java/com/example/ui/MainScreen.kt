@@ -112,7 +112,6 @@ fun MainScreen(
     mutableStateOf(MainDestination.FINANCE)
   }
   var showHistorySheet by rememberSaveable { mutableStateOf(false) }
-  var showFavoritesSheet by rememberSaveable { mutableStateOf(false) }
   var showHubSheet by rememberSaveable { mutableStateOf(false) }
   var showThemeSheet by rememberSaveable { mutableStateOf(false) }
   var menuExpanded by remember { mutableStateOf(false) }
@@ -149,20 +148,6 @@ fun MainScreen(
     )
   }
 
-  if (showFavoritesSheet) {
-    com.example.ui.screens.history.FavoritesBottomSheet(
-      viewModel = historyViewModel,
-      onOpenTool = { key ->
-        when (key) {
-          "EMI" -> currentDestination = MainDestination.EMI
-          "INVEST" -> currentDestination = MainDestination.INVESTMENTS
-          "EXPENSE" -> currentDestination = MainDestination.FINANCE
-          "CALC" -> currentDestination = MainDestination.CALCULATOR
-        }
-      },
-      onDismiss = { showFavoritesSheet = false }
-    )
-  }
 
   if (showHistorySheet) {
     HistoryBottomSheet(
@@ -322,13 +307,6 @@ fun MainScreen(
               expanded = menuExpanded,
               onDismissRequest = { menuExpanded = false }
             ) {
-              DropdownMenuItem(
-                text = { Text("Favorites") },
-                onClick = {
-                  menuExpanded = false
-                  showFavoritesSheet = true
-                }
-              )
               DropdownMenuItem(
                 text = { Text("About") },
                 onClick = {

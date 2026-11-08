@@ -1104,18 +1104,31 @@ private fun SettlementLedgerTab(
                 Text("Nudge", fontSize = 10.5.sp)
               }
 
-              // Mark as Settled Toggle
-              IconButton(
+              Spacer(modifier = Modifier.weight(1f))
+
+              // Prominent Mark Settled Button
+              Button(
                 onClick = {
-                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                   viewModel.toggleSettledTransfer(transferKey)
                 },
-                modifier = Modifier.size(32.dp)
+                colors = ButtonDefaults.buttonColors(
+                  containerColor = if (isSettled) Color(0xFF10B981) else MaterialTheme.colorScheme.primaryContainer,
+                  contentColor = if (isSettled) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+                ),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
               ) {
                 Icon(
-                  if (isSettled) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                  contentDescription = "Mark Settled",
-                  tint = if (isSettled) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant
+                  if (isSettled) Icons.Default.CheckCircle else Icons.Default.Check,
+                  contentDescription = null,
+                  modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  text = if (isSettled) "Settled ✓" else "Settle",
+                  fontSize = 11.5.sp,
+                  fontWeight = FontWeight.Bold
                 )
               }
             }
@@ -1342,26 +1355,31 @@ private fun AddReceiptItemDialog(
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Add Dish / Line Item") },
+    shape = RoundedCornerShape(20.dp),
+    title = { Text("Add Dish / Expense", fontWeight = FontWeight.Bold) },
     text = {
       Column(
         modifier = Modifier
-          .heightIn(max = 380.dp)
+          .fillMaxWidth()
+          .heightIn(max = 420.dp)
           .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
       ) {
         OutlinedTextField(
           value = title,
           onValueChange = { title = it },
-          label = { Text("Dish / Item Title") },
+          label = { Text("Dish / Item Name") },
+          placeholder = { Text("e.g. Biryani, Drinks, Pizza") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           OutlinedTextField(
             value = priceStr,
             onValueChange = { priceStr = it },
             label = { Text("Price ($currencySymbol)") },
+            placeholder = { Text("0.00") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
             modifier = Modifier.weight(1f)
@@ -1369,93 +1387,121 @@ private fun AddReceiptItemDialog(
           OutlinedTextField(
             value = qtyStr,
             onValueChange = { qtyStr = it },
-            label = { Text("Quantity") },
+            label = { Text("Qty") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
-            modifier = Modifier.weight(0.7f)
+            modifier = Modifier.weight(0.5f)
           )
         }
-        Text(
-          text = "Split this item with",
-          style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
-        )
-        Text(
-          text = "Select at least one diner.",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        participants.forEach { participant ->
-          val isSelected = participant.id in selectedParticipantIds
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .clickable {
-                selectedParticipantIds = if (isSelected) {
-                  if (selectedParticipantIds.size > 1) {
-                    selectedParticipantIds - participant.id
-                  } else {
-                    selectedParticipantIds
-                  }
-                } else {
-                  selectedParticipantIds + participant.id
-                }
-              },
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Checkbox(
-              checked = isSelected,
-              onCheckedChange = null,
-              enabled = !isSelected || selectedParticipantIds.size > 1
-            )
-            Text(
-              text = participant.name,
-              style = MaterialTheme.typography.bodyMedium,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis
-            )
-          }
-        }
 
-        Box {
+        // Active Prompt for Who Paid
+        Text(
+          text = "Who Paid for this Item?",
+          style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+          color = MaterialTheme.colorScheme.primary
+        )
+
+        Box(modifier = Modifier.fillMaxWidth()) {
           OutlinedButton(
             onClick = { payerMenuExpanded = true },
-            enabled = participants.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp)
           ) {
-            val payerName = participants.firstOrNull { it.id == selectedPayerId }?.name
-            Text(
-              text = payerName?.let { "Paid by: $it" } ?: "Choose who paid",
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis
-            )
+            val payerName = participants.firstOrNull { it.id == selectedPayerId }?.name ?: "Select Payer"
+            Icon(Icons.Default.Payment, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(text = "Paid by: $payerName", fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
           }
+
           DropdownMenu(
             expanded = payerMenuExpanded,
             onDismissRequest = { payerMenuExpanded = false }
           ) {
-            participants.forEach { participant ->
+            participants.forEach { p ->
               DropdownMenuItem(
-                text = { Text(participant.name) },
+                text = { Text(p.name, fontWeight = if (p.id == selectedPayerId) FontWeight.Bold else FontWeight.Normal) },
                 onClick = {
-                  selectedPayerId = participant.id
+                  selectedPayerId = p.id
                   payerMenuExpanded = false
                 }
               )
             }
           }
         }
+
+        // Who Shared this Dish
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = "Who Shared this Dish?",
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+          )
+          TextButton(
+            onClick = {
+              selectedParticipantIds = if (selectedParticipantIds.size == participants.size) {
+                listOfNotNull(participants.firstOrNull()?.id)
+              } else {
+                participants.map { it.id }
+              }
+            }
+          ) {
+            Text(if (selectedParticipantIds.size == participants.size) "Clear" else "Select All", fontSize = 11.sp)
+          }
+        }
+
+        participants.forEach { participant ->
+          val isSelected = participant.id in selectedParticipantIds
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(RoundedCornerShape(8.dp))
+              .clickable {
+                selectedParticipantIds = if (isSelected) {
+                  if (selectedParticipantIds.size > 1) selectedParticipantIds - participant.id else selectedParticipantIds
+                } else {
+                  selectedParticipantIds + participant.id
+                }
+              }
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Checkbox(
+              checked = isSelected,
+              onCheckedChange = { checked ->
+                selectedParticipantIds = if (checked) {
+                  selectedParticipantIds + participant.id
+                } else {
+                  if (selectedParticipantIds.size > 1) selectedParticipantIds - participant.id else selectedParticipantIds
+                }
+              }
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+              text = participant.name,
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+            )
+          }
+        }
       }
     },
     confirmButton = {
+      val parsedPrice = priceStr.toDoubleOrNull() ?: 0.0
+      val canAdd = title.isNotBlank() && parsedPrice > 0.0
       Button(
         onClick = {
-          val price = priceStr.toDoubleOrNull() ?: 0.0
           val qty = qtyStr.toIntOrNull() ?: 1
-          onConfirm(title, price, qty, selectedParticipantIds, selectedPayerId)
+          onConfirm(title.trim(), parsedPrice, qty, selectedParticipantIds, selectedPayerId)
         },
-        enabled = title.isNotBlank() && priceStr.isNotBlank()
+        enabled = canAdd,
+        shape = RoundedCornerShape(10.dp)
       ) {
-        Text("Add Item")
+        Text("Add Dish")
       }
     },
     dismissButton = {

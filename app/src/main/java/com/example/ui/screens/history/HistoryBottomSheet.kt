@@ -171,7 +171,6 @@ fun HistoryBottomSheet(
             HistoryItemCard(
               item = item,
               dateFormat = dateFormat,
-              onToggleFavorite = { viewModel.toggleFavorite(item) },
               onShare = { viewModel.shareRecord(context, item) },
               onDelete = { viewModel.delete(item) }
             )
@@ -186,7 +185,6 @@ fun HistoryBottomSheet(
 private fun HistoryItemCard(
   item: CalculationRecord,
   dateFormat: SimpleDateFormat,
-  onToggleFavorite: () -> Unit,
   onShare: () -> Unit,
   onDelete: () -> Unit
 ) {
@@ -237,14 +235,6 @@ private fun HistoryItemCard(
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        IconButton(onClick = onToggleFavorite, modifier = Modifier.size(32.dp)) {
-          Icon(
-            imageVector = if (item.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-            contentDescription = if (item.isFavorite) "Remove from favorites" else "Add to favorites",
-            tint = if (item.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp)
-          )
-        }
         IconButton(onClick = onShare, modifier = Modifier.size(32.dp)) {
           Icon(Icons.Default.Share, contentDescription = "Share", modifier = Modifier.size(18.dp))
         }

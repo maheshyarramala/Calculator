@@ -6008,18 +6008,49 @@ private fun SubscriptionDetailsDialog(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Text("Bill & Subscription", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Surface(
-          shape = RoundedCornerShape(8.dp),
-          color = Color(0xFF6366F1).copy(alpha = 0.12f)
-        ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
           Text(
-            text = sub.billingCycle,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF4F46E5),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            text = "Bill & Subscription",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
           )
+          Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = Color(0xFF6366F1).copy(alpha = 0.12f),
+            modifier = Modifier.padding(top = 4.dp)
+          ) {
+            Text(
+              text = sub.billingCycle,
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Bold,
+              color = Color(0xFF4F46E5),
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+          }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          IconButton(
+            onClick = onEdit,
+            modifier = Modifier.size(36.dp)
+          ) {
+            Icon(
+              Icons.Default.Edit,
+              contentDescription = "Edit Bill",
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(20.dp)
+            )
+          }
+          IconButton(
+            onClick = onDelete,
+            modifier = Modifier.size(36.dp)
+          ) {
+            Icon(
+              Icons.Default.DeleteOutline,
+              contentDescription = "Delete Bill",
+              tint = MaterialTheme.colorScheme.error,
+              modifier = Modifier.size(20.dp)
+            )
+          }
         }
       }
     },
@@ -6030,7 +6061,6 @@ private fun SubscriptionDetailsDialog(
           .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)
       ) {
-        // Hero amount
         Surface(
           shape = RoundedCornerShape(16.dp),
           color = Color(0xFF6366F1).copy(alpha = 0.08f),
@@ -6043,22 +6073,20 @@ private fun SubscriptionDetailsDialog(
           ) {
             Text(
               text = "${CurrencyFormatter.format(sub.amount)} / ${sub.billingCycle.lowercase()}",
-              style = MaterialTheme.typography.headlineSmall,
-              fontWeight = FontWeight.ExtraBold,
+              fontSize = 24.sp,
+              fontWeight = FontWeight.Black,
               color = Color(0xFF4F46E5)
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
               text = sub.name,
               style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.SemiBold
+              fontWeight = FontWeight.Bold
             )
           }
         }
 
-        // Details
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          // Status badge row
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -6081,7 +6109,6 @@ private fun SubscriptionDetailsDialog(
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
-          // Next Due Date
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -6097,7 +6124,6 @@ private fun SubscriptionDetailsDialog(
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
-          // Category
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -6111,7 +6137,6 @@ private fun SubscriptionDetailsDialog(
             )
           }
 
-          // Linked Bank Account
           if (sub.bankAccountName.isNotBlank()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             Row(
@@ -6128,7 +6153,6 @@ private fun SubscriptionDetailsDialog(
             }
           }
 
-          // Notes
           if (sub.notes.isNotBlank()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -6150,44 +6174,29 @@ private fun SubscriptionDetailsDialog(
       }
     },
     confirmButton = {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        TextButton(
-          onClick = onDelete,
-          colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+      if (!isPaidThisCycle) {
+        Button(
+          onClick = onMarkPaid,
+          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+          shape = RoundedCornerShape(12.dp)
         ) {
-          Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(Modifier.width(4.dp))
-          Text("Delete")
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          if (!isPaidThisCycle) {
-            Button(
-              onClick = onMarkPaid,
-              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-            ) {
-              Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-              Spacer(Modifier.width(4.dp))
-              Text("Mark Paid")
-            }
-          }
-          FilledTonalButton(onClick = onEdit) {
-            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("Edit")
-          }
+          Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(Modifier.width(6.dp))
+          Text("Mark Paid", fontWeight = FontWeight.Bold)
         }
       }
     },
     dismissButton = {
-      TextButton(onClick = onDismiss) { Text("Close") }
+      TextButton(onClick = onDismiss) {
+        Text("Close", fontWeight = FontWeight.SemiBold)
+      }
     }
   )
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditSubscriptionDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

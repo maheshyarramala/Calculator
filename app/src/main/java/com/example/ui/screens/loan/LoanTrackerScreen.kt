@@ -988,27 +988,18 @@ private fun LoanDetailDialog(
     },
     confirmButton = {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedButton(
-          onClick = {
-            onDismiss()
-            onEdit()
-          }
-        ) {
-          Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("Edit")
-        }
-
         if (loan.paidEmisCount > 0) {
           OutlinedButton(
             onClick = {
               onUndoEmi()
               onDismiss()
-            }
+            },
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
           ) {
             Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(15.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Undo #${loan.paidEmisCount}")
+            Text("Undo #${loan.paidEmisCount}", fontSize = 12.sp)
           }
         }
         if (!loan.isFullyPaid) {
@@ -1017,22 +1008,19 @@ private fun LoanDetailDialog(
               onPayEmi(selectedBankId, selectedAccount?.account?.bankName ?: "")
               onDismiss()
             },
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
           ) {
             Icon(Icons.Default.Payment, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Pay Monthly EMI", maxLines = 1, softWrap = false, fontSize = 12.sp)
-          }
-        } else {
-          Button(onClick = onDismiss) {
-            Text("Close")
+            Text("Pay Monthly EMI", fontSize = 12.sp, fontWeight = FontWeight.Bold)
           }
         }
       }
     },
     dismissButton = {
       TextButton(onClick = onDismiss) {
-        Text("Done")
+        Text("Done", fontWeight = FontWeight.SemiBold)
       }
     }
   )
