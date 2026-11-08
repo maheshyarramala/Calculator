@@ -32,8 +32,13 @@ object DebtSimplifier {
       SplitMode.ITEMIZED -> calculateItemizedBreakdowns(
         participants, items, safeTax, safeTip, safeDiscount
       )
-      SplitMode.EQUAL -> {
-        val weights = List(participants.size) { 1.0 }
+      SplitMode.EQUAL, SplitMode.PERCENTAGE, SplitMode.CUSTOM -> {
+        val weights = when (mode) {
+          SplitMode.EQUAL -> List(participants.size) { 1.0 }
+          SplitMode.PERCENTAGE -> participants.map { nonNegative(it.sharePercentage) }
+          SplitMode.CUSTOM -> participants.map { nonNegative(it.customShareWeight) }
+          SplitMode.ITEMIZED -> emptyList()
+        }
         val subtotals = distribute(nonNegative(manualBillTotal), weights)
         buildBreakdowns(participants, subtotals, safeTax, safeTip, safeDiscount, weights)
       }
