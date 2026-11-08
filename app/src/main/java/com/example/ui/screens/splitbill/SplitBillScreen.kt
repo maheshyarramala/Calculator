@@ -333,55 +333,34 @@ fun SplitBillScreen(
 
     Spacer(modifier = Modifier.height(10.dp))
 
-    // Sub-Tabs: [0: Items / Split] [1: Diners & Claims] [2: Settlement & Pay]
-    TabRow(
+    // Five-step Split Bill workspace: Expenses, People, Split, Settlement, History.
+    ScrollableTabRow(
       selectedTabIndex = state.activeTab,
+      edgePadding = 0.dp,
       containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
       modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
     ) {
-      Tab(
-        selected = state.activeTab == 0,
-        onClick = { viewModel.setTab(0) },
-        text = { Text("Items & Bill", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold) },
-        icon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp)) }
-      )
-      Tab(
-        selected = state.activeTab == 1,
-        onClick = { viewModel.setTab(1) },
-        text = { Text("Diners (${state.participants.size})", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold) },
-        icon = { Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(16.dp)) }
-      )
-      Tab(
-        selected = state.activeTab == 2,
-        onClick = { viewModel.setTab(2) },
-        text = { Text("Settlement", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold) },
-        icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(16.dp)) }
-      )
+      val sections = listOf("Expenses", "People", "Split", "Settlement", "History")
+      val sectionIcons = listOf(Icons.AutoMirrored.Filled.ReceiptLong, Icons.Default.Group, Icons.Default.PieChart, Icons.Default.AccountBalanceWallet, Icons.Default.History)
+      sections.forEachIndexed { index, label ->
+        Tab(
+          selected = state.activeTab == index,
+          onClick = { viewModel.setTab(index) },
+          text = { Text(if (index == 1) "People (${state.participants.size})" else label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) },
+          icon = { Icon(sectionIcons[index], contentDescription = null, modifier = Modifier.size(16.dp)) }
+        )
+      }
     }
 
     Spacer(modifier = Modifier.height(10.dp))
 
-    // Active Tab Content
     when (state.activeTab) {
-      0 -> ItemsAndBillTab(
-        state = state,
-        viewModel = viewModel,
-        onAddItemClick = { viewModel.setShowAddItemDialog(true) }
-      )
-      1 -> DinersAndClaimsTab(
-        state = state,
-        breakdowns = breakdowns,
-        transfers = simplifiedTransfers,
-        viewModel = viewModel,
-        onAddDinerClick = { viewModel.setShowAddParticipantDialog(true) }
-      )
-      2 -> SettlementLedgerTab(
-        state = state,
-        breakdowns = breakdowns,
-        transfers = simplifiedTransfers,
-        totalBill = totalBill,
-        viewModel = viewModel,
-        bankAccounts = financeAccounts,
+      0 -> ItemsAndBillTab(state = state, viewModel = viewModel, onAddItemClick = { viewModel.setShowAddItemDialog(true) })
+      1 -> DinersAndClaimsTab(state = state, breakdowns = breakdowns, transfers = simplifiedTransfers, viewModel = viewModel, onAddDinerClick = { viewModel.setShowAddParticipantDialog(true) })
+      2 -> SplitMethodTab(state = state, viewModel = viewModel, breakdowns = breakdowns)
+      3 -> SettlementLedgerTab(
+        state = state, breakdowns = breakdowns, transfers = simplifiedTransfers, totalBill = totalBill,
+        viewModel = viewModel, bankAccounts = financeAccounts,
         onRecordPayment = { title, amount, accountId, accountName, method, settlementReference ->
           financeViewModel?.logSplitBillPayment(title, amount, accountId, accountName, method, settlementReference)
         },
@@ -389,6 +368,7 @@ fun SplitBillScreen(
           financeViewModel?.logSplitBillSettlementIncome(title, amount, accountId, accountName, method, settlementReference)
         }
       )
+      4 -> BillHistoryTab(savedBills = savedBills, currentBillId = state.billId, onOpen = { viewModel.openSavedBill(it); viewModel.setTab(0) }, onDelete = viewModel::deleteSavedBill, onNew = { viewModel.startNewBill(); viewModel.setTab(0) })
     }
   }
 }
@@ -406,29 +386,7 @@ private fun ItemsAndBillTab(
     verticalArrangement = Arrangement.spacedBy(10.dp),
     contentPadding = PaddingValues(bottom = 80.dp)
   ) {
-    item {
-      Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("How should the bill be split?", fontWeight = FontWeight.Bold)
-          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = state.splitMode == SplitMode.ITEMIZED, onClick = { viewModel.setSplitMode(SplitMode.ITEMIZED) }, label = { Text("By items") })
-            FilterChip(selected = state.splitMode == SplitMode.EQUAL, onClick = { viewModel.setSplitMode(SplitMode.EQUAL) }, label = { Text("Equally") })
-          }
-          if (state.splitMode == SplitMode.EQUAL) {
-            OutlinedTextField(
-              value = if (state.manualBillTotal == 0.0) "" else state.manualBillTotal.toString(),
-              onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d{0,2}$"))) viewModel.setManualBillTotal(value.toDoubleOrNull() ?: 0.0) },
-              label = { Text("Total bill amount") },
-              prefix = { Text(state.currencySymbol) },
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth()
-            )
-            Text("The total is divided evenly between all participants.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          }
-        }
-      }
-    }
+
     // Items Section Header
     if (state.splitMode == SplitMode.ITEMIZED) item {
       Column(modifier = Modifier.fillMaxWidth()) {
