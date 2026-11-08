@@ -1231,15 +1231,17 @@ private fun SettlementLedgerTab(
       },
       confirmButton = {
         Button(onClick = {
-          val settlementReference = "${state.billId}:${transfer.fromParticipant.id}:${transfer.toParticipant.id}:${String.format(Locale.US, "%.2f", transfer.amount)}"
+          val settlementAmount = (settlementAmountText.toDoubleOrNull() ?: transfer.amount).coerceIn(0.0, transfer.amount)
+          if (settlementAmount <= 0.0) return@Button
+          val cumulative = (state.transferPaidAmounts[pendingTransferKey] ?: 0.0) + settlementAmount
+          val settlementReference = "${state.billId}:$pendingTransferKey:${String.format(Locale.US, "%.2f", cumulative)}"
           val selectedAccountName = bankAccounts.firstOrNull { it.id == selectedPaymentAccountId }?.bankName ?: ""
           if (isCurrentUserPayer) {
-            onRecordPayment(state.billTitle, transfer.amount, selectedPaymentAccountId, selectedAccountName, paymentSource, settlementReference)
+            onRecordPayment(state.billTitle, settlementAmount, selectedPaymentAccountId, selectedAccountName, paymentSource, settlementReference)
           } else if (isCurrentUserPayee) {
-            onRecordIncome(state.billTitle, transfer.amount, selectedPaymentAccountId, selectedAccountName, paymentSource, settlementReference)
+            onRecordIncome(state.billTitle, settlementAmount, selectedPaymentAccountId, selectedAccountName, paymentSource, settlementReference)
           }
-          val key = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
-          viewModel.toggleSettledTransfer(key)
+          viewModel.addTransferPayment(pendingTransferKey, settlementAmount, pendingOriginalAmount)
           pendingSettlement = null
         }) { Text(when { isCurrentUserPayer -> "Record & settle"; isCurrentUserPayee -> "Record received"; else -> "Confirm paid" }) }
       },
