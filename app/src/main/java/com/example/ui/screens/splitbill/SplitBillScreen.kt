@@ -1163,7 +1163,7 @@ private fun SettlementLedgerTab(
   var pendingSettlement by remember { mutableStateOf<DebtTransfer?>(null) }
   var pendingTransferKey by remember { mutableStateOf("") }
   var pendingOriginalAmount by remember { mutableStateOf(0.0) }
-  var settlementAmountText by remember(pendingTransferKey) { mutableStateOf("") }
+  var settlementAmountText by remember { mutableStateOf("") }
   var selectedPaymentAccountId by remember { mutableStateOf<Long?>(null) }
   var paymentSource by remember { mutableStateOf("Cash / Wallet") }
   var showAccountMenu by remember { mutableStateOf(false) }
