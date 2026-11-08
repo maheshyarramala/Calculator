@@ -62,6 +62,7 @@ fun SplitBillScreen(
   val clipboard = LocalClipboardManager.current
   val isRestored by viewModel.isRestored.collectAsState()
   val savedBills by viewModel.savedBills.collectAsState()
+  val billCreatedAt = savedBills.firstOrNull { it.id == state.billId }?.createdAt ?: System.currentTimeMillis()
   var showBillHistory by remember { mutableStateOf(false) }
   var showNewBillConfirm by remember { mutableStateOf(false) }
   var showRenameBill by remember { mutableStateOf(false) }
@@ -216,7 +217,7 @@ fun SplitBillScreen(
           modifier = Modifier.clickable { billTitleDraft = state.billTitle; showRenameBill = true }
         )
         Text(
-          text = "${state.participants.size} participants",
+          text = "${state.participants.size} participants · ${java.text.SimpleDateFormat("dd MMM", Locale.getDefault()).format(java.util.Date(billCreatedAt))}",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           maxLines = 1,
