@@ -97,7 +97,7 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
     viewModelScope.launch {
       val record = dao.getBill(id) ?: return@launch
       runCatching { decodeState(record) }.onSuccess {
-        _uiState.value = it
+        _uiState.value = it.copy(activeTab = 0)
         persistCurrent()
       }
     }
