@@ -50,12 +50,15 @@ import java.util.Locale
 @Composable
 fun SplitBillScreen(
   viewModel: SplitBillViewModel,
+  financeViewModel: com.example.ui.screens.finance.FinanceHubViewModel? = null,
   modifier: Modifier = Modifier
 ) {
   val state by viewModel.uiState.collectAsState()
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
   val clipboard = LocalClipboardManager.current
+  val financeAccounts by financeViewModel?.bankAccounts?.collectAsState()
+    ?: remember { mutableStateOf(emptyList<com.example.data.local.entity.BankAccount>()) }
 
   // Calculate dynamic breakdowns and debt settlements using DebtSimplifier
   val breakdowns = remember(
@@ -300,7 +303,11 @@ fun SplitBillScreen(
         breakdowns = breakdowns,
         transfers = simplifiedTransfers,
         totalBill = totalBill,
-        viewModel = viewModel
+        viewModel = viewModel,
+        bankAccounts = financeAccounts,
+        onRecordPayment = { title, amount, accountId, accountName, method ->
+          financeViewModel?.logSplitBillPayment(title, amount, accountId, accountName, method)
+        }
       )
     }
   }
@@ -904,10 +911,84 @@ private fun SettlementLedgerTab(
   breakdowns: List<PersonBreakdown>,
   transfers: List<DebtTransfer>,
   totalBill: Double,
-  viewModel: SplitBillViewModel
+  viewModel: SplitBillViewModel,
+  bankAccounts: List<com.example.data.local.entity.BankAccount>,
+  onRecordPayment: (String, Double, Long?, String, String) -> Unit
 ) {
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
+  var pendingSettlement by remember { mutableStateOf<DebtTransfer?>(null) }
+  var selectedPaymentAccountId by remember { mutableStateOf<Long?>(null) }
+  var paymentSource by remember { mutableStateOf("Cash / Wallet") }
+  var showAccountMenu by remember { mutableStateOf(false) }
+
+  pendingSettlement?.let { transfer ->
+    val isCurrentUserPayer = transfer.fromParticipant.name.equals("You (Me)", ignoreCase = true) ||
+      transfer.fromParticipant.name.equals("You", ignoreCase = true) ||
+      transfer.fromParticipant.name.equals("Me", ignoreCase = true)
+    AlertDialog(
+      onDismissRequest = { pendingSettlement = null },
+      title = { Text(if (isCurrentUserPayer) "Record payment" else "Confirm settlement") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("${transfer.fromParticipant.name} pays ${transfer.toParticipant.name} ${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}")
+          if (isCurrentUserPayer) {
+            Text("Choose where this payment came from. The payment will also be added to Finance > Expenses.")
+            Box {
+              OutlinedButton(onClick = { showAccountMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.AccountBalanceWallet, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(paymentSource, modifier = Modifier.weight(1f))
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+              }
+              DropdownMenu(expanded = showAccountMenu, onDismissRequest = { showAccountMenu = false }) {
+                DropdownMenuItem(
+                  text = { Text("Cash / Wallet (not linked)") },
+                  onClick = {
+                    paymentSource = "Cash / Wallet"
+                    selectedPaymentAccountId = null
+                    showAccountMenu = false
+                  }
+                )
+                bankAccounts.filterNot { it.accountType.equals("Credit Card", ignoreCase = true) }.forEach { account ->
+                  DropdownMenuItem(
+                    text = { Text(account.bankName) },
+                    onClick = {
+                      paymentSource = account.bankName
+                      selectedPaymentAccountId = account.id
+                      showAccountMenu = false
+                    }
+                  )
+                }
+              }
+            }
+            if (bankAccounts.isEmpty()) {
+              Text("No bank accounts found. Cash / Wallet will still be recorded in your expense history.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          } else {
+            Text("This payment is from another participant. Confirm only after you have received the payment.")
+          }
+        }
+      },
+      confirmButton = {
+        Button(onClick = {
+          if (isCurrentUserPayer) {
+            onRecordPayment(
+              state.billTitle,
+              transfer.amount,
+              selectedPaymentAccountId,
+              bankAccounts.firstOrNull { it.id == selectedPaymentAccountId }?.bankName ?: "",
+              paymentSource
+            )
+          }
+          val key = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
+          viewModel.toggleSettledTransfer(key)
+          pendingSettlement = null
+        }) { Text(if (isCurrentUserPayer) "Record & settle" else "Confirm paid") }
+      },
+      dismissButton = { TextButton(onClick = { pendingSettlement = null }) { Text("Cancel") } }
+    )
+  }
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
@@ -1110,7 +1191,9 @@ private fun SettlementLedgerTab(
               Button(
                 onClick = {
                   haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-                  viewModel.toggleSettledTransfer(transferKey)
+                  paymentSource = "Cash / Wallet"
+                  selectedPaymentAccountId = null
+                  pendingSettlement = transfer
                 },
                 colors = ButtonDefaults.buttonColors(
                   containerColor = if (isSettled) Color(0xFF10B981) else MaterialTheme.colorScheme.primaryContainer,
