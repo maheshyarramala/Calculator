@@ -3,11 +3,14 @@ package com.example.ui.screens.splitbill
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.SplitBillRecord
 import com.example.domain.splitbill.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -35,7 +38,9 @@ data class SplitBillUiState(
 )
 
 class SplitBillViewModel(application: Application) : AndroidViewModel(application) {
-  private val dao = AppDatabase.getDatabase(application).splitBillDao()
+  private val database = AppDatabase.getDatabase(application)
+  private val dao = database.splitBillDao()
+  private val persistMutex = Mutex()
   private val _uiState = MutableStateFlow(SplitBillUiState())
   val uiState: StateFlow<SplitBillUiState> = _uiState.asStateFlow()
   val savedBills: StateFlow<List<SplitBillRecord>> = dao.observeBills()
@@ -59,21 +64,25 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
     if (!_isRestored.value) return
     val state = _uiState.value
     viewModelScope.launch {
-      runCatching {
-        val existing = dao.getBill(state.billId)
-        dao.clearActiveBill()
-        dao.upsertBill(
-          SplitBillRecord(
-            id = state.billId,
-            title = state.billTitle,
-            currencyCode = state.currencyCode,
-            currencySymbol = state.currencySymbol,
-            payloadJson = encodeState(state),
-            createdAt = existing?.createdAt ?: System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis(),
-            isActive = true
-          )
-        )
+      persistMutex.withLock {
+        runCatching {
+          database.withTransaction {
+            val existing = dao.getBill(state.billId)
+            dao.clearActiveBill()
+            dao.upsertBill(
+              SplitBillRecord(
+                id = state.billId,
+                title = state.billTitle,
+                currencyCode = state.currencyCode,
+                currencySymbol = state.currencySymbol,
+                payloadJson = encodeState(state),
+                createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                isActive = true
+              )
+            )
+          }
+        }
       }
     }
   }
