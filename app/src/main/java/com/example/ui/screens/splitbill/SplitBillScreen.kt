@@ -404,7 +404,7 @@ private fun ItemsAndBillTab(
       }
     }
     // Items Section Header
-    item {
+    if (state.splitMode == SplitMode.ITEMIZED) item {
       Column(modifier = Modifier.fillMaxWidth()) {
         Text(
           text = "Dishes & Line Items (${state.items.size})",
@@ -438,7 +438,7 @@ private fun ItemsAndBillTab(
     }
 
     // Empty state when no items exist
-    if (state.items.isEmpty()) {
+    if (state.splitMode == SplitMode.ITEMIZED && state.items.isEmpty()) {
       item {
         Card(
           shape = RoundedCornerShape(16.dp),
