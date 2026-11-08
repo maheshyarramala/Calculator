@@ -1102,7 +1102,7 @@ private fun ExpensesSection(
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 88.dp),
+    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(8.dp)
   ) {
     // Total Net Balance Dashboard Banner
@@ -3092,7 +3092,7 @@ private fun TripsSection(
 ) {
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
     item(key = "trips_header") {
@@ -4934,7 +4934,7 @@ private fun SubscriptionsSection(
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 88.dp),
+    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(12.dp)
   ) {
     item(key = "subscriptions_header") {
@@ -5832,7 +5832,7 @@ private fun CreditCardsSection(
 
   LazyColumn(
     modifier = modifier.fillMaxSize(),
-    contentPadding = PaddingValues(16.dp),
+    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
     item {

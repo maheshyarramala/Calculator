@@ -59,6 +59,7 @@ fun DebtTrackerScreen(
   var showUpiDialog by remember { mutableStateOf(false) }
 
   Scaffold(
+    contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
     snackbarHost = { SnackbarHost(snackbarHostState) },
     floatingActionButton = {
       FloatingActionButton(
@@ -77,7 +78,7 @@ fun DebtTrackerScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(padding),
-      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
       // 1. Dual Summary Card: Receivable (Green) vs Payable (Red)
