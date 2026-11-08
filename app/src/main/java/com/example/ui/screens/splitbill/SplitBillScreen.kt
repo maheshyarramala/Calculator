@@ -543,11 +543,7 @@ private fun ItemsAndBillTab(
           Text("Your expenses", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
           Text("Add what the group spent.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        FilledTonalButton(onClick = onAddItemClick, shape = RoundedCornerShape(12.dp)) {
-          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-          Spacer(Modifier.width(4.dp))
-          Text("Add item")
-        }
+
       }
     }
 
