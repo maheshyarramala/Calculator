@@ -109,7 +109,17 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
     }
   }
 
-  fun setTab(index: Int) { _uiState.update { it.copy(activeTab = index.coerceIn(0, 2)) }; persistCurrent() }
+  fun setTab(index: Int) { _uiState.update { it.copy(activeTab = index.coerceIn(0, 4)) }; persistCurrent() }
+
+  fun setParticipantSharePercentage(id: String, value: Double) {
+    _uiState.update { state -> state.copy(participants = state.participants.map { if (it.id == id) it.copy(sharePercentage = nonNegative(value).coerceAtMost(100.0)) else it }) }
+    persistCurrent()
+  }
+
+  fun setParticipantCustomWeight(id: String, value: Double) {
+    _uiState.update { state -> state.copy(participants = state.participants.map { if (it.id == id) it.copy(customShareWeight = nonNegative(value)) else it }) }
+    persistCurrent()
+  }
   fun setBillTitle(title: String) { _uiState.update { it.copy(billTitle = title.take(80)) }; persistCurrent() }
   fun setCurrency(code: String, symbol: String) { _uiState.update { it.copy(currencyCode = code, currencySymbol = symbol) }; persistCurrent() }
   fun setTaxAmount(tax: Double) { _uiState.update { it.copy(taxAmount = nonNegative(tax)) }; persistCurrent() }
@@ -234,7 +244,8 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
     val people = JSONArray()
     state.participants.forEach { p ->
       people.put(JSONObject().put("id", p.id).put("name", p.name).put("avatarColorHex", p.avatarColorHex)
-        .put("upiId", p.upiId).put("paypalUsername", p.paypalUsername).put("paidAmount", p.paidAmount))
+        .put("upiId", p.upiId).put("paypalUsername", p.paypalUsername).put("paidAmount", p.paidAmount)
+        .put("sharePercentage", p.sharePercentage).put("customShareWeight", p.customShareWeight))
     }
     val items = JSONArray()
     state.items.forEach { item ->
@@ -259,7 +270,9 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
         avatarColorHex = p.optString("avatarColorHex", "#6366F1"),
         upiId = p.optString("upiId", ""),
         paypalUsername = p.optString("paypalUsername", ""),
-        paidAmount = nonNegative(p.optDouble("paidAmount", 0.0))
+        paidAmount = nonNegative(p.optDouble("paidAmount", 0.0)),
+        sharePercentage = nonNegative(p.optDouble("sharePercentage", 0.0)),
+        customShareWeight = nonNegative(p.optDouble("customShareWeight", 1.0))
       )
     }.ifEmpty { listOf(Participant(id = "p1", name = "You (Me)")) }
     val itemJson = root.optJSONArray("items") ?: JSONArray()
@@ -290,7 +303,7 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
       discountAmount = nonNegative(root.optDouble("discountAmount", 0.0)),
       manualBillTotal = nonNegative(root.optDouble("manualBillTotal", 0.0)),
       simplifyDebtsEnabled = root.optBoolean("simplifyDebtsEnabled", true),
-      activeTab = root.optInt("activeTab", 0).coerceIn(0, 2),
+      activeTab = root.optInt("activeTab", 0).coerceIn(0, 4),
       settledTransferKeys = settled,
       splitMode = mode
     )
