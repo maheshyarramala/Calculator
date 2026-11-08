@@ -64,7 +64,32 @@ fun SplitBillScreen(
   val savedBills by viewModel.savedBills.collectAsState()
   var showBillHistory by remember { mutableStateOf(false) }
   var showNewBillConfirm by remember { mutableStateOf(false) }
+  var showRenameBill by remember { mutableStateOf(false) }
+  var billTitleDraft by remember(state.billTitle) { mutableStateOf(state.billTitle) }
   LaunchedEffect(state, isRestored) { if (isRestored) viewModel.persistCurrent() }
+
+  if (showRenameBill) {
+    AlertDialog(
+      onDismissRequest = { showRenameBill = false },
+      title = { Text("Rename bill") },
+      text = {
+        OutlinedTextField(
+          value = billTitleDraft,
+          onValueChange = { billTitleDraft = it.take(80) },
+          label = { Text("Bill name") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+      },
+      confirmButton = {
+        Button(onClick = {
+          if (billTitleDraft.isNotBlank()) viewModel.setBillTitle(billTitleDraft.trim())
+          showRenameBill = false
+        }, enabled = billTitleDraft.isNotBlank()) { Text("Save") }
+      },
+      dismissButton = { TextButton(onClick = { showRenameBill = false }) { Text("Cancel") } }
+    )
+  }
 
   if (showNewBillConfirm) {
     AlertDialog(
@@ -187,7 +212,8 @@ fun SplitBillScreen(
           text = state.billTitle,
           style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
           maxLines = 1,
-          overflow = TextOverflow.Ellipsis
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.clickable { billTitleDraft = state.billTitle; showRenameBill = true }
         )
         Text(
           text = "${state.participants.size} participants",
