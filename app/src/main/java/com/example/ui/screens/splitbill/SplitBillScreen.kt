@@ -44,6 +44,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.domain.splitbill.*
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1304,16 +1307,37 @@ private fun OcrScannerBottomSheet(
   val context = LocalContext.current
   var pastedText by remember { mutableStateOf("") }
   var isParsing by remember { mutableStateOf(false) }
+  val recognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+  DisposableEffect(recognizer) { onDispose { recognizer.close() } }
 
-  // Photo Picker
+  // On-device OCR: the image stays on the phone; extracted text is parsed locally.
   val photoPicker = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickVisualMedia()
   ) { uri: Uri? ->
     if (uri != null) {
-      // Simulate multimodal OCR extraction from image uri
-      Toast.makeText(context, "Receipt captured! Parsing line items & taxes...", Toast.LENGTH_SHORT).show()
-      onLoadDemo(ReceiptOcrParser.demoReceiptBistro, "Bistro Dinner (Scanned)")
-      onDismiss()
+      isParsing = true
+      runCatching { InputImage.fromFilePath(context, uri) }
+        .onSuccess { image ->
+          recognizer.process(image)
+            .addOnSuccessListener { result ->
+              isParsing = false
+              val parsed = ReceiptOcrParser.parseReceiptText(result.text, "Scanned Receipt")
+              if (parsed.items.isEmpty()) {
+                Toast.makeText(context, "No receipt line items detected. Try a clearer photo or paste the receipt text.", Toast.LENGTH_LONG).show()
+              } else {
+                onApplyReceipt(parsed)
+                onDismiss()
+              }
+            }
+            .addOnFailureListener { error ->
+              isParsing = false
+              Toast.makeText(context, "Could not read this receipt: ${error.localizedMessage ?: "Try another image."}", Toast.LENGTH_LONG).show()
+            }
+        }
+        .onFailure { error ->
+          isParsing = false
+          Toast.makeText(context, "Could not open this image: ${error.localizedMessage ?: "Try another image."}", Toast.LENGTH_LONG).show()
+        }
     }
   }
 
@@ -1332,7 +1356,7 @@ private fun OcrScannerBottomSheet(
       ) {
         Column {
           Text("AI Receipt Scanner & OCR", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-          Text("Automatically extract items, prices, discounts & taxes", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("On-device text recognition; review parsed items before splitting", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         IconButton(onClick = onDismiss) {
           Icon(Icons.Default.Close, contentDescription = "Close")
@@ -1348,12 +1372,14 @@ private fun OcrScannerBottomSheet(
           onClick = {
             photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
           },
+          enabled = !isParsing,
           shape = RoundedCornerShape(12.dp),
           modifier = Modifier.weight(1f)
         ) {
-          Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+          if (isParsing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+          else Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
           Spacer(modifier = Modifier.width(6.dp))
-          Text("Photo / Receipt", fontSize = 12.sp)
+          Text(if (isParsing) "Reading receipt…" else "Photo / Receipt", fontSize = 12.sp)
         }
       }
 
