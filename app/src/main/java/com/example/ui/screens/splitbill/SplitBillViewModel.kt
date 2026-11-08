@@ -24,6 +24,7 @@ data class SplitBillUiState(
   val taxAmount: Double = 0.0,
   val tipAmount: Double = 0.0,
   val discountAmount: Double = 0.0,
+  val manualBillTotal: Double = 0.0,
   val simplifyDebtsEnabled: Boolean = true,
   val showOcrDialog: Boolean = false,
   val showAddParticipantDialog: Boolean = false,
@@ -105,6 +106,7 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
   fun setTaxAmount(tax: Double) { _uiState.update { it.copy(taxAmount = nonNegative(tax)) }; persistCurrent() }
   fun setTipAmount(tip: Double) { _uiState.update { it.copy(tipAmount = nonNegative(tip)) }; persistCurrent() }
   fun setDiscountAmount(discount: Double) { _uiState.update { it.copy(discountAmount = nonNegative(discount)) }; persistCurrent() }
+  fun setManualBillTotal(total: Double) { _uiState.update { it.copy(manualBillTotal = nonNegative(total)) }; persistCurrent() }
   fun setSplitMode(mode: SplitMode) { _uiState.update { it.copy(splitMode = mode) }; persistCurrent() }
   fun toggleSimplifyDebts() { _uiState.update { it.copy(simplifyDebtsEnabled = !it.simplifyDebtsEnabled) }; persistCurrent() }
   fun setShowOcrDialog(show: Boolean) { _uiState.update { it.copy(showOcrDialog = show) } }
@@ -216,6 +218,7 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
       .put("taxAmount", state.taxAmount)
       .put("tipAmount", state.tipAmount)
       .put("discountAmount", state.discountAmount)
+      .put("manualBillTotal", state.manualBillTotal)
       .put("simplifyDebtsEnabled", state.simplifyDebtsEnabled)
       .put("activeTab", state.activeTab)
       .put("splitMode", state.splitMode.name)
@@ -276,6 +279,7 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
       taxAmount = nonNegative(root.optDouble("taxAmount", 0.0)),
       tipAmount = nonNegative(root.optDouble("tipAmount", 0.0)),
       discountAmount = nonNegative(root.optDouble("discountAmount", 0.0)),
+      manualBillTotal = nonNegative(root.optDouble("manualBillTotal", 0.0)),
       simplifyDebtsEnabled = root.optBoolean("simplifyDebtsEnabled", true),
       activeTab = root.optInt("activeTab", 0).coerceIn(0, 2),
       settledTransferKeys = settled,
