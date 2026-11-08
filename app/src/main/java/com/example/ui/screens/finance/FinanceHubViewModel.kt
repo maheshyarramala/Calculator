@@ -290,20 +290,25 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     if (!amount.isFinite() || amount <= 0.0 || settlementReference.isBlank()) return
     viewModelScope.launch {
       val ledgerNote = "OMNICAlC_SPLIT_SETTLEMENT:$settlementReference"
-      if (dao.getExpenseByNotes(ledgerNote) != null) return@launch
       try {
-        dao.insertExpense(
-          ExpenseRecord(
-            title = "Split bill: ${billTitle.trim().ifBlank { "Group expense" }}",
-            amount = amount,
-            categoryName = "Food & Dining",
-            type = "EXPENSE",
-            bankAccountId = bankAccountId,
-            bankAccountName = bankAccountName,
-            notes = "$ledgerNote | Payment source: $paymentMethod"
-          )
-        )
-        _uiState.update { it.copy(toastMessage = "Split-bill payment added to Finance expenses") }
+        val inserted = database.withTransaction {
+          if (dao.getExpenseByNotes(ledgerNote) != null) false
+          else {
+            dao.insertExpense(
+              ExpenseRecord(
+                title = "Split bill: ${billTitle.trim().ifBlank { "Group expense" }}",
+                amount = amount,
+                categoryName = "Food & Dining",
+                type = "EXPENSE",
+                bankAccountId = bankAccountId,
+                bankAccountName = bankAccountName,
+                notes = "$ledgerNote | Payment source: $paymentMethod"
+              )
+            )
+            true
+          }
+        }
+        if (inserted) _uiState.update { it.copy(toastMessage = "Split-bill payment added to Finance expenses") }
       } catch (error: Exception) {
         _uiState.update { it.copy(toastMessage = "Could not record split-bill payment: ${error.localizedMessage ?: "Unknown error"}") }
       }
@@ -322,20 +327,25 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     if (!amount.isFinite() || amount <= 0.0 || settlementReference.isBlank()) return
     viewModelScope.launch {
       val ledgerNote = "OMNICAlC_SPLIT_SETTLEMENT_IN:$settlementReference"
-      if (dao.getExpenseByNotes(ledgerNote) != null) return@launch
       try {
-        dao.insertExpense(
-          ExpenseRecord(
-            title = "Split bill received: ${billTitle.trim().ifBlank { "Group expense" }}",
-            amount = amount,
-            categoryName = "Split Bill Reimbursements",
-            type = "INCOME",
-            bankAccountId = bankAccountId,
-            bankAccountName = bankAccountName,
-            notes = "$ledgerNote | Received to: $paymentMethod"
-          )
-        )
-        _uiState.update { it.copy(toastMessage = "Split-bill reimbursement added to Finance income") }
+        val inserted = database.withTransaction {
+          if (dao.getExpenseByNotes(ledgerNote) != null) false
+          else {
+            dao.insertExpense(
+              ExpenseRecord(
+                title = "Split bill received: ${billTitle.trim().ifBlank { "Group expense" }}",
+                amount = amount,
+                categoryName = "Split Bill Reimbursements",
+                type = "INCOME",
+                bankAccountId = bankAccountId,
+                bankAccountName = bankAccountName,
+                notes = "$ledgerNote | Received to: $paymentMethod"
+              )
+            )
+            true
+          }
+        }
+        if (inserted) _uiState.update { it.copy(toastMessage = "Split-bill reimbursement added to Finance income") }
       } catch (error: Exception) {
         _uiState.update { it.copy(toastMessage = "Could not record reimbursement: ${error.localizedMessage ?: "Unknown error"}") }
       }
