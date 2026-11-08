@@ -278,6 +278,31 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
+  /** Records a completed split-bill payment in the shared Finance expense ledger. */
+  fun logSplitBillPayment(
+    billTitle: String,
+    amount: Double,
+    bankAccountId: Long?,
+    bankAccountName: String,
+    paymentMethod: String
+  ) {
+    if (!amount.isFinite() || amount <= 0.0) return
+    viewModelScope.launch {
+      dao.insertExpense(
+        ExpenseRecord(
+          title = "Split bill: ${billTitle.trim().ifBlank { "Group expense" }}",
+          amount = amount,
+          categoryName = "Food & Dining",
+          type = "EXPENSE",
+          bankAccountId = bankAccountId,
+          bankAccountName = bankAccountName,
+          notes = "Settlement recorded from Split Bill. Payment source: $paymentMethod"
+        )
+      )
+      _uiState.update { it.copy(toastMessage = "Split-bill payment added to Finance expenses") }
+    }
+  }
+
   // --- Expense & Income Actions ---
   fun addExpense(
     title: String,
