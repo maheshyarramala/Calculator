@@ -49,7 +49,7 @@ interface FinanceDao {
   @Query("SELECT * FROM expenses WHERE id = :id LIMIT 1")
   suspend fun getExpenseById(id: Long): ExpenseRecord?
 
-  @Query("SELECT * FROM expenses WHERE notes = :notes LIMIT 1")
+  @Query("SELECT * FROM expenses WHERE notes LIKE '%' || :notes || '%' LIMIT 1")
   suspend fun getExpenseByNotes(notes: String): ExpenseRecord?
 
   @Query("SELECT * FROM expenses WHERE loanId = :loanId ORDER BY dateTimestamp DESC")
