@@ -6196,10 +6196,6 @@ private fun SubscriptionDetailsDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditSubscriptionDialog
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 private fun EditSubscriptionDialog(
   sub: SubscriptionRecord,
   categories: List<ExpenseCategory>,
