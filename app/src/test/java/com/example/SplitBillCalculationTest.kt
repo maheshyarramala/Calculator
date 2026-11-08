@@ -55,6 +55,38 @@ class SplitBillCalculationTest {
   }
 
   @Test
+  fun percentageSplitUsesConfiguredWeightsAndPreservesTotal() {
+    val participants = listOf(
+      Participant(id = "a", name = "A", sharePercentage = 60.0),
+      Participant(id = "b", name = "B", sharePercentage = 40.0)
+    )
+    val result = DebtSimplifier.calculateBreakdowns(
+      mode = SplitMode.PERCENTAGE, participants = participants, items = emptyList(),
+      tax = 0.0, tip = 0.0, discount = 0.0, manualBillTotal = 100.0
+    )
+    assertEquals(60.0, result[0].totalToPay, 0.001)
+    assertEquals(40.0, result[1].totalToPay, 0.001)
+    assertEquals(100.0, result.sumOf { it.totalToPay }, 0.001)
+  }
+
+  @Test
+  fun customSplitUsesRelativeWeightsAndPreservesTotal() {
+    val participants = listOf(
+      Participant(id = "a", name = "A", customShareWeight = 2.0),
+      Participant(id = "b", name = "B", customShareWeight = 1.0),
+      Participant(id = "c", name = "C", customShareWeight = 1.0)
+    )
+    val result = DebtSimplifier.calculateBreakdowns(
+      mode = SplitMode.CUSTOM, participants = participants, items = emptyList(),
+      tax = 0.0, tip = 0.0, discount = 0.0, manualBillTotal = 100.0
+    )
+    assertEquals(50.0, result[0].totalToPay, 0.001)
+    assertEquals(25.0, result[1].totalToPay, 0.001)
+    assertEquals(25.0, result[2].totalToPay, 0.001)
+    assertEquals(100.0, result.sumOf { it.totalToPay }, 0.001)
+  }
+
+  @Test
   fun itemPayerIsCreditedAndSharedItemCentsArePreserved() {
     val participants = listOf(
       Participant(id = "a", name = "A"),
