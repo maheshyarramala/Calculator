@@ -310,6 +310,38 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
+  /** Records a reimbursement received from a split-bill participant in the Finance income ledger. */
+  fun logSplitBillSettlementIncome(
+    billTitle: String,
+    amount: Double,
+    bankAccountId: Long?,
+    bankAccountName: String,
+    paymentMethod: String,
+    settlementReference: String
+  ) {
+    if (!amount.isFinite() || amount <= 0.0 || settlementReference.isBlank()) return
+    viewModelScope.launch {
+      val ledgerNote = "OMNICAlC_SPLIT_SETTLEMENT_IN:$settlementReference"
+      if (dao.getExpenseByNotes(ledgerNote) != null) return@launch
+      try {
+        dao.insertExpense(
+          ExpenseRecord(
+            title = "Split bill received: ${billTitle.trim().ifBlank { "Group expense" }}",
+            amount = amount,
+            categoryName = "Split Bill Reimbursements",
+            type = "INCOME",
+            bankAccountId = bankAccountId,
+            bankAccountName = bankAccountName,
+            notes = "$ledgerNote | Received to: $paymentMethod"
+          )
+        )
+        _uiState.update { it.copy(toastMessage = "Split-bill reimbursement added to Finance income") }
+      } catch (error: Exception) {
+        _uiState.update { it.copy(toastMessage = "Could not record reimbursement: ${error.localizedMessage ?: "Unknown error"}") }
+      }
+    }
+  }
+
   // --- Expense & Income Actions ---
   fun addExpense(
     title: String,
