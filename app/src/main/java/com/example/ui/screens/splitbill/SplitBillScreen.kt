@@ -461,7 +461,7 @@ private fun SplitMethodTab(
     } else {
       Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+          Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
           Text("Item-by-item split", fontWeight = FontWeight.Bold)
           Text("Go to Expenses to add dishes, scan a receipt and choose who shared each item. Each person's share is calculated from their claimed items.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
           TextButton(onClick = { viewModel.setTab(0) }) { Text("Go to Expenses") }
