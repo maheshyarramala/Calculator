@@ -104,10 +104,10 @@ object ReceiptOcrParser {
   }
 
   private fun extractFirstNumber(text: String): Double? {
-    val matcher = Pattern.compile("""(?:[\$₹€£]|Rs\.?|INR)?\s*([0-9]+(?:[\.,][0-9]{2})?)""").matcher(text)
+    val matcher = Pattern.compile("""(?:[\$₹€£]|Rs\.?|INR)?\s*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)""").matcher(text)
     var result: Double? = null
     while (matcher.find()) {
-      matcher.group(1)?.replace(",", ".")?.toDoubleOrNull()?.let {
+      matcher.group(1)?.replace(",", "")?.toDoubleOrNull()?.let {
         result = it
       }
     }
