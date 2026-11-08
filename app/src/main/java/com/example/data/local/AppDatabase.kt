@@ -10,6 +10,7 @@ import com.example.data.local.dao.CalculationHistoryDao
 import com.example.data.local.dao.DebtDao
 import com.example.data.local.dao.FinanceDao
 import com.example.data.local.dao.LoanDao
+import com.example.data.local.dao.SplitBillDao
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.CalculationRecord
 import com.example.data.local.entity.CreditCardBillReminder
@@ -18,6 +19,7 @@ import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.LoanRecord
 import com.example.data.local.entity.TripRecord
+import com.example.data.local.entity.SplitBillRecord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,9 +34,10 @@ import kotlinx.coroutines.launch
     TripRecord::class,
     com.example.data.local.entity.SubscriptionRecord::class,
     LoanRecord::class,
-    DebtRecord::class
+    DebtRecord::class,
+    SplitBillRecord::class
   ],
-  version = 9,
+  version = 10,
   exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -42,6 +45,7 @@ abstract class AppDatabase : RoomDatabase() {
   abstract fun financeDao(): FinanceDao
   abstract fun loanDao(): LoanDao
   abstract fun debtDao(): DebtDao
+  abstract fun splitBillDao(): SplitBillDao
 
   companion object {
     private val MIGRATION_4_5 = object : Migration(4, 5) {
@@ -107,6 +111,22 @@ abstract class AppDatabase : RoomDatabase() {
       }
     }
 
+    private val MIGRATION_9_10 = object : Migration(9, 10) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS split_bills (" +
+            "id TEXT NOT NULL PRIMARY KEY, " +
+            "title TEXT NOT NULL, " +
+            "currencyCode TEXT NOT NULL, " +
+            "currencySymbol TEXT NOT NULL, " +
+            "payloadJson TEXT NOT NULL, " +
+            "createdAt INTEGER NOT NULL, " +
+            "updatedAt INTEGER NOT NULL, " +
+            "isActive INTEGER NOT NULL)"
+        )
+      }
+    }
+
     @Volatile
     private var INSTANCE: AppDatabase? = null
 
@@ -122,6 +142,7 @@ abstract class AppDatabase : RoomDatabase() {
           .addMigrations(MIGRATION_6_7)
           .addMigrations(MIGRATION_7_8)
           .addMigrations(MIGRATION_8_9)
+          .addMigrations(MIGRATION_9_10)
           .fallbackToDestructiveMigration(true)
           .addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
