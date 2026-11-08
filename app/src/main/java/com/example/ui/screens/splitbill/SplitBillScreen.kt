@@ -374,6 +374,159 @@ fun SplitBillScreen(
 }
 
 @Composable
+private fun SplitMethodTab(
+  state: SplitBillUiState,
+  viewModel: SplitBillViewModel,
+  breakdowns: List<PersonBreakdown>
+) {
+  val modes = listOf(SplitMode.EQUAL, SplitMode.PERCENTAGE, SplitMode.CUSTOM, SplitMode.ITEMIZED)
+  val totalPercentage = state.participants.sumOf { it.sharePercentage }
+  Column(
+    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 80.dp),
+    verticalArrangement = Arrangement.spacedBy(12.dp)
+  ) {
+    Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Choose how to split", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Select a fair allocation method for this group bill.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        modes.forEach { mode ->
+          val selected = state.splitMode == mode
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            border = BorderStroke(if (selected) 1.5.dp else 0.5.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.fillMaxWidth().clickable { viewModel.setSplitMode(mode) }
+          ) {
+            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+              RadioButton(selected = selected, onClick = { viewModel.setSplitMode(mode) })
+              Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                Text(mode.title, fontWeight = FontWeight.SemiBold)
+                Text(mode.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+              if (selected) Icon(Icons.Default.CheckCircle, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+            }
+          }
+        }
+      }
+    }
+    if (state.splitMode != SplitMode.ITEMIZED) {
+      Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("Bill amount", fontWeight = FontWeight.Bold)
+          OutlinedTextField(
+            value = amountInputText(state.manualBillTotal),
+            onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\\\d*\\\\.?\\\\d{0,2}$"))) viewModel.setManualBillTotal(value.toDoubleOrNull() ?: 0.0) },
+            label = { Text("Total before tax, tip and discount") },
+            prefix = { Text(state.currencySymbol) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          when (state.splitMode) {
+            SplitMode.PERCENTAGE -> {
+              Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Assign percentage per person", fontWeight = FontWeight.SemiBold)
+                Text("${String.format(Locale.US, "%.1f", totalPercentage)}%", color = if (kotlin.math.abs(totalPercentage - 100.0) < 0.01) Color(0xFF059669) else MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+              }
+              state.participants.forEach { person ->
+                OutlinedTextField(
+                  value = amountInputText(person.sharePercentage),
+                  onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\\\d*\\\\.?\\\\d{0,2}$"))) viewModel.setParticipantSharePercentage(person.id, value.toDoubleOrNull() ?: 0.0) },
+                  label = { Text(person.name) },
+                  suffix = { Text("%") },
+                  keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                  singleLine = true,
+                  modifier = Modifier.fillMaxWidth()
+                )
+              }
+              if (kotlin.math.abs(totalPercentage - 100.0) >= 0.01) Text("Percentages should add up to 100%. Shares are normalized until then.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            SplitMode.CUSTOM -> {
+              Text("Set relative share weights. Example: 2, 1, 1 means 50%, 25%, 25%.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              state.participants.forEach { person ->
+                OutlinedTextField(
+                  value = amountInputText(person.customShareWeight),
+                  onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\\\d*\\\\.?\\\\d{0,2}$"))) viewModel.setParticipantCustomWeight(person.id, value.toDoubleOrNull() ?: 0.0) },
+                  label = { Text("${person.name} share weight") },
+                  keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                  singleLine = true,
+                  modifier = Modifier.fillMaxWidth()
+                )
+              }
+            }
+            else -> Text("The bill is divided equally among all participants.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+        }
+      }
+    } else {
+      Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+          Text("Item-by-item split", fontWeight = FontWeight.Bold)
+          Text("Go to Expenses to add dishes, scan a receipt and choose who shared each item. Each person's share is calculated from their claimed items.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          TextButton(onClick = { viewModel.setTab(0) }) { Text("Go to Expenses") }
+        }
+      }
+    }
+    Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Share preview", fontWeight = FontWeight.Bold)
+        breakdowns.forEach { row ->
+          Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(row.participant.name, style = MaterialTheme.typography.bodyMedium)
+            Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", row.totalToPay)}", fontWeight = FontWeight.SemiBold)
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun BillHistoryTab(
+  savedBills: List<com.example.data.local.entity.SplitBillRecord>,
+  currentBillId: String,
+  onOpen: (String) -> Unit,
+  onDelete: (String) -> Unit,
+  onNew: () -> Unit
+) {
+  Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+      Column {
+        Text("Your saved bills", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("${savedBills.size} bills stored on this device", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+      FilledTonalButton(onClick = onNew) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(4.dp)); Text("New bill") }
+    }
+    if (savedBills.isEmpty()) {
+      Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
+          Text("No bill history yet", fontWeight = FontWeight.Bold)
+          Text("Create a bill and it will be saved automatically here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+    } else {
+      LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+        items(savedBills, key = { it.id }) { bill ->
+          Card(Modifier.fillMaxWidth().clickable { onOpen(bill.id) }, border = if (bill.id == currentBillId) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null) {
+            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+              Column(Modifier.weight(1f)) {
+                Text(bill.title, fontWeight = FontWeight.SemiBold)
+                Text("${bill.currencyCode} · ${java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(java.util.Date(bill.updatedAt))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (bill.id == currentBillId) Text("Currently open", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+              }
+              IconButton(onClick = { onDelete(bill.id) }) { Icon(Icons.Default.DeleteOutline, contentDescription = "Delete bill", tint = MaterialTheme.colorScheme.error) }
+              Icon(Icons.Default.ChevronRight, contentDescription = "Open bill")
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
 private fun ItemsAndBillTab(
   state: SplitBillUiState,
   viewModel: SplitBillViewModel,
