@@ -1371,13 +1371,16 @@ private fun SettlementLedgerTab(
               }
 
               Text(
-                text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}",
+                text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", remainingAmount)}",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = if (isSettled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
               )
             }
 
+            if (paidSoFar > 0.0) {
+              Text("Paid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", paidSoFar)} · Remaining: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", remainingAmount)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Spacer(modifier = Modifier.height(10.dp))
 
             // Action Buttons: Pay UPI | PayPal | Nudge | Mark Settled
@@ -1394,7 +1397,7 @@ private fun SettlementLedgerTab(
                       context = context,
                       upiId = transfer.toParticipant.upiId,
                       payeeName = transfer.toParticipant.name,
-                      amount = transfer.amount,
+                      amount = remainingAmount,
                       currency = state.currencyCode,
                       note = "OmniCalc: ${state.billTitle}"
                     )
@@ -1450,6 +1453,7 @@ private fun SettlementLedgerTab(
 
               // Prominent Mark Settled Button
               Button(
+                enabled = !isSettled,
                 onClick = {
                   haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                   paymentSource = "Cash / Wallet"
