@@ -4,6 +4,8 @@ import java.util.UUID
 
 enum class SplitMode(val title: String, val description: String) {
   EQUAL("Equal", "Split total evenly"),
+  PERCENTAGE("Percentage", "Allocate shares by percentage"),
+  CUSTOM("Custom", "Set a custom share weight for each person"),
   ITEMIZED("Itemized & OCR", "Claim individual dishes & prorate tax/tip")
 }
 
@@ -13,7 +15,9 @@ data class Participant(
   val avatarColorHex: String = "#6366F1",
   val upiId: String = "",
   val paypalUsername: String = "",
-  val paidAmount: Double = 0.0
+  val paidAmount: Double = 0.0,
+  val sharePercentage: Double = 0.0,
+  val customShareWeight: Double = 1.0
 )
 
 data class ReceiptItem(
