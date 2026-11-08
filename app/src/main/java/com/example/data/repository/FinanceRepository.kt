@@ -7,6 +7,8 @@ import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.DebtRecord
 import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.LoanRecord
+import com.example.data.local.entity.SubscriptionRecord
+import com.example.data.local.entity.TripRecord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -179,6 +181,18 @@ class FinanceRepository private constructor(context: Context) {
 
   suspend fun deleteBankAccount(account: BankAccount) = withContext(Dispatchers.IO) {
     financeDao.deleteBankAccount(account)
+  }
+
+  suspend fun updateBankAccount(account: BankAccount) = withContext(Dispatchers.IO) {
+    financeDao.updateBankAccount(account)
+  }
+
+  suspend fun updateSubscription(sub: com.example.data.local.entity.SubscriptionRecord) = withContext(Dispatchers.IO) {
+    financeDao.updateSubscription(sub)
+  }
+
+  suspend fun updateTrip(trip: TripRecord) = withContext(Dispatchers.IO) {
+    financeDao.updateTrip(trip)
   }
 
   suspend fun updateOpeningBalance(account: BankAccount, newOpening: Double) = withContext(Dispatchers.IO) {

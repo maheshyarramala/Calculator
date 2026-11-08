@@ -6,6 +6,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -57,6 +59,9 @@ fun DebtTrackerScreen(
 
   val userUpiId by viewModel.userUpiId.collectAsState()
   var showUpiDialog by remember { mutableStateOf(false) }
+  var selectedDebtForDetails by remember { mutableStateOf<DebtRecord?>(null) }
+  var editingDebt by remember { mutableStateOf<DebtRecord?>(null) }
+  var debtToDelete by remember { mutableStateOf<DebtRecord?>(null) }
 
   Scaffold(
     contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
@@ -234,13 +239,79 @@ fun DebtTrackerScreen(
         items(state.allDebts, key = { it.id }) { debt ->
           DebtItemCard(
             debt = debt,
+            onClick = { selectedDebtForDetails = debt },
             onSendReminder = { viewModel.sendReminder(context, debt) },
-            onMarkSettled = { viewModel.setDebtToSettle(debt) },
-            onDelete = { viewModel.deleteDebt(debt) }
+            onMarkSettled = { viewModel.setDebtToSettle(debt) }
           )
         }
       }
     }
+  }
+
+  // Debt Details Dialog (Tap to Inspect)
+  selectedDebtForDetails?.let { debt ->
+    DebtDetailsDialog(
+      debt = debt,
+      onDismiss = { selectedDebtForDetails = null },
+      onEdit = {
+        val target = debt
+        selectedDebtForDetails = null
+        editingDebt = target
+      },
+      onSendReminder = {
+        viewModel.sendReminder(context, debt)
+      },
+      onMarkSettled = {
+        val target = debt
+        selectedDebtForDetails = null
+        viewModel.setDebtToSettle(target)
+      },
+      onDelete = {
+        val target = debt
+        selectedDebtForDetails = null
+        debtToDelete = target
+      }
+    )
+  }
+
+  // Edit Debt Dialog
+  editingDebt?.let { debt ->
+    EditDebtDialog(
+      debt = debt,
+      bankAccounts = state.bankAccounts,
+      onDismiss = { editingDebt = null },
+      onConfirm = { updatedDebt ->
+        viewModel.updateDebt(updatedDebt)
+        editingDebt = null
+      }
+    )
+  }
+
+  // Delete Confirmation Dialog
+  debtToDelete?.let { debt ->
+    AlertDialog(
+      onDismissRequest = { debtToDelete = null },
+      title = { Text("Delete Transaction?", fontWeight = FontWeight.Bold) },
+      text = {
+        Text("Are you sure you want to delete the record for ${debt.personName} (${CurrencyFormatter.format(debt.amount)})? This action cannot be undone.")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            viewModel.deleteDebt(debt)
+            debtToDelete = null
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) {
+          Text("Delete")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { debtToDelete = null }) {
+          Text("Cancel")
+        }
+      }
+    )
   }
 
   // Add Debt Dialog
@@ -554,9 +625,9 @@ private fun SingleChoiceSegmentedTabs(
 @Composable
 private fun DebtItemCard(
   debt: DebtRecord,
+  onClick: () -> Unit,
   onSendReminder: () -> Unit,
-  onMarkSettled: () -> Unit,
-  onDelete: () -> Unit
+  onMarkSettled: () -> Unit
 ) {
   val isLent = debt.type == "LENT"
   val primaryColor = if (isLent) Color(0xFF059669) else Color(0xFFDC2626)
@@ -572,6 +643,8 @@ private fun DebtItemCard(
     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     modifier = Modifier
       .fillMaxWidth()
+      .clip(RoundedCornerShape(18.dp))
+      .clickable(onClick = onClick)
       .testTag("debt_card_${debt.id}")
   ) {
     Column(
@@ -669,14 +742,22 @@ private fun DebtItemCard(
       HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
       Spacer(modifier = Modifier.height(10.dp))
 
-      // Action Row: "Send Reminder" & "Mark as Settled"
+      // Action Row: Clean tap prompt & Settle/Reminder
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        IconButton(onClick = onDelete) {
-          Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp, horizontal = 2.dp)
+        ) {
+          Icon(Icons.Default.Info, contentDescription = "View Details", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("Details", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -721,6 +802,378 @@ private fun DebtItemCard(
       }
     }
   }
+}
+
+// -------------------------------------------------------------
+// DEBT DETAILS DIALOG (TAP-TO-INSPECT)
+// -------------------------------------------------------------
+@Composable
+private fun DebtDetailsDialog(
+  debt: DebtRecord,
+  onDismiss: () -> Unit,
+  onEdit: () -> Unit,
+  onSendReminder: () -> Unit,
+  onMarkSettled: () -> Unit,
+  onDelete: () -> Unit
+) {
+  val isLent = debt.type == "LENT"
+  val primaryColor = if (isLent) Color(0xFF059669) else Color(0xFFDC2626)
+  val dateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
+  val dueDateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Column(modifier = Modifier.weight(1f)) {
+          Text(debt.personName, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
+          Text(
+            if (isLent) "Lent (You gave)" else "Borrowed (You took)",
+            style = MaterialTheme.typography.bodySmall,
+            color = primaryColor,
+            fontWeight = FontWeight.SemiBold
+          )
+        }
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = if (debt.isSettled) Color(0xFF10B981).copy(alpha = 0.15f)
+          else if (debt.isOverdue) MaterialTheme.colorScheme.errorContainer
+          else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        ) {
+          Text(
+            text = if (debt.isSettled) "SETTLED" else if (debt.isOverdue) "OVERDUE" else "ACTIVE",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (debt.isSettled) Color(0xFF059669)
+            else if (debt.isOverdue) MaterialTheme.colorScheme.onErrorContainer
+            else MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+          )
+        }
+      }
+    },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+      ) {
+        Card(
+          shape = RoundedCornerShape(12.dp),
+          colors = CardDefaults.cardColors(containerColor = primaryColor.copy(alpha = 0.08f)),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(modifier = Modifier.padding(14.dp)) {
+            Text("Amount", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+              text = "${if (isLent) "+" else "-"}${CurrencyFormatter.format(debt.amount)}",
+              style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
+              color = primaryColor
+            )
+          }
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Column(modifier = Modifier.weight(1f)) {
+            Text("Recorded Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(dateFormat.format(Date(debt.dateTimestamp)), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+          }
+          if (debt.dueDateTimestamp != null && debt.dueDateTimestamp > 0L) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text("Due Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(dueDateFormat.format(Date(debt.dueDateTimestamp)), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+            }
+          }
+        }
+
+        if (debt.bankAccountName.isNotBlank()) {
+          Column {
+            Text("Linked Account", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(debt.bankAccountName, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+          }
+        }
+
+        if (debt.notes.isNotBlank()) {
+          Column {
+            Text("Notes", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(debt.notes, style = MaterialTheme.typography.bodyMedium)
+          }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+        // Action Buttons Row
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          OutlinedButton(
+            onClick = onEdit,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(10.dp)
+          ) {
+            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Edit", fontSize = 12.sp)
+          }
+
+          if (!debt.isSettled) {
+            Button(
+              onClick = onMarkSettled,
+              modifier = Modifier.weight(1f),
+              shape = RoundedCornerShape(10.dp)
+            ) {
+              Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Settle", fontSize = 12.sp)
+            }
+          }
+
+          IconButton(
+            onClick = onDelete,
+            modifier = Modifier.size(40.dp)
+          ) {
+            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+          }
+        }
+
+        if (!debt.isSettled) {
+          FilledTonalButton(
+            onClick = onSendReminder,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp)
+          ) {
+            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Send WhatsApp / SMS Reminder")
+          }
+        }
+      }
+    },
+    confirmButton = {},
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Close")
+      }
+    }
+  )
+}
+
+// -------------------------------------------------------------
+// EDIT DEBT DIALOG
+// -------------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditDebtDialog(
+  debt: DebtRecord,
+  bankAccounts: List<AccountWithBalance>,
+  onDismiss: () -> Unit,
+  onConfirm: (DebtRecord) -> Unit
+) {
+  val context = LocalContext.current
+  var personName by rememberSaveable { mutableStateOf(debt.personName) }
+  var amountText by rememberSaveable { mutableStateOf(if (debt.amount > 0) debt.amount.toString() else "") }
+  var debtType by rememberSaveable { mutableStateOf(debt.type) }
+  var dueDateMillis by rememberSaveable { mutableStateOf(debt.dueDateTimestamp) }
+  var notes by rememberSaveable { mutableStateOf(debt.notes) }
+  var selectedBankId by rememberSaveable { mutableStateOf(debt.bankAccountId) }
+
+  val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Text("Edit Transaction", fontWeight = FontWeight.Bold)
+    },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+      ) {
+        // Toggle Lent vs Borrowed
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          FilterChip(
+            selected = debtType == "LENT",
+            onClick = { debtType = "LENT" },
+            label = { Text("Lent (They owe you)", fontSize = 12.sp) },
+            leadingIcon = if (debtType == "LENT") {
+              { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            } else null,
+            modifier = Modifier.weight(1f)
+          )
+          FilterChip(
+            selected = debtType == "BORROWED",
+            onClick = { debtType = "BORROWED" },
+            label = { Text("Borrowed (You owe)", fontSize = 12.sp) },
+            leadingIcon = if (debtType == "BORROWED") {
+              { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            } else null,
+            modifier = Modifier.weight(1f)
+          )
+        }
+
+        OutlinedTextField(
+          value = personName,
+          onValueChange = { personName = it },
+          label = { Text("Person Name *") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth(),
+          shape = RoundedCornerShape(12.dp)
+        )
+
+        OutlinedTextField(
+          value = amountText,
+          onValueChange = { amountText = it.filter { ch -> ch.isDigit() || ch == '.' } },
+          label = { Text("Amount (₹) *") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth(),
+          shape = RoundedCornerShape(12.dp)
+        )
+
+        // Due date picker
+        OutlinedCard(
+          shape = RoundedCornerShape(12.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+              val cal = Calendar.getInstance()
+              dueDateMillis?.let { cal.timeInMillis = it }
+              DatePickerDialog(
+                context,
+                { _, year, month, dayOfMonth ->
+                  val selected = Calendar.getInstance().apply {
+                    set(year, month, dayOfMonth, 12, 0, 0)
+                  }
+                  dueDateMillis = selected.timeInMillis
+                },
+                cal.get(Calendar.YEAR),
+                cal.get(Calendar.MONTH),
+                cal.get(Calendar.DAY_OF_MONTH)
+              ).show()
+            }
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(Icons.Default.Event, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+              Spacer(modifier = Modifier.width(10.dp))
+              Column {
+                Text("Due Date (Optional)", style = MaterialTheme.typography.labelSmall)
+                Text(
+                  text = dueDateMillis?.let { dateFormat.format(Date(it)) } ?: "Tap to set due date",
+                  style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                  color = if (dueDateMillis != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+            if (dueDateMillis != null) {
+              IconButton(onClick = { dueDateMillis = null }) {
+                Icon(Icons.Default.Clear, contentDescription = "Clear due date", modifier = Modifier.size(18.dp))
+              }
+            }
+          }
+        }
+
+        // Bank Account Selection
+        if (bankAccounts.isNotEmpty()) {
+          var expanded by remember { mutableStateOf(false) }
+          val selectedAccount = bankAccounts.find { it.account.id == selectedBankId }
+
+          ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it }
+          ) {
+            OutlinedTextField(
+              value = selectedAccount?.account?.bankName ?: "None / Cash",
+              onValueChange = {},
+              readOnly = true,
+              label = { Text("Linked Account") },
+              trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+              modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(),
+              shape = RoundedCornerShape(12.dp)
+            )
+            ExposedDropdownMenu(
+              expanded = expanded,
+              onDismissRequest = { expanded = false }
+            ) {
+              DropdownMenuItem(
+                text = { Text("None / Cash") },
+                onClick = {
+                  selectedBankId = null
+                  expanded = false
+                }
+              )
+              bankAccounts.forEach { acc ->
+                DropdownMenuItem(
+                  text = { Text("${acc.account.bankName} (${CurrencyFormatter.format(acc.currentBalance)})") },
+                  onClick = {
+                    selectedBankId = acc.account.id
+                    expanded = false
+                  }
+                )
+              }
+            }
+          }
+        }
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
+          modifier = Modifier.fillMaxWidth(),
+          shape = RoundedCornerShape(12.dp)
+        )
+      }
+    },
+    confirmButton = {
+      val parsedAmount = amountText.toDoubleOrNull() ?: 0.0
+      val selectedAcc = bankAccounts.find { it.account.id == selectedBankId }
+      Button(
+        onClick = {
+          if (personName.isNotBlank() && parsedAmount > 0.0) {
+            onConfirm(
+              debt.copy(
+                personName = personName.trim(),
+                amount = parsedAmount,
+                type = debtType,
+                dueDateTimestamp = dueDateMillis,
+                bankAccountId = selectedBankId,
+                bankAccountName = selectedAcc?.account?.bankName ?: (if (selectedBankId == null) "" else debt.bankAccountName),
+                notes = notes.trim()
+              )
+            )
+          }
+        },
+        enabled = personName.isNotBlank() && parsedAmount > 0.0
+      ) {
+        Text("Save Changes")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancel")
+      }
+    }
+  )
 }
 
 // -------------------------------------------------------------

@@ -149,6 +149,24 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
     }
   }
 
+  fun updateLoan(loan: LoanRecord) {
+    viewModelScope.launch {
+      loanDao.updateLoan(loan)
+      if (loan.isFullyPaid) {
+        com.example.domain.notification.CreditCardBillNotificationScheduler.cancelLoan(
+          getApplication(),
+          loan.id
+        )
+      } else {
+        com.example.domain.notification.CreditCardBillNotificationScheduler.scheduleLoanReminder(
+          getApplication(),
+          loan
+        )
+      }
+      _userMessage.value = "Loan '${loan.loanName}' updated successfully"
+    }
+  }
+
   fun deleteLoan(loan: LoanRecord) {
     viewModelScope.launch {
       com.example.domain.notification.CreditCardBillNotificationScheduler.cancelLoan(getApplication(), loan.id)

@@ -234,6 +234,21 @@ class DebtTrackerViewModel(application: Application) : AndroidViewModel(applicat
     }
   }
 
+  fun updateDebt(debt: DebtRecord) {
+    viewModelScope.launch {
+      debtDao.updateDebt(debt)
+      if (debt.dueDateTimestamp != null && debt.dueDateTimestamp > 0L && !debt.isSettled) {
+        com.example.domain.notification.CreditCardBillNotificationScheduler.scheduleDebtReminder(
+          getApplication(),
+          debt
+        )
+      } else {
+        com.example.domain.notification.CreditCardBillNotificationScheduler.cancelDebt(getApplication(), debt.id)
+      }
+      _userMessage.value = "Updated transaction with ${debt.personName}"
+    }
+  }
+
   fun deleteDebt(debt: DebtRecord) {
     viewModelScope.launch {
       com.example.domain.notification.CreditCardBillNotificationScheduler.cancelDebt(getApplication(), debt.id)

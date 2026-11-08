@@ -35,6 +35,7 @@ enum class FinanceTab(val title: String) {
   CREDIT_CARDS("Credit Cards"),
   SUBSCRIPTIONS("Recurring & Bills"),
   DEBTS("Lend & Borrow"),
+  SPLIT_BILL("Split Bill"),
   TRIPS("Trip Manager")
 }
 
@@ -398,7 +399,11 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     expense: ExpenseRecord,
     title: String,
     amount: Double,
-    category: String
+    category: String,
+    bankAccountId: Long? = expense.bankAccountId,
+    bankAccountName: String = expense.bankAccountName,
+    notes: String = expense.notes,
+    dateTimestamp: Long = expense.dateTimestamp
   ) {
     val cleanTitle = title.trim()
     if (cleanTitle.isBlank() || !amount.isFinite() || amount <= 0.0 || category.isBlank()) {
@@ -412,7 +417,11 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
           expense.copy(
             title = cleanTitle,
             amount = amount,
-            categoryName = category
+            categoryName = category,
+            bankAccountId = bankAccountId,
+            bankAccountName = bankAccountName,
+            notes = notes,
+            dateTimestamp = dateTimestamp
           )
         )
         _uiState.update { it.copy(toastMessage = "Transaction updated") }
@@ -421,6 +430,13 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
           it.copy(toastMessage = "Could not update transaction: ${error.localizedMessage ?: "Unknown error"}")
         }
       }
+    }
+  }
+
+  fun updateBankAccount(account: BankAccount) {
+    viewModelScope.launch {
+      repository.updateBankAccount(account)
+      _uiState.update { it.copy(toastMessage = "Account '${account.bankName}' updated") }
     }
   }
 
@@ -584,6 +600,13 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
+  fun updateTrip(trip: TripRecord) {
+    viewModelScope.launch {
+      repository.updateTrip(trip)
+      _uiState.update { it.copy(toastMessage = "Trip '${trip.tripName}' updated") }
+    }
+  }
+
   fun deleteTrip(trip: TripRecord) {
     viewModelScope.launch {
       dao.deleteTrip(trip)
@@ -621,6 +644,13 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
         )
       )
       _uiState.update { it.copy(showAddSubscriptionDialog = false, toastMessage = "Subscription '$name' added!") }
+    }
+  }
+
+  fun updateSubscription(sub: SubscriptionRecord) {
+    viewModelScope.launch {
+      repository.updateSubscription(sub)
+      _uiState.update { it.copy(toastMessage = "Subscription '${sub.name}' updated") }
     }
   }
 

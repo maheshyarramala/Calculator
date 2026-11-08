@@ -68,6 +68,9 @@ interface FinanceDao {
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertBankAccounts(accounts: List<BankAccount>)
 
+  @Update
+  suspend fun updateBankAccount(account: BankAccount)
+
   @Delete
   suspend fun deleteBankAccount(account: BankAccount)
 
@@ -116,6 +119,9 @@ interface FinanceDao {
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertSubscriptions(subs: List<com.example.data.local.entity.SubscriptionRecord>)
+
+  @Update
+  suspend fun updateSubscription(sub: com.example.data.local.entity.SubscriptionRecord)
 
   @Delete
   suspend fun deleteSubscription(sub: com.example.data.local.entity.SubscriptionRecord)

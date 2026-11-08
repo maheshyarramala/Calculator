@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -114,6 +115,12 @@ fun FinanceHubScreen(
   var preselectedTripIdForExpense by remember { mutableStateOf<Long?>(null) }
   var accountForDetails by remember { mutableStateOf<BankAccount?>(null) }
   var accountPendingDelete by remember { mutableStateOf<BankAccount?>(null) }
+  var editingAccount by remember { mutableStateOf<BankAccount?>(null) }
+  var selectedExpenseForDetails by remember { mutableStateOf<ExpenseRecord?>(null) }
+  var selectedSubscriptionForDetails by remember { mutableStateOf<SubscriptionRecord?>(null) }
+  var editingSubscription by remember { mutableStateOf<SubscriptionRecord?>(null) }
+  var editingTrip by remember { mutableStateOf<TripRecord?>(null) }
+  var subscriptionToDelete by remember { mutableStateOf<SubscriptionRecord?>(null) }
   var editingExpense by remember { mutableStateOf<ExpenseRecord?>(null) }
   var subscriptionPendingPayment by remember { mutableStateOf<SubscriptionRecord?>(null) }
   var showTransferDialog by remember { mutableStateOf(false) }
@@ -228,14 +235,122 @@ fun FinanceHubScreen(
     )
   }
 
+  // Transaction Details Modal (Tap to Inspect)
+  selectedExpenseForDetails?.let { expense ->
+    TransactionDetailsDialog(
+      expense = expense,
+      categories = categories,
+      onDismiss = { selectedExpenseForDetails = null },
+      onEdit = {
+        val target = expense
+        selectedExpenseForDetails = null
+        editingExpense = target
+      },
+      onDelete = {
+        val target = expense
+        selectedExpenseForDetails = null
+        viewModel.deleteExpensesWithUndo(listOf(target)) { undo ->
+          coroutineScope.launch {
+            val res = snackbarHostState.showSnackbar(
+              message = "Deleted '${target.title}'",
+              actionLabel = "Undo",
+              duration = SnackbarDuration.Short
+            )
+            if (res == SnackbarResult.ActionPerformed) {
+              undo()
+            }
+          }
+        }
+      }
+    )
+  }
+
   editingExpense?.let { expense ->
     EditExpenseDialog(
       expense = expense,
       categories = categories,
+      bankAccounts = bankAccounts,
       onDismiss = { editingExpense = null },
-      onConfirm = { title, amount, category ->
-        viewModel.updateExpense(expense, title, amount, category)
+      onConfirm = { title, amount, category, accountId, accountName, notes, dateTimestamp ->
+        viewModel.updateExpense(expense, title, amount, category, accountId, accountName, notes, dateTimestamp)
         editingExpense = null
+      }
+    )
+  }
+
+  // Subscription Details Modal (Tap to Inspect)
+  selectedSubscriptionForDetails?.let { sub ->
+    SubscriptionDetailsDialog(
+      sub = sub,
+      today = LocalDate.now(),
+      onDismiss = { selectedSubscriptionForDetails = null },
+      onEdit = {
+        val target = sub
+        selectedSubscriptionForDetails = null
+        editingSubscription = target
+      },
+      onMarkPaid = {
+        val target = sub
+        selectedSubscriptionForDetails = null
+        subscriptionPendingPayment = target
+      },
+      onDelete = {
+        val target = sub
+        selectedSubscriptionForDetails = null
+        subscriptionToDelete = target
+      }
+    )
+  }
+
+  // Edit Subscription Dialog
+  editingSubscription?.let { sub ->
+    EditSubscriptionDialog(
+      sub = sub,
+      categories = categories,
+      bankAccounts = bankAccounts,
+      onDismiss = { editingSubscription = null },
+      onConfirm = { updatedSub ->
+        viewModel.updateSubscription(updatedSub)
+        editingSubscription = null
+      }
+    )
+  }
+
+  // Delete Subscription Confirmation Dialog
+  subscriptionToDelete?.let { sub ->
+    AlertDialog(
+      onDismissRequest = { subscriptionToDelete = null },
+      title = { Text("Delete Subscription?", fontWeight = FontWeight.Bold) },
+      text = {
+        Text("Are you sure you want to delete '${sub.name}' (${CurrencyFormatter.format(sub.amount)}/${sub.billingCycle})?")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            viewModel.deleteSubscription(sub)
+            subscriptionToDelete = null
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) {
+          Text("Delete")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { subscriptionToDelete = null }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
+
+  // Edit Trip Dialog
+  editingTrip?.let { trip ->
+    EditTripDialog(
+      trip = trip,
+      onDismiss = { editingTrip = null },
+      onConfirm = { updatedTrip ->
+        viewModel.updateTrip(updatedTrip)
+        editingTrip = null
       }
     )
   }
@@ -321,6 +436,11 @@ fun FinanceHubScreen(
       currentBalance = currentBalance,
       billReminder = cardReminder,
       onDismiss = { accountForDetails = null },
+      onEdit = {
+        val target = account
+        accountForDetails = null
+        editingAccount = target
+      },
       onDelete = {
         accountForDetails = null
         accountPendingDelete = account
@@ -343,6 +463,29 @@ fun FinanceHubScreen(
         }
       }
     )
+  }
+
+  // Edit Account / Credit Card Dialog
+  editingAccount?.let { account ->
+    if (account.accountType.equals("Credit Card", ignoreCase = true)) {
+      EditCreditCardDialog(
+        account = account,
+        onDismiss = { editingAccount = null },
+        onConfirm = { updated ->
+          viewModel.updateBankAccount(updated)
+          editingAccount = null
+        }
+      )
+    } else {
+      EditAccountDialog(
+        account = account,
+        onDismiss = { editingAccount = null },
+        onConfirm = { updated ->
+          viewModel.updateBankAccount(updated)
+          editingAccount = null
+        }
+      )
+    }
   }
 
   if (showCreditCardReminderDialog) {
@@ -495,6 +638,7 @@ fun FinanceHubScreen(
             Icon(Icons.Default.AddLocationAlt, contentDescription = "Add Trip")
           }
         }
+        FinanceTab.SPLIT_BILL -> null
         FinanceTab.DEBTS -> null
       }
     },
@@ -551,7 +695,7 @@ fun FinanceHubScreen(
         }
       }
 
-      // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Trip Manager)
+      // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Split Bill, Trip Manager)
       ScrollableTabRow(
         selectedTabIndex = uiState.selectedTab.ordinal,
         edgePadding = 12.dp,
@@ -564,6 +708,7 @@ fun FinanceHubScreen(
             FinanceTab.CREDIT_CARDS -> Icons.Default.CreditCard
             FinanceTab.SUBSCRIPTIONS -> Icons.Default.EventRepeat
             FinanceTab.DEBTS -> Icons.Default.SwapHoriz
+            FinanceTab.SPLIT_BILL -> Icons.Default.CallSplit
             FinanceTab.TRIPS -> Icons.Default.FlightTakeoff
           }
           Tab(
@@ -621,6 +766,7 @@ fun FinanceHubScreen(
             }
           },
           onEditExpense = { editingExpense = it },
+          onSelectExpense = { selectedExpenseForDetails = it },
           onSetCreditCardBill = { accountId ->
             editingCreditCardAccountId = accountId
             showCreditCardReminderDialog = true
@@ -639,6 +785,7 @@ fun FinanceHubScreen(
           cardAccounts = accountsWithBalances.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) },
           reminders = creditCardBillReminders,
           onAddCardClick = { showAddCreditCardDialog = true },
+          onCardClick = { accountForDetails = it },
           onSetBillReminder = { accountId ->
             editingCreditCardAccountId = accountId
             showCreditCardReminderDialog = true
@@ -663,6 +810,7 @@ fun FinanceHubScreen(
         FinanceTab.SUBSCRIPTIONS -> SubscriptionsSection(
           subscriptions = subscriptions,
           onAddSubscriptionClick = { viewModel.setShowAddSubscription(true) },
+          onSelectSubscription = { selectedSubscriptionForDetails = it },
           onMarkPaid = { subscriptionPendingPayment = it },
           onDeleteSubscription = { viewModel.deleteSubscription(it) }
         )
@@ -673,6 +821,13 @@ fun FinanceHubScreen(
             modifier = Modifier.fillMaxSize()
           )
         }
+        FinanceTab.SPLIT_BILL -> {
+          val splitBillViewModel: com.example.ui.screens.splitbill.SplitBillViewModel = viewModel()
+          com.example.ui.screens.splitbill.SplitBillScreen(
+            viewModel = splitBillViewModel,
+            modifier = Modifier.fillMaxSize()
+          )
+        }
         FinanceTab.TRIPS -> TripsSection(
           trips = trips,
           expenses = expenses,
@@ -680,6 +835,8 @@ fun FinanceHubScreen(
             preselectedTripIdForExpense = trip.id
             viewModel.setShowAddExpense(true)
           },
+          onEditTrip = { editingTrip = it },
+          onTripExpenseClick = { selectedExpenseForDetails = it },
           onSetCategoryCap = { trip -> viewModel.setSelectedTripForCategoryCap(trip) },
           onRemoveCategoryCap = { trip, cat -> viewModel.removeTripCategoryCap(trip, cat) },
           onExportTripPdf = { trip, tripExpenses ->
@@ -703,6 +860,7 @@ private fun AccountDetailsDialog(
   currentBalance: Double,
   billReminder: CreditCardBillReminder? = null,
   onDismiss: () -> Unit,
+  onEdit: () -> Unit = {},
   onDelete: () -> Unit,
   onShowTransactions: () -> Unit,
   onSetBillReminder: (() -> Unit)? = null,
@@ -742,6 +900,19 @@ private fun AccountDetailsDialog(
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
           )
+        }
+
+        if (account.accountNumber.isNotBlank()) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text("Account number", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+              if (isCreditCard) "•••• " + account.accountNumber.takeLast(4) else account.accountNumber,
+              fontWeight = FontWeight.Medium
+            )
+          }
         }
 
         Row(
@@ -877,8 +1048,15 @@ private fun AccountDetailsDialog(
       }
     },
     confirmButton = {
-      FilledTonalButton(onClick = onShowTransactions) {
-        Text("Transactions")
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(onClick = onEdit) {
+          Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+          Spacer(Modifier.width(4.dp))
+          Text(if (isCreditCard) "Edit Card" else "Edit Account")
+        }
+        FilledTonalButton(onClick = onShowTransactions) {
+          Text("Transactions")
+        }
       }
     },
     dismissButton = {
@@ -893,6 +1071,188 @@ private fun AccountDetailsDialog(
           Text("Close")
         }
       }
+    }
+  )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditAccountDialog(
+  account: BankAccount,
+  onDismiss: () -> Unit,
+  onConfirm: (BankAccount) -> Unit
+) {
+  var bankName by remember(account.id) { mutableStateOf(account.bankName) }
+  var accountType by remember(account.id) { mutableStateOf(account.accountType) }
+  var accountNumber by remember(account.id) { mutableStateOf(account.accountNumber) }
+  var openingBalText by remember(account.id) { mutableStateOf(account.openingBalance.toString()) }
+  var notes by remember(account.id) { mutableStateOf(account.notes) }
+
+  val openingBal = openingBalText.toDoubleOrNull() ?: 0.0
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Edit Account", fontWeight = FontWeight.Bold) },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        OutlinedTextField(
+          value = bankName,
+          onValueChange = { bankName = it },
+          label = { Text("Bank / Account Name *") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          listOf("Savings", "Current", "Cash Wallet", "Salary", "Other").forEach { type ->
+            FilterChip(
+              selected = accountType.equals(type, ignoreCase = true),
+              onClick = { accountType = type },
+              label = { Text(type, fontSize = 11.sp) }
+            )
+          }
+        }
+
+        OutlinedTextField(
+          value = openingBalText,
+          onValueChange = { openingBalText = it },
+          label = { Text("Opening Balance (₹) *") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = accountNumber,
+          onValueChange = { accountNumber = it },
+          label = { Text("Account Number (Optional)") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          if (bankName.isNotBlank()) {
+            onConfirm(
+              account.copy(
+                bankName = bankName.trim(),
+                accountType = accountType,
+                openingBalance = openingBal,
+                accountNumber = accountNumber.trim(),
+                notes = notes.trim()
+              )
+            )
+          }
+        },
+        enabled = bankName.isNotBlank()
+      ) {
+        Text("Save Changes")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditCreditCardDialog(
+  account: BankAccount,
+  onDismiss: () -> Unit,
+  onConfirm: (BankAccount) -> Unit
+) {
+  var cardName by remember(account.id) { mutableStateOf(account.bankName) }
+  var lastDigits by remember(account.id) { mutableStateOf(account.accountNumber) }
+  var openingBalText by remember(account.id) { mutableStateOf(kotlin.math.abs(account.openingBalance).toString()) }
+  var notes by remember(account.id) { mutableStateOf(account.notes) }
+
+  val openingBal = openingBalText.toDoubleOrNull() ?: 0.0
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Edit Credit Card", fontWeight = FontWeight.Bold) },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        OutlinedTextField(
+          value = cardName,
+          onValueChange = { cardName = it },
+          label = { Text("Card / Bank Name *") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = lastDigits,
+          onValueChange = { if (it.length <= 16) lastDigits = it.filter { ch -> ch.isDigit() } },
+          label = { Text("Card Number / Last 4 Digits") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = openingBalText,
+          onValueChange = { openingBalText = it },
+          label = { Text("Opening Outstanding / Dues (₹)") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          if (cardName.isNotBlank()) {
+            onConfirm(
+              account.copy(
+                bankName = cardName.trim(),
+                openingBalance = -kotlin.math.abs(openingBal),
+                accountNumber = lastDigits.trim(),
+                notes = notes.trim()
+              )
+            )
+          }
+        },
+        enabled = cardName.isNotBlank()
+      ) {
+        Text("Save Changes")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
     }
   )
 }
@@ -1050,6 +1410,7 @@ private fun ExpensesSection(
   onDeleteCategory: (ExpenseCategory) -> Unit,
   onDeleteExpenses: (List<ExpenseRecord>) -> Unit,
   onEditExpense: (ExpenseRecord) -> Unit,
+  onSelectExpense: (ExpenseRecord) -> Unit = {},
   onSetCreditCardBill: (Long) -> Unit,
   onMarkCreditCardBillPaid: (CreditCardBillReminder) -> Unit
 ) {
@@ -1397,31 +1758,30 @@ private fun ExpensesSection(
                   )
                 }
 
-                Row {
-                  IconButton(
-                    onClick = { onEditOpeningBalance(accWithBal.account) },
-                    modifier = Modifier.size(24.dp)
+                if (isSelected) {
+                  Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.primary
                   ) {
-                    Icon(
-                      Icons.Default.Edit,
-                      contentDescription = "Edit Opening Balance",
-                      modifier = Modifier.size(14.dp),
-                      tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    Text(
+                      text = "Filtered",
+                      fontSize = 9.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = MaterialTheme.colorScheme.onPrimary,
+                      modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                   }
-                  IconButton(
-                    onClick = {
-                      onSelectAccountFilter(if (isSelected) null else accWithBal.account.id)
+                } else {
+                  Icon(
+                    imageVector = when (accWithBal.account.accountType.lowercase()) {
+                      "cash", "cash wallet" -> Icons.Default.Payments
+                      "salary account" -> Icons.Default.Work
+                      else -> Icons.Default.AccountBalance
                     },
-                    modifier = Modifier.size(24.dp)
-                  ) {
-                    Icon(
-                      Icons.AutoMirrored.Filled.ReceiptLong,
-                      contentDescription = "Show account transactions",
-                      modifier = Modifier.size(14.dp),
-                      tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                  }
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                  )
                 }
               }
 
@@ -1957,8 +2317,7 @@ private fun ExpensesSection(
           expense = expense,
           categories = categories,
           isCreditCard = isCc,
-          onDelete = { expensePendingDelete = expense },
-          onEdit = { onEditExpense(expense) }
+          onClick = { onSelectExpense(expense) }
         )
       }
     }
@@ -2017,8 +2376,7 @@ private fun ExpenseItemCard(
   expense: ExpenseRecord,
   categories: List<ExpenseCategory>,
   isCreditCard: Boolean = false,
-  onDelete: () -> Unit,
-  onEdit: () -> Unit
+  onClick: () -> Unit
 ) {
   val matchedCat = remember(expense.categoryName, categories) {
     categories.find { it.name.equals(expense.categoryName, ignoreCase = true) }
@@ -2049,7 +2407,10 @@ private fun ExpenseItemCard(
       containerColor = MaterialTheme.colorScheme.surface
     ),
     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    modifier = Modifier.fillMaxWidth()
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(16.dp))
+      .clickable(onClick = onClick)
   ) {
     Row(
       modifier = Modifier
@@ -2222,35 +2583,223 @@ private fun ExpenseItemCard(
           fontSize = 14.sp,
           color = amountColor
         )
-        Row {
-          if (!isTransfer) {
-            IconButton(
-              onClick = onEdit,
-              modifier = Modifier.size(28.dp)
+        Spacer(modifier = Modifier.height(4.dp))
+        Icon(
+          Icons.Default.ChevronRight,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+          modifier = Modifier.size(16.dp)
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun TransactionDetailsDialog(
+  expense: ExpenseRecord,
+  categories: List<ExpenseCategory>,
+  onDismiss: () -> Unit,
+  onEdit: () -> Unit,
+  onDelete: () -> Unit
+) {
+  val matchedCat = remember(expense.categoryName, categories) {
+    categories.find { it.name.equals(expense.categoryName, ignoreCase = true) }
+  }
+  val catColor = remember(matchedCat) {
+    try {
+      matchedCat?.let { Color(android.graphics.Color.parseColor(it.colorHex)) } ?: Color(0xFF6366F1)
+    } catch (e: Exception) {
+      Color(0xFF6366F1)
+    }
+  }
+  val isTransfer = expense.type == "TRANSFER_IN" || expense.type == "TRANSFER_OUT"
+  val isIncome = expense.type == "INCOME" || expense.type == "TRANSFER_IN"
+  val amountColor = when {
+    isTransfer -> MaterialTheme.colorScheme.primary
+    isIncome -> Color(0xFF059669)
+    else -> Color(0xFFDC2626)
+  }
+  val amountSign = if (isIncome) "+" else "-"
+  val dateFormatted = remember(expense.dateTimestamp) {
+    SimpleDateFormat("EEEE, dd MMMM yyyy, hh:mm a", Locale.getDefault()).format(Date(expense.dateTimestamp))
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    shape = RoundedCornerShape(24.dp),
+    title = {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text("Transaction Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = when {
+            isTransfer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            isIncome -> Color(0xFF10B981).copy(alpha = 0.15f)
+            else -> Color(0xFFEF4444).copy(alpha = 0.12f)
+          }
+        ) {
+          Text(
+            text = when {
+              isTransfer -> "Transfer"
+              isIncome -> "Income"
+              else -> "Expense"
+            },
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = amountColor,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+          )
+        }
+      }
+    },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+      ) {
+        // Amount hero box
+        Surface(
+          shape = RoundedCornerShape(16.dp),
+          color = amountColor.copy(alpha = 0.08f),
+          border = BorderStroke(1.dp, amountColor.copy(alpha = 0.25f)),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+          ) {
+            Text(
+              text = "$amountSign ${CurrencyFormatter.format(expense.amount)}",
+              style = MaterialTheme.typography.headlineMedium,
+              fontWeight = FontWeight.ExtraBold,
+              color = amountColor
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+              text = expense.title,
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.SemiBold,
+              textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+          }
+        }
+
+        // Details rows
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          // Category
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text("Category", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(
+              shape = RoundedCornerShape(6.dp),
+              color = catColor.copy(alpha = 0.15f)
             ) {
-              Icon(
-                Icons.Default.Edit,
-                contentDescription = "Edit transaction",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
+              Text(
+                text = expense.categoryName,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = catColor,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
               )
             }
           }
-          IconButton(
-            onClick = onDelete,
-            modifier = Modifier.size(28.dp)
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+          // Account
+          if (expense.bankAccountName.isNotBlank()) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text("Account / Mode", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(
+                text = expense.bankAccountName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+              )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+          }
+
+          // Date & Time
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
           ) {
-            Icon(
-              Icons.Default.DeleteOutline,
-              contentDescription = "Delete transaction",
-              tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.size(18.dp)
+            Text("Date & Time", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+              text = dateFormatted,
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = FontWeight.Medium,
+              textAlign = androidx.compose.ui.text.style.TextAlign.End,
+              modifier = Modifier.weight(1f).padding(start = 12.dp)
             )
+          }
+
+          // Notes
+          if (expense.notes.isNotBlank()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+              Text("Notes", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+              ) {
+                Text(
+                  text = expense.notes,
+                  style = MaterialTheme.typography.bodyMedium,
+                  modifier = Modifier.padding(10.dp)
+                )
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        TextButton(
+          onClick = onDelete,
+          colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        ) {
+          Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(Modifier.width(4.dp))
+          Text("Delete")
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          if (!isTransfer) {
+            FilledTonalButton(onClick = onEdit) {
+              Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(Modifier.width(4.dp))
+              Text("Edit")
+            }
+          }
+          Button(onClick = onDismiss) {
+            Text("Close")
           }
         }
       }
     }
-  }
+  )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2258,13 +2807,21 @@ private fun ExpenseItemCard(
 private fun EditExpenseDialog(
   expense: ExpenseRecord,
   categories: List<ExpenseCategory>,
+  bankAccounts: List<BankAccount>,
   onDismiss: () -> Unit,
-  onConfirm: (title: String, amount: Double, category: String) -> Unit
+  onConfirm: (title: String, amount: Double, category: String, accountId: Long?, accountName: String, notes: String, dateTimestamp: Long) -> Unit
 ) {
   var title by remember(expense.id) { mutableStateOf(expense.title) }
   var amountText by remember(expense.id) { mutableStateOf(expense.amount.toString()) }
   var selectedCategory by remember(expense.id) { mutableStateOf(expense.categoryName) }
+  var selectedAccountId by remember(expense.id) { mutableStateOf(expense.bankAccountId) }
+  var selectedAccountName by remember(expense.id) { mutableStateOf(expense.bankAccountName) }
+  var notes by remember(expense.id) { mutableStateOf(expense.notes) }
+  var dateTimestamp by remember(expense.id) { mutableStateOf(expense.dateTimestamp) }
+
   var categoryDropdownExpanded by remember { mutableStateOf(false) }
+  var accountDropdownExpanded by remember { mutableStateOf(false) }
+
   val availableCategories = remember(categories, expense.categoryName) {
     (categories.map { it.name } + expense.categoryName).distinct()
   }
@@ -2273,23 +2830,28 @@ private fun EditExpenseDialog(
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Edit Transaction") },
+    title = { Text("Edit Transaction", fontWeight = FontWeight.Bold) },
     text = {
       Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
       ) {
         OutlinedTextField(
           value = title,
           onValueChange = { title = it },
-          label = { Text("Title") },
+          label = { Text("Title *") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
           value = amountText,
-          onValueChange = { amountText = it },
-          label = { Text("Amount (₹)") },
+          onValueChange = { input ->
+            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) amountText = input
+          },
+          label = { Text("Amount (₹) *") },
+          prefix = { Text("₹ ") },
           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
@@ -2325,17 +2887,75 @@ private fun EditExpenseDialog(
             }
           }
         }
+
+        // Account Dropdown
+        ExposedDropdownMenuBox(
+          expanded = accountDropdownExpanded,
+          onExpandedChange = { accountDropdownExpanded = !accountDropdownExpanded }
+        ) {
+          OutlinedTextField(
+            value = selectedAccountName.ifBlank { "None (Cash / Unlinked)" },
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Account") },
+            trailingIcon = {
+              ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountDropdownExpanded)
+            },
+            modifier = Modifier
+              .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+              .fillMaxWidth()
+          )
+          ExposedDropdownMenu(
+            expanded = accountDropdownExpanded,
+            onDismissRequest = { accountDropdownExpanded = false }
+          ) {
+            DropdownMenuItem(
+              text = { Text("None (Cash / Unlinked)") },
+              onClick = {
+                selectedAccountId = null
+                selectedAccountName = ""
+                accountDropdownExpanded = false
+              }
+            )
+            bankAccounts.forEach { acc ->
+              DropdownMenuItem(
+                text = { Text("${acc.bankName} (${acc.accountType})") },
+                onClick = {
+                  selectedAccountId = acc.id
+                  selectedAccountName = acc.bankName
+                  accountDropdownExpanded = false
+                }
+              )
+            }
+          }
+        }
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
       }
     },
     confirmButton = {
-      TextButton(
+      Button(
         onClick = {
-          val parsedAmount = amount ?: return@TextButton
-          onConfirm(title.trim(), parsedAmount, selectedCategory)
+          val parsedAmount = amount ?: return@Button
+          onConfirm(
+            title.trim(),
+            parsedAmount,
+            selectedCategory,
+            selectedAccountId,
+            selectedAccountName,
+            notes.trim(),
+            dateTimestamp
+          )
         },
         enabled = canSave
       ) {
-        Text("Update")
+        Text("Save Changes")
       }
     },
     dismissButton = {
@@ -3088,7 +3708,9 @@ private fun TripsSection(
   onSetCategoryCap: (TripRecord) -> Unit,
   onRemoveCategoryCap: (TripRecord, String) -> Unit,
   onExportTripPdf: (TripRecord, List<ExpenseRecord>) -> Unit,
-  onDeleteTrip: (TripRecord) -> Unit
+  onDeleteTrip: (TripRecord) -> Unit,
+  onEditTrip: (TripRecord) -> Unit = {},
+  onTripExpenseClick: (ExpenseRecord) -> Unit = {}
 ) {
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
@@ -3178,7 +3800,9 @@ private fun TripsSection(
           onSetCap = { onSetCategoryCap(trip) },
           onRemoveCap = { cat -> onRemoveCategoryCap(trip, cat) },
           onExportPdf = { onExportTripPdf(trip, tripExpenses) },
-          onDelete = { onDeleteTrip(trip) }
+          onDelete = { onDeleteTrip(trip) },
+          onEdit = { onEditTrip(trip) },
+          onTripExpenseClick = onTripExpenseClick
         )
       }
     }
@@ -3194,7 +3818,9 @@ private fun TripCardItem(
   onSetCap: () -> Unit,
   onRemoveCap: (String) -> Unit,
   onExportPdf: () -> Unit,
-  onDelete: () -> Unit
+  onDelete: () -> Unit,
+  onEdit: () -> Unit = {},
+  onTripExpenseClick: (ExpenseRecord) -> Unit = {}
 ) {
   val progress = remember(trip.budget, spent) {
     if (trip.budget > 0) (spent / trip.budget).toFloat().coerceIn(0f, 1f) else 0f
@@ -3249,16 +3875,29 @@ private fun TripCardItem(
           }
         }
 
-        IconButton(
-          onClick = onDelete,
-          modifier = Modifier.size(32.dp)
-        ) {
-          Icon(
-            Icons.Default.DeleteOutline,
-            contentDescription = "Delete trip",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
-          )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          IconButton(
+            onClick = onEdit,
+            modifier = Modifier.size(32.dp)
+          ) {
+            Icon(
+              Icons.Default.Edit,
+              contentDescription = "Edit trip",
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(18.dp)
+            )
+          }
+          IconButton(
+            onClick = onDelete,
+            modifier = Modifier.size(32.dp)
+          ) {
+            Icon(
+              Icons.Default.DeleteOutline,
+              contentDescription = "Delete trip",
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(20.dp)
+            )
+          }
         }
       }
 
@@ -3438,7 +4077,11 @@ private fun TripCardItem(
           } else {
             tripExpenses.forEach { exp ->
               Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .clip(RoundedCornerShape(8.dp))
+                  .clickable { onTripExpenseClick(exp) }
+                  .padding(vertical = 4.dp, horizontal = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
               ) {
@@ -3454,12 +4097,21 @@ private fun TripCardItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )
                 }
-                Text(
-                  text = CurrencyFormatter.formatWhole(exp.amount),
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 12.sp,
-                  color = Color(0xFFDC2626)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Text(
+                    text = CurrencyFormatter.formatWhole(exp.amount),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = Color(0xFFDC2626)
+                  )
+                  Spacer(Modifier.width(4.dp))
+                  Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                  )
+                }
               }
               if (exp != tripExpenses.last()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
@@ -3470,6 +4122,120 @@ private fun TripCardItem(
       }
     }
   }
+}
+
+@Composable
+private fun EditTripDialog(
+  trip: TripRecord,
+  onDismiss: () -> Unit,
+  onConfirm: (TripRecord) -> Unit
+) {
+  var tripName by remember(trip.id) { mutableStateOf(trip.tripName) }
+  var destination by remember(trip.id) { mutableStateOf(trip.destination) }
+  var budgetStr by remember(trip.id) { mutableStateOf(trip.budget.toString()) }
+  var startDate by remember(trip.id) { mutableStateOf(trip.startDate) }
+  var endDate by remember(trip.id) { mutableStateOf(trip.endDate) }
+  var notes by remember(trip.id) { mutableStateOf(trip.notes) }
+
+  val parsedBudget = budgetStr.toDoubleOrNull()
+  val canSave = tripName.isNotBlank() && destination.isNotBlank() && parsedBudget != null && parsedBudget > 0
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    shape = RoundedCornerShape(24.dp),
+    title = { Text("Edit Trip Details", fontWeight = FontWeight.Bold) },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        OutlinedTextField(
+          value = tripName,
+          onValueChange = { tripName = it },
+          label = { Text("Trip Name *") },
+          placeholder = { Text("e.g. Goa Vacation, Europe Tour") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = destination,
+          onValueChange = { destination = it },
+          label = { Text("Destination *") },
+          placeholder = { Text("e.g. Goa, Paris, Manali") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = budgetStr,
+          onValueChange = { input ->
+            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) budgetStr = input
+          },
+          label = { Text("Budget Cap (₹) *") },
+          prefix = { Text("₹ ") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          OutlinedTextField(
+            value = startDate,
+            onValueChange = { startDate = it },
+            label = { Text("Start Date") },
+            placeholder = { Text("YYYY-MM-DD") },
+            singleLine = true,
+            modifier = Modifier.weight(1f)
+          )
+          OutlinedTextField(
+            value = endDate,
+            onValueChange = { endDate = it },
+            label = { Text("End Date") },
+            placeholder = { Text("YYYY-MM-DD") },
+            singleLine = true,
+            modifier = Modifier.weight(1f)
+          )
+        }
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val budget = parsedBudget ?: return@Button
+          onConfirm(
+            trip.copy(
+              tripName = tripName.trim(),
+              destination = destination.trim(),
+              budget = budget,
+              startDate = startDate.trim(),
+              endDate = endDate.trim(),
+              notes = notes.trim()
+            )
+          )
+        },
+        enabled = canSave
+      ) {
+        Text("Save Changes")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
 }
 
 // -------------------------------------------------------------
@@ -4917,6 +5683,7 @@ private fun MarkSubscriptionPaidDialog(
 private fun SubscriptionsSection(
   subscriptions: List<SubscriptionRecord>,
   onAddSubscriptionClick: () -> Unit,
+  onSelectSubscription: (SubscriptionRecord) -> Unit = {},
   onMarkPaid: (SubscriptionRecord) -> Unit,
   onDeleteSubscription: (SubscriptionRecord) -> Unit
 ) {
@@ -5055,8 +5822,8 @@ private fun SubscriptionsSection(
         SubscriptionItemCard(
           sub = sub,
           today = today,
-          onMarkPaid = { onMarkPaid(sub) },
-          onDelete = { onDeleteSubscription(sub) }
+          onClick = { onSelectSubscription(sub) },
+          onMarkPaid = { onMarkPaid(sub) }
         )
       }
     }
@@ -5067,8 +5834,8 @@ private fun SubscriptionsSection(
 private fun SubscriptionItemCard(
   sub: SubscriptionRecord,
   today: LocalDate,
-  onMarkPaid: () -> Unit,
-  onDelete: () -> Unit
+  onClick: () -> Unit,
+  onMarkPaid: () -> Unit
 ) {
   val daysLeft = ChronoUnit.DAYS.between(
     today,
@@ -5088,7 +5855,10 @@ private fun SubscriptionItemCard(
     shape = RoundedCornerShape(16.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    modifier = Modifier.fillMaxWidth()
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(16.dp))
+      .clickable(onClick = onClick)
   ) {
     Column(
       modifier = Modifier
@@ -5194,14 +5964,417 @@ private fun SubscriptionItemCard(
             )
           }
 
-          Spacer(modifier = Modifier.width(4.dp))
-          IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-          }
+          Spacer(modifier = Modifier.width(6.dp))
+          Icon(
+            Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+            modifier = Modifier.size(16.dp)
+          )
         }
       }
     }
   }
+}
+
+@Composable
+private fun SubscriptionDetailsDialog(
+  sub: SubscriptionRecord,
+  today: LocalDate,
+  onDismiss: () -> Unit,
+  onEdit: () -> Unit,
+  onMarkPaid: () -> Unit,
+  onDelete: () -> Unit
+) {
+  val nextDueDate = SubscriptionDueDateCalculator.nextDueDate(sub, today)
+  val daysLeft = ChronoUnit.DAYS.between(today, nextDueDate).toInt()
+  val isPaidThisCycle = SubscriptionDueDateCalculator.isPaidInCurrentCycle(sub, today)
+  val isUrgent = daysLeft in 0..3
+
+  val statusLabel = when {
+    isPaidThisCycle -> "Paid for this cycle ✓"
+    daysLeft < 0 -> "Overdue by ${-daysLeft} days"
+    daysLeft == 0 -> "Due Today!"
+    daysLeft == 1 -> "Due Tomorrow"
+    else -> "Due in $daysLeft days"
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    shape = RoundedCornerShape(24.dp),
+    title = {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text("Bill & Subscription", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = Color(0xFF6366F1).copy(alpha = 0.12f)
+        ) {
+          Text(
+            text = sub.billingCycle,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF4F46E5),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+          )
+        }
+      }
+    },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+      ) {
+        // Hero amount
+        Surface(
+          shape = RoundedCornerShape(16.dp),
+          color = Color(0xFF6366F1).copy(alpha = 0.08f),
+          border = BorderStroke(1.dp, Color(0xFF6366F1).copy(alpha = 0.25f)),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+          ) {
+            Text(
+              text = "${CurrencyFormatter.format(sub.amount)} / ${sub.billingCycle.lowercase()}",
+              style = MaterialTheme.typography.headlineSmall,
+              fontWeight = FontWeight.ExtraBold,
+              color = Color(0xFF4F46E5)
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+              text = sub.name,
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.SemiBold
+            )
+          }
+        }
+
+        // Details
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          // Status badge row
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text("Payment Status", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = if (isPaidThisCycle) Color(0xFFD1FAE5) else if (isUrgent) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surfaceVariant
+            ) {
+              Text(
+                text = statusLabel,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isPaidThisCycle) Color(0xFF047857) else if (isUrgent) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+              )
+            }
+          }
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+          // Next Due Date
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text("Next Due Date", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+              text = nextDueDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = FontWeight.SemiBold
+            )
+          }
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+          // Category
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text("Category", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+              text = sub.categoryName,
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = FontWeight.SemiBold
+            )
+          }
+
+          // Linked Bank Account
+          if (sub.bankAccountName.isNotBlank()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text("Payment Account", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(
+                text = sub.bankAccountName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+              )
+            }
+          }
+
+          // Notes
+          if (sub.notes.isNotBlank()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+              Text("Notes", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+              ) {
+                Text(
+                  text = sub.notes,
+                  style = MaterialTheme.typography.bodyMedium,
+                  modifier = Modifier.padding(10.dp)
+                )
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        TextButton(
+          onClick = onDelete,
+          colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        ) {
+          Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(Modifier.width(4.dp))
+          Text("Delete")
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          if (!isPaidThisCycle) {
+            Button(
+              onClick = onMarkPaid,
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+            ) {
+              Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(Modifier.width(4.dp))
+              Text("Mark Paid")
+            }
+          }
+          FilledTonalButton(onClick = onEdit) {
+            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Edit")
+          }
+        }
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Close") }
+    }
+  )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditSubscriptionDialog(
+  sub: SubscriptionRecord,
+  categories: List<ExpenseCategory>,
+  bankAccounts: List<BankAccount>,
+  onDismiss: () -> Unit,
+  onConfirm: (SubscriptionRecord) -> Unit
+) {
+  var name by remember(sub.id) { mutableStateOf(sub.name) }
+  var amountStr by remember(sub.id) { mutableStateOf(sub.amount.toString()) }
+  var billingCycle by remember(sub.id) { mutableStateOf(sub.billingCycle) }
+  var categoryName by remember(sub.id) { mutableStateOf(sub.categoryName) }
+  var selectedAccountId by remember(sub.id) { mutableStateOf(sub.bankAccountId) }
+  var selectedAccountName by remember(sub.id) { mutableStateOf(sub.bankAccountName) }
+  var notes by remember(sub.id) { mutableStateOf(sub.notes) }
+
+  var cycleDropdownExpanded by remember { mutableStateOf(false) }
+  var categoryDropdownExpanded by remember { mutableStateOf(false) }
+  var accountDropdownExpanded by remember { mutableStateOf(false) }
+
+  val cycles = listOf("MONTHLY", "YEARLY", "WEEKLY")
+  val parsedAmount = amountStr.toDoubleOrNull()
+  val canSave = name.isNotBlank() && parsedAmount != null && parsedAmount > 0
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    shape = RoundedCornerShape(24.dp),
+    title = { Text("Edit Subscription / Bill", fontWeight = FontWeight.Bold) },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        OutlinedTextField(
+          value = name,
+          onValueChange = { name = it },
+          label = { Text("Bill / Service Name *") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+          value = amountStr,
+          onValueChange = { input ->
+            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) amountStr = input
+          },
+          label = { Text("Amount (₹) *") },
+          prefix = { Text("₹ ") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        // Billing Cycle Dropdown
+        ExposedDropdownMenuBox(
+          expanded = cycleDropdownExpanded,
+          onExpandedChange = { cycleDropdownExpanded = !cycleDropdownExpanded }
+        ) {
+          OutlinedTextField(
+            value = billingCycle,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Billing Cycle") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = cycleDropdownExpanded) },
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
+          )
+          ExposedDropdownMenu(
+            expanded = cycleDropdownExpanded,
+            onDismissRequest = { cycleDropdownExpanded = false }
+          ) {
+            cycles.forEach { cycle ->
+              DropdownMenuItem(
+                text = { Text(cycle) },
+                onClick = {
+                  billingCycle = cycle
+                  cycleDropdownExpanded = false
+                }
+              )
+            }
+          }
+        }
+
+        // Category Dropdown
+        ExposedDropdownMenuBox(
+          expanded = categoryDropdownExpanded,
+          onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
+        ) {
+          OutlinedTextField(
+            value = categoryName,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Category") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryDropdownExpanded) },
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
+          )
+          ExposedDropdownMenu(
+            expanded = categoryDropdownExpanded,
+            onDismissRequest = { categoryDropdownExpanded = false }
+          ) {
+            categories.forEach { cat ->
+              DropdownMenuItem(
+                text = { Text(cat.name) },
+                onClick = {
+                  categoryName = cat.name
+                  categoryDropdownExpanded = false
+                }
+              )
+            }
+          }
+        }
+
+        // Bank Account Dropdown
+        ExposedDropdownMenuBox(
+          expanded = accountDropdownExpanded,
+          onExpandedChange = { accountDropdownExpanded = !accountDropdownExpanded }
+        ) {
+          OutlinedTextField(
+            value = selectedAccountName.ifBlank { "None (Manual / Cash)" },
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Linked Payment Account") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountDropdownExpanded) },
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
+          )
+          ExposedDropdownMenu(
+            expanded = accountDropdownExpanded,
+            onDismissRequest = { accountDropdownExpanded = false }
+          ) {
+            DropdownMenuItem(
+              text = { Text("None (Manual / Cash)") },
+              onClick = {
+                selectedAccountId = null
+                selectedAccountName = ""
+                accountDropdownExpanded = false
+              }
+            )
+            bankAccounts.forEach { acc ->
+              DropdownMenuItem(
+                text = { Text("${acc.bankName} (${acc.accountType})") },
+                onClick = {
+                  selectedAccountId = acc.id
+                  selectedAccountName = acc.bankName
+                  accountDropdownExpanded = false
+                }
+              )
+            }
+          }
+        }
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          val amt = parsedAmount ?: return@Button
+          onConfirm(
+            sub.copy(
+              name = name.trim(),
+              amount = amt,
+              billingCycle = billingCycle,
+              categoryName = categoryName,
+              bankAccountId = selectedAccountId,
+              bankAccountName = selectedAccountName,
+              notes = notes.trim()
+            )
+          )
+        },
+        enabled = canSave
+      ) {
+        Text("Save Changes")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Cancel") }
+    }
+  )
 }
 
 // -------------------------------------------------------------
@@ -5818,6 +6991,7 @@ private fun CreditCardsSection(
   cardAccounts: List<AccountWithBalance>,
   reminders: List<CreditCardBillReminder>,
   onAddCardClick: () -> Unit,
+  onCardClick: (BankAccount) -> Unit = {},
   onSetBillReminder: (Long) -> Unit,
   onMarkBillPaid: (CreditCardBillReminder) -> Unit,
   onShowTransactions: (Long) -> Unit,
@@ -6006,7 +7180,11 @@ private fun CreditCardsSection(
         val isPaid = reminder?.paidDateEpochDay?.let { it >= 0L } == true
 
         Card(
-          modifier = Modifier.fillMaxWidth().testTag("credit_card_${accWithBal.account.id}"),
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("credit_card_${accWithBal.account.id}")
+            .clip(RoundedCornerShape(20.dp))
+            .clickable { onCardClick(accWithBal.account) },
           shape = RoundedCornerShape(20.dp),
           colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -6047,15 +7225,18 @@ private fun CreditCardsSection(
                       color = Color.White
                     )
                   }
-                  IconButton(
-                    onClick = { onDeleteCard(accWithBal.account) },
-                    modifier = Modifier.size(32.dp)
+                  Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.White.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
                   ) {
-                    Icon(
-                      Icons.Default.DeleteOutline,
-                      contentDescription = "Delete Card",
-                      tint = Color.White.copy(alpha = 0.7f),
-                      modifier = Modifier.size(18.dp)
+                    Text(
+                      text = "CREDIT",
+                      fontSize = 10.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = Color.White,
+                      letterSpacing = 1.sp,
+                      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                   }
                 }

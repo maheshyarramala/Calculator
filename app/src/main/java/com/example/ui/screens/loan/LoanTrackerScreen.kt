@@ -279,12 +279,19 @@ fun LoanTrackerScreen(
     )
   }
 
+  var editingLoan by remember { mutableStateOf<LoanRecord?>(null) }
+
   // Loan Detail Modal
   state.selectedLoanDetail?.let { loan ->
     LoanDetailDialog(
       loan = loan,
       bankAccounts = state.bankAccounts,
       onDismiss = { viewModel.selectLoanForDetail(null) },
+      onEdit = {
+        val target = loan
+        viewModel.selectLoanForDetail(null)
+        editingLoan = target
+      },
       onPayEmi = { bankId, _ ->
         viewModel.payMonthlyEmi(loan, bankId)
       },
@@ -293,6 +300,19 @@ fun LoanTrackerScreen(
       },
       onDelete = {
         viewModel.deleteLoan(loan)
+      }
+    )
+  }
+
+  // Edit Loan Dialog
+  editingLoan?.let { loan ->
+    EditLoanDialog(
+      loan = loan,
+      bankAccounts = state.bankAccounts,
+      onDismiss = { editingLoan = null },
+      onConfirm = { updated ->
+        viewModel.updateLoan(updated)
+        editingLoan = null
       }
     )
   }
@@ -851,6 +871,7 @@ private fun LoanDetailDialog(
   loan: LoanRecord,
   bankAccounts: List<AccountWithBalance>,
   onDismiss: () -> Unit,
+  onEdit: () -> Unit,
   onPayEmi: (Long?, String) -> Unit,
   onUndoEmi: () -> Unit,
   onDelete: () -> Unit
@@ -869,8 +890,13 @@ private fun LoanDetailDialog(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(loan.loanName, fontWeight = FontWeight.Bold)
-        IconButton(onClick = { showDeleteConfirm = true }) {
-          Icon(Icons.Default.DeleteOutline, contentDescription = "Delete Loan", tint = MaterialTheme.colorScheme.error)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          IconButton(onClick = onEdit) {
+            Icon(Icons.Default.Edit, contentDescription = "Edit Loan", tint = MaterialTheme.colorScheme.primary)
+          }
+          IconButton(onClick = { showDeleteConfirm = true }) {
+            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete Loan", tint = MaterialTheme.colorScheme.error)
+          }
         }
       }
     },
@@ -962,6 +988,17 @@ private fun LoanDetailDialog(
     },
     confirmButton = {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(
+          onClick = {
+            onDismiss()
+            onEdit()
+          }
+        ) {
+          Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("Edit")
+        }
+
         if (loan.paidEmisCount > 0) {
           OutlinedButton(
             onClick = {
@@ -1024,6 +1061,203 @@ private fun LoanDetailDialog(
       }
     )
   }
+}
+
+// -------------------------------------------------------------
+// EDIT LOAN DIALOG
+// -------------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditLoanDialog(
+  loan: LoanRecord,
+  bankAccounts: List<AccountWithBalance>,
+  onDismiss: () -> Unit,
+  onConfirm: (LoanRecord) -> Unit
+) {
+  var loanName by rememberSaveable { mutableStateOf(loan.loanName) }
+  var loanCategory by rememberSaveable { mutableStateOf(loan.loanCategory) }
+  var principalText by rememberSaveable { mutableStateOf(loan.principalAmount.toString()) }
+  var interestRateText by rememberSaveable { mutableStateOf(loan.annualInterestRate.toString()) }
+  var tenureMonthsText by rememberSaveable { mutableStateOf(loan.tenureMonths.toString()) }
+  var customEmiText by rememberSaveable { mutableStateOf(loan.emiAmount.toString()) }
+  var dueDayOfMonthText by rememberSaveable { mutableStateOf(loan.dueDayOfMonth.toString()) }
+  var notes by rememberSaveable { mutableStateOf(loan.notes) }
+  var selectedBankId by rememberSaveable { mutableStateOf(loan.bankAccountId) }
+
+  val principalVal = principalText.toDoubleOrNull() ?: 0.0
+  val rateVal = interestRateText.toDoubleOrNull() ?: 0.0
+  val tenureVal = tenureMonthsText.toIntOrNull() ?: 0
+  val dueDayOfMonth = dueDayOfMonthText.toIntOrNull()?.takeIf { it in 1..31 } ?: loan.dueDayOfMonth
+
+  val calculatedEmi = remember(principalVal, rateVal, tenureVal) {
+    LoanRecord.calculateEmi(principalVal, rateVal, tenureVal)
+  }
+
+  val selectedAccount = bankAccounts.find { it.account.id == selectedBankId }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Edit Loan", fontWeight = FontWeight.Bold) },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(max = 480.dp)
+          .verticalScroll(rememberScrollState())
+          .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        OutlinedTextField(
+          value = loanName,
+          onValueChange = { loanName = it },
+          label = { Text("Loan Name *") },
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        // Category Selection
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          listOf("HOME", "CAR", "PERSONAL", "MOBILE", "EDUCATION", "OTHER").forEach { cat ->
+            FilterChip(
+              selected = loanCategory.equals(cat, ignoreCase = true),
+              onClick = { loanCategory = cat },
+              label = { Text(cat.lowercase().replaceFirstChar { it.uppercase() }, fontSize = 11.sp) },
+              shape = RoundedCornerShape(10.dp)
+            )
+          }
+        }
+
+        OutlinedTextField(
+          value = principalText,
+          onValueChange = { principalText = it },
+          label = { Text("Principal Amount (₹) *") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          OutlinedTextField(
+            value = interestRateText,
+            onValueChange = { interestRateText = it },
+            label = { Text("Interest Rate (% p.a.) *") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.weight(1f)
+          )
+          OutlinedTextField(
+            value = tenureMonthsText,
+            onValueChange = { tenureMonthsText = it },
+            label = { Text("Tenure (Months) *") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.weight(1f)
+          )
+        }
+
+        OutlinedTextField(
+          value = customEmiText,
+          onValueChange = { customEmiText = it },
+          label = { Text("Monthly EMI (₹)") },
+          placeholder = { Text("Default: ₹${calculatedEmi.toLong()}") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        // Optional Linked Bank Account
+        if (bankAccounts.isNotEmpty()) {
+          var expanded by remember { mutableStateOf(false) }
+          ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it }
+          ) {
+            OutlinedTextField(
+              value = selectedAccount?.let { "${it.account.bankName} (${CurrencyFormatter.format(it.currentBalance)})" } ?: "Select Linked Account (Optional)",
+              onValueChange = {},
+              readOnly = true,
+              label = { Text("Deduct EMI from Account") },
+              trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+              modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+            )
+            ExposedDropdownMenu(
+              expanded = expanded,
+              onDismissRequest = { expanded = false }
+            ) {
+              DropdownMenuItem(
+                text = { Text("None") },
+                onClick = {
+                  selectedBankId = null
+                  expanded = false
+                }
+              )
+              bankAccounts.forEach { acc ->
+                DropdownMenuItem(
+                  text = { Text("${acc.account.bankName} (${CurrencyFormatter.format(acc.currentBalance)})") },
+                  onClick = {
+                    selectedBankId = acc.account.id
+                    expanded = false
+                  }
+                )
+              }
+            }
+          }
+        }
+
+        OutlinedTextField(
+          value = dueDayOfMonthText,
+          onValueChange = {
+            if (it.length <= 2 && it.all { char -> char.isDigit() }) dueDayOfMonthText = it
+          },
+          label = { Text("EMI Due Date (Day of Month, 1-31)") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+          modifier = Modifier.fillMaxWidth(),
+          singleLine = true
+        )
+
+        OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          label = { Text("Notes (Optional)") },
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+    },
+    confirmButton = {
+      val parsedCustomEmi = customEmiText.toDoubleOrNull()?.takeIf { it > 0 } ?: calculatedEmi
+      val canSave = loanName.isNotBlank() && principalVal > 0 && rateVal > 0 && tenureVal > 0
+      Button(
+        onClick = {
+          if (canSave) {
+            onConfirm(
+              loan.copy(
+                loanName = loanName.trim(),
+                loanCategory = loanCategory,
+                principalAmount = principalVal,
+                annualInterestRate = rateVal,
+                tenureMonths = tenureVal,
+                emiAmount = parsedCustomEmi,
+                dueDayOfMonth = dueDayOfMonth,
+                bankAccountId = selectedBankId,
+                bankAccountName = selectedAccount?.account?.bankName ?: (if (selectedBankId == null) "" else loan.bankAccountName),
+                notes = notes.trim()
+              )
+            )
+          }
+        },
+        enabled = canSave
+      ) {
+        Text("Save Changes")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancel")
+      }
+    }
+  )
 }
 
 @Composable

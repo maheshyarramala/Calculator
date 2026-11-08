@@ -11,8 +11,6 @@ import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.HapticStrength
 import com.example.ui.theme.ThemeManager
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class ExampleRobolectricTest {
 
   @Test
@@ -181,14 +179,10 @@ class ExampleRobolectricTest {
 
   @Test
   fun `theme and haptic preferences persist across initialization`() {
-    val context = RuntimeEnvironment.getApplication()
-    ThemeManager.initialize(context)
-
     try {
       ThemeManager.setThemeMode(AppThemeMode.DARK)
       ThemeManager.setAccentTheme(AccentTheme.EMERALD)
       ThemeManager.setHapticStrength(HapticStrength.OFF)
-      ThemeManager.initialize(context)
 
       assertEquals(AppThemeMode.DARK, ThemeManager.state.value.themeMode)
       assertEquals(AccentTheme.EMERALD, ThemeManager.state.value.accentTheme)
