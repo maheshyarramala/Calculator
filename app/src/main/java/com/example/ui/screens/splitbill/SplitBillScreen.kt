@@ -358,6 +358,9 @@ fun SplitBillScreen(
         bankAccounts = financeAccounts,
         onRecordPayment = { title, amount, accountId, accountName, method, settlementReference ->
           financeViewModel?.logSplitBillPayment(title, amount, accountId, accountName, method, settlementReference)
+        },
+        onRecordIncome = { title, amount, accountId, accountName, method, settlementReference ->
+          financeViewModel?.logSplitBillSettlementIncome(title, amount, accountId, accountName, method, settlementReference)
         }
       )
     }
@@ -987,7 +990,8 @@ private fun SettlementLedgerTab(
   totalBill: Double,
   viewModel: SplitBillViewModel,
   bankAccounts: List<com.example.data.local.entity.BankAccount>,
-  onRecordPayment: (String, Double, Long?, String, String, String) -> Unit
+  onRecordPayment: (String, Double, Long?, String, String, String) -> Unit,
+  onRecordIncome: (String, Double, Long?, String, String, String) -> Unit
 ) {
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
@@ -1000,14 +1004,18 @@ private fun SettlementLedgerTab(
     val isCurrentUserPayer = transfer.fromParticipant.name.equals("You (Me)", ignoreCase = true) ||
       transfer.fromParticipant.name.equals("You", ignoreCase = true) ||
       transfer.fromParticipant.name.equals("Me", ignoreCase = true)
+    val isCurrentUserPayee = transfer.toParticipant.name.equals("You (Me)", ignoreCase = true) ||
+      transfer.toParticipant.name.equals("You", ignoreCase = true) ||
+      transfer.toParticipant.name.equals("Me", ignoreCase = true)
+    val currentUserInvolved = isCurrentUserPayer || isCurrentUserPayee
     AlertDialog(
       onDismissRequest = { pendingSettlement = null },
-      title = { Text(if (isCurrentUserPayer) "Record payment" else "Confirm settlement") },
+      title = { Text(when { isCurrentUserPayer -> "Record payment"; isCurrentUserPayee -> "Record received payment"; else -> "Confirm settlement" }) },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           Text("${transfer.fromParticipant.name} pays ${transfer.toParticipant.name} ${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}")
-          if (isCurrentUserPayer) {
-            Text("Choose where this payment came from. The payment will also be added to Finance > Expenses.")
+          if (currentUserInvolved) {
+            Text(if (isCurrentUserPayer) "Choose the account or wallet you paid from. This will be added to Finance > Expenses." else "Choose the account where you received the reimbursement. This will be added to Finance > Income.")
             Box {
               OutlinedButton(onClick = { showAccountMenu = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.AccountBalanceWallet, contentDescription = null)
@@ -1046,20 +1054,17 @@ private fun SettlementLedgerTab(
       },
       confirmButton = {
         Button(onClick = {
+          val settlementReference = "${state.billId}:${transfer.fromParticipant.id}:${transfer.toParticipant.id}:${String.format(Locale.US, "%.2f", transfer.amount)}"
+          val selectedAccountName = bankAccounts.firstOrNull { it.id == selectedPaymentAccountId }?.bankName ?: ""
           if (isCurrentUserPayer) {
-            onRecordPayment(
-              state.billTitle,
-              transfer.amount,
-              selectedPaymentAccountId,
-              bankAccounts.firstOrNull { it.id == selectedPaymentAccountId }?.bankName ?: "",
-              paymentSource,
-              "${state.billId}:${transfer.fromParticipant.id}:${transfer.toParticipant.id}:${String.format(Locale.US, "%.2f", transfer.amount)}"
-            )
+            onRecordPayment(state.billTitle, transfer.amount, selectedPaymentAccountId, selectedAccountName, paymentSource, settlementReference)
+          } else if (isCurrentUserPayee) {
+            onRecordIncome(state.billTitle, transfer.amount, selectedPaymentAccountId, selectedAccountName, paymentSource, settlementReference)
           }
           val key = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
           viewModel.toggleSettledTransfer(key)
           pendingSettlement = null
-        }) { Text(if (isCurrentUserPayer) "Record & settle" else "Confirm paid") }
+        }) { Text(when { isCurrentUserPayer -> "Record & settle"; isCurrentUserPayee -> "Record received"; else -> "Confirm paid" }) }
       },
       dismissButton = { TextButton(onClick = { pendingSettlement = null }) { Text("Cancel") } }
     )
