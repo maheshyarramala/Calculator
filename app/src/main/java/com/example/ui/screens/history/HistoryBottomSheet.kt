@@ -1,7 +1,10 @@
 package com.example.ui.screens.history
 import com.example.ui.theme.performConfiguredHapticFeedback
 
-import androidx.compose.foundation.layout.*\nimport androidx.compose.foundation.clickable\nimport androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -35,6 +38,7 @@ fun HistoryBottomSheet(
   val haptic = LocalHapticFeedback.current
   var showClearConfirm by remember { mutableStateOf(false) }
   var selectedRecord by remember { mutableStateOf<com.example.data.local.entity.CalculationRecord?>(null) }
+  val dateFormat = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
 
   selectedRecord?.let { record ->
     AlertDialog(
@@ -62,7 +66,6 @@ fun HistoryBottomSheet(
     )
   }
 
-  val dateFormat = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
 
   val filters = listOf(
     "ALL" to "All",
