@@ -1417,7 +1417,7 @@ private fun SettlementLedgerTab(
                     PaymentDeepLinkHelper.launchPayPal(
                       context = context,
                       paypalUsername = transfer.toParticipant.paypalUsername,
-                      amount = transfer.amount
+                      amount = remainingAmount
                     )
                   },
                   shape = RoundedCornerShape(10.dp),
