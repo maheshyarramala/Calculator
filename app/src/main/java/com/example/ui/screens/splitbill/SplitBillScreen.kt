@@ -199,7 +199,7 @@ fun SplitBillScreen(
       .fillMaxSize()
       .padding(horizontal = 16.dp, vertical = 8.dp)
   ) {
-    // Top Bar: Bill Title, Currency & OCR Action
+    // Minimal, premium header — all colors inherit the app's current theme.
     Row(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.SpaceBetween,
@@ -208,149 +208,118 @@ fun SplitBillScreen(
       Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
         Text(
           text = state.billTitle,
-          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+          style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
           modifier = Modifier.clickable { billTitleDraft = state.billTitle; showRenameBill = true }
         )
         Text(
-          text = "${state.participants.size} participants · ${java.text.SimpleDateFormat("dd MMM", Locale.getDefault()).format(java.util.Date(billCreatedAt))}",
+          text = "${state.participants.size} people · " + java.text.SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(java.util.Date(billCreatedAt)),
           style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
+          color = MaterialTheme.colorScheme.onSurfaceVariant
         )
       }
-
-      Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = { showBillHistory = true }) {
           Icon(Icons.Default.History, contentDescription = "Saved bills")
         }
         IconButton(onClick = { showNewBillConfirm = true }) {
           Icon(Icons.Default.Add, contentDescription = "New bill")
         }
-        // AI Receipt Scan / OCR Button
         FilledTonalButton(
           onClick = {
             haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
             viewModel.setShowOcrDialog(true)
           },
-          shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-          colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.primary
-          ),
+          shape = RoundedCornerShape(14.dp),
+          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
           modifier = Modifier.testTag("scan_receipt_btn")
         ) {
-          Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("Scan Receipt", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+          Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(17.dp))
+          Spacer(Modifier.width(6.dp))
+          Text("Scan", fontWeight = FontWeight.SemiBold)
         }
       }
     }
 
-    Spacer(modifier = Modifier.height(10.dp))
+    Spacer(Modifier.height(16.dp))
 
-    // Grand Total Overview Card (High Contrast & Clear Visibility)
-    Card(
-      shape = RoundedCornerShape(18.dp),
-      colors = CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-      ),
-      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-      modifier = Modifier.fillMaxWidth()
+    // Quiet summary surface with clear total hierarchy.
+    Surface(
+      modifier = Modifier.fillMaxWidth(),
+      shape = RoundedCornerShape(22.dp),
+      color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     ) {
-      Column(modifier = Modifier.padding(16.dp)) {
+      Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
+          verticalAlignment = Alignment.Top
         ) {
           Column {
-            Text(
-              text = "Total Group Bill",
-              style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-              color = MaterialTheme.colorScheme.onSurface
-            )
+            Text("GROUP TOTAL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(3.dp))
             Text(
               text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", totalBill)}",
-              style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
-              color = MaterialTheme.colorScheme.primary
+              style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+              color = MaterialTheme.colorScheme.onSurface
             )
           }
-
-          // Currency Switcher Dropdown
           var showCurrencyMenu by remember { mutableStateOf(false) }
           Box {
-            FilledTonalButton(
-              onClick = { showCurrencyMenu = true },
-              shape = RoundedCornerShape(10.dp),
-              contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-              Text("${state.currencyCode} (${state.currencySymbol})", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-              Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
+            TextButton(onClick = { showCurrencyMenu = true }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+              Text(state.currencyCode, fontWeight = FontWeight.SemiBold)
+              Icon(Icons.Default.ExpandMore, contentDescription = "Change currency")
             }
             DropdownMenu(expanded = showCurrencyMenu, onDismissRequest = { showCurrencyMenu = false }) {
-              listOf(
-                "INR" to "₹", "USD" to "$", "EUR" to "€", "GBP" to "£",
-                "AED" to "د.إ", "CAD" to "$", "AUD" to "$", "JPY" to "¥"
-              ).forEach { (code, sym) ->
+              listOf("INR" to "₹", "USD" to "$", "EUR" to "€", "GBP" to "£", "AED" to "د.إ", "CAD" to "$", "AUD" to "$", "JPY" to "¥").forEach { (code, sym) ->
                 DropdownMenuItem(
-                  text = { Text("$code ($sym)", fontWeight = FontWeight.Medium) },
-                  onClick = {
-                    viewModel.setCurrency(code, sym)
-                    showCurrencyMenu = false
-                  }
+                  text = { Text("$code ($sym)") },
+                  onClick = { viewModel.setCurrency(code, sym); showCurrencyMenu = false }
                 )
               }
             }
           }
         }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
+        Spacer(Modifier.height(8.dp))
         val diff = totalPaid - totalBill
-        Text(
-          text = when {
-            totalBill <= 0.0 -> "No Items"
-            Math.abs(diff) < 0.005 -> "Fully Paid ✓"
-            diff < 0.0 -> "Owed: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", -diff)}"
-            else -> "Overpaid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", diff)}"
-          },
-          fontSize = 11.sp,
-          fontWeight = FontWeight.Bold,
-          color = when {
-            totalBill <= 0.0 -> MaterialTheme.colorScheme.onSurfaceVariant
-            Math.abs(diff) < 0.005 -> Color(0xFF059669)
-            else -> Color(0xFFDC2626)
+        val status = when {
+          totalBill <= 0.0 -> "Add expenses to get started"
+          kotlin.math.abs(diff) < 0.005 -> "All payments accounted for"
+          diff < 0.0 -> "Remaining · ${state.currencySymbol}${String.format(Locale.US, "%,.2f", -diff)}"
+          else -> "Overpaid · ${state.currencySymbol}${String.format(Locale.US, "%,.2f", diff)}"
+        }
+        Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+    }
+
+    Spacer(Modifier.height(16.dp))
+
+    // Simple text-first navigation; selection uses the existing app accent.
+    ScrollableTabRow(
+      selectedTabIndex = state.activeTab,
+      edgePadding = 0.dp,
+      containerColor = Color.Transparent,
+      divider = {},
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      listOf("Expenses", "People", "Split", "Settlement", "History").forEachIndexed { index, label ->
+        Tab(
+          selected = state.activeTab == index,
+          onClick = { viewModel.setTab(index) },
+          text = {
+            Text(
+              if (index == 1) "People · ${state.participants.size}" else label,
+              style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (state.activeTab == index) FontWeight.SemiBold else FontWeight.Normal),
+              maxLines = 1
+            )
           }
         )
       }
     }
 
-    Spacer(modifier = Modifier.height(10.dp))
-
-    // Five-step Split Bill workspace: Expenses, People, Split, Settlement, History.
-    ScrollableTabRow(
-      selectedTabIndex = state.activeTab,
-      edgePadding = 0.dp,
-      containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-      modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-    ) {
-      val sections = listOf("Expenses", "People", "Split", "Settlement", "History")
-      val sectionIcons = listOf(Icons.AutoMirrored.Filled.ReceiptLong, Icons.Default.Group, Icons.Default.PieChart, Icons.Default.AccountBalanceWallet, Icons.Default.History)
-      sections.forEachIndexed { index, label ->
-        Tab(
-          selected = state.activeTab == index,
-          onClick = { viewModel.setTab(index) },
-          text = { Text(if (index == 1) "People (${state.participants.size})" else label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) },
-          icon = { Icon(sectionIcons[index], contentDescription = null, modifier = Modifier.size(16.dp)) }
-        )
-      }
-    }
-
-    Spacer(modifier = Modifier.height(10.dp))
+    Spacer(Modifier.height(12.dp))
 
     when (state.activeTab) {
       0 -> ItemsAndBillTab(state = state, viewModel = viewModel, onAddItemClick = { viewModel.setShowAddItemDialog(true) })
@@ -414,7 +383,7 @@ private fun SplitMethodTab(
           OutlinedTextField(
             value = amountInputText(state.manualBillTotal),
             onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\\\d*\\\\.?\\\\d{0,2}$"))) viewModel.setManualBillTotal(value.toDoubleOrNull() ?: 0.0) },
-            label = { Text("Total before tax, tip and discount") },
+            label = { Text("Total bill amount") },
             prefix = { Text(state.currencySymbol) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
@@ -540,8 +509,8 @@ private fun ItemsAndBillTab(
     item {
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-          Text("Your expenses", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-          Text("Add what the group spent.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("Expenses", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+          Text("Add items and assign them to the people who shared them.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
       }
