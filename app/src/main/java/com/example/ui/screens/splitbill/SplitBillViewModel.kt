@@ -33,6 +33,7 @@ data class SplitBillUiState(
   val showAddParticipantDialog: Boolean = false,
   val showAddItemDialog: Boolean = false,
   val settledTransferKeys: Set<String> = emptySet(),
+  val transferPaidAmounts: Map<String, Double> = emptyMap(),
   val activeTab: Int = 0,
   val splitMode: SplitMode = SplitMode.ITEMIZED
 )
@@ -227,6 +228,20 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
     persistCurrent()
   }
 
+  fun addTransferPayment(transferKey: String, amount: Double, originalAmount: Double) {
+    if (!amount.isFinite() || amount <= 0.0) return
+    _uiState.update { state ->
+      val paid = (state.transferPaidAmounts[transferKey] ?: 0.0) + amount
+      val capped = paid.coerceAtMost(originalAmount.coerceAtLeast(0.0))
+      val isFullyPaid = capped + 0.005 >= originalAmount
+      state.copy(
+        transferPaidAmounts = state.transferPaidAmounts + (transferKey to capped),
+        settledTransferKeys = if (isFullyPaid) state.settledTransferKeys + transferKey else state.settledTransferKeys
+      )
+    }
+    persistCurrent()
+  }
+
   private fun encodeState(state: SplitBillUiState): String {
     val root = JSONObject()
       .put("version", 1)
@@ -256,7 +271,10 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
     }
     val settled = JSONArray()
     state.settledTransferKeys.forEach { settled.put(it) }
-    return root.put("participants", people).put("items", items).put("settledTransferKeys", settled).toString()
+    val transferPayments = JSONObject()
+    state.transferPaidAmounts.forEach { (key, amount) -> transferPayments.put(key, amount) }
+    return root.put("participants", people).put("items", items).put("settledTransferKeys", settled)
+      .put("transferPaidAmounts", transferPayments).toString()
   }
 
   private fun decodeState(record: SplitBillRecord): SplitBillUiState {
@@ -290,6 +308,9 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
     }
     val settledJson = root.optJSONArray("settledTransferKeys") ?: JSONArray()
     val settled = (0 until settledJson.length()).map { settledJson.optString(it) }.toSet()
+    val paymentJson = root.optJSONObject("transferPaidAmounts") ?: JSONObject()
+    val transferPayments = mutableMapOf<String, Double>()
+    paymentJson.keys().forEach { key -> transferPayments[key] = nonNegative(paymentJson.optDouble(key, 0.0)) }
     val mode = runCatching { SplitMode.valueOf(root.optString("splitMode", SplitMode.ITEMIZED.name)) }.getOrDefault(SplitMode.ITEMIZED)
     return SplitBillUiState(
       billId = record.id,
@@ -305,6 +326,7 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
       simplifyDebtsEnabled = root.optBoolean("simplifyDebtsEnabled", true),
       activeTab = root.optInt("activeTab", 0).coerceIn(0, 4),
       settledTransferKeys = settled,
+      transferPaidAmounts = transferPayments,
       splitMode = mode
     )
   }
