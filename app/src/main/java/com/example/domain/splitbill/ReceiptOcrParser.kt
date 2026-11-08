@@ -19,7 +19,7 @@ object ReceiptOcrParser {
     var detectedTotal = 0.0
 
     // Price regex: matches amounts like 12.50, $12.50, ₹450, 450.00
-    val pricePattern = Pattern.compile("""(?:[\$₹€£]|Rs\.?|INR)?\s*([0-9]+(?:[\.,][0-9]{2})?)""")
+    val pricePattern = Pattern.compile("""(?:[\$₹€£]|Rs\.?|INR)?\s*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)""")
 
     lines.forEach { line ->
       val lower = line.lowercase()
@@ -65,7 +65,7 @@ object ReceiptOcrParser {
       var priceStart = -1
 
       while (matcher.find()) {
-        val numStr = matcher.group(1)?.replace(",", ".")
+        val numStr = matcher.group(1)?.replace(",", "")
         val parsed = numStr?.toDoubleOrNull()
         if (parsed != null && parsed > 0.0 && parsed < 1000000.0) {
           lastFoundPrice = parsed
