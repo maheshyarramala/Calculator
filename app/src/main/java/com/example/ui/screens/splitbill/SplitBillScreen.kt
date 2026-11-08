@@ -353,8 +353,8 @@ fun SplitBillScreen(
         totalBill = totalBill,
         viewModel = viewModel,
         bankAccounts = financeAccounts,
-        onRecordPayment = { title, amount, accountId, accountName, method ->
-          financeViewModel?.logSplitBillPayment(title, amount, accountId, accountName, method)
+        onRecordPayment = { title, amount, accountId, accountName, method, settlementReference ->
+          financeViewModel?.logSplitBillPayment(title, amount, accountId, accountName, method, settlementReference)
         }
       )
     }
@@ -984,7 +984,7 @@ private fun SettlementLedgerTab(
   totalBill: Double,
   viewModel: SplitBillViewModel,
   bankAccounts: List<com.example.data.local.entity.BankAccount>,
-  onRecordPayment: (String, Double, Long?, String, String) -> Unit
+  onRecordPayment: (String, Double, Long?, String, String, String) -> Unit
 ) {
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
@@ -1049,7 +1049,8 @@ private fun SettlementLedgerTab(
               transfer.amount,
               selectedPaymentAccountId,
               bankAccounts.firstOrNull { it.id == selectedPaymentAccountId }?.bankName ?: "",
-              paymentSource
+              paymentSource,
+              "${state.billId}:${transfer.fromParticipant.id}:${transfer.toParticipant.id}:${String.format(Locale.US, "%.2f", transfer.amount)}"
             )
           }
           val key = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
