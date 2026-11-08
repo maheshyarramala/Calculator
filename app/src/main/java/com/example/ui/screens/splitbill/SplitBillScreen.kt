@@ -1161,6 +1161,9 @@ private fun SettlementLedgerTab(
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
   var pendingSettlement by remember { mutableStateOf<DebtTransfer?>(null) }
+  var pendingTransferKey by remember { mutableStateOf("") }
+  var pendingOriginalAmount by remember { mutableStateOf(0.0) }
+  var settlementAmountText by remember(pendingTransferKey) { mutableStateOf("") }
   var selectedPaymentAccountId by remember { mutableStateOf<Long?>(null) }
   var paymentSource by remember { mutableStateOf("Cash / Wallet") }
   var showAccountMenu by remember { mutableStateOf(false) }
@@ -1179,6 +1182,15 @@ private fun SettlementLedgerTab(
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           Text("${transfer.fromParticipant.name} pays ${transfer.toParticipant.name} ${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}")
+          OutlinedTextField(
+            value = settlementAmountText,
+            onValueChange = { value -> if (value.isEmpty() || value.matches(Regex("^\\d*\\.?\\d{0,2}$"))) settlementAmountText = value },
+            label = { Text("Amount paid now (max ${state.currencySymbol}${String.format(Locale.US, "%.2f", transfer.amount)})") },
+            prefix = { Text(state.currencySymbol) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
           if (currentUserInvolved) {
             Text(if (isCurrentUserPayer) "Choose the account or wallet you paid from. This will be added to Finance > Expenses." else "Choose the account where you received the reimbursement. This will be added to Finance > Income.")
             Box {
@@ -1327,7 +1339,9 @@ private fun SettlementLedgerTab(
     } else {
       items(transfers) { transfer ->
         val transferKey = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
-        val isSettled = state.settledTransferKeys.contains(transferKey)
+        val paidSoFar = state.transferPaidAmounts[transferKey] ?: 0.0
+        val remainingAmount = (transfer.amount - paidSoFar).coerceAtLeast(0.0)
+        val isSettled = state.settledTransferKeys.contains(transferKey) || remainingAmount <= 0.005
 
         Card(
           shape = RoundedCornerShape(16.dp),
@@ -1438,7 +1452,10 @@ private fun SettlementLedgerTab(
                   haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
                   paymentSource = "Cash / Wallet"
                   selectedPaymentAccountId = null
-                  pendingSettlement = transfer
+                  pendingTransferKey = transferKey
+                  pendingOriginalAmount = transfer.amount
+                  settlementAmountText = amountInputText(remainingAmount)
+                  pendingSettlement = transfer.copy(amount = remainingAmount)
                 },
                 colors = ButtonDefaults.buttonColors(
                   containerColor = if (isSettled) Color(0xFF10B981) else MaterialTheme.colorScheme.primaryContainer,
@@ -1454,7 +1471,7 @@ private fun SettlementLedgerTab(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                  text = if (isSettled) "Settled ✓" else "Settle",
+                  text = if (isSettled) "Settled ✓" else if (paidSoFar > 0.0) "Pay balance" else "Settle",
                   fontSize = 11.5.sp,
                   fontWeight = FontWeight.Bold
                 )
