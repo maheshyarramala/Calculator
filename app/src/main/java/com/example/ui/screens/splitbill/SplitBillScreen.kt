@@ -554,6 +554,7 @@ private fun AddReceiptItemDialog(
           onValueChange = { title = it },
           label = { Text("Dish / Item Name") },
           placeholder = { Text("e.g. Biryani, Drinks, Pizza") },
+          readOnly = initialItem?.isImportedFromFinance == true,
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
@@ -564,6 +565,7 @@ private fun AddReceiptItemDialog(
             onValueChange = { priceStr = it },
             label = { Text("Price ($currencySymbol)") },
             placeholder = { Text("0.00") },
+            readOnly = initialItem?.isImportedFromFinance == true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
             modifier = Modifier.weight(1f)
@@ -572,6 +574,7 @@ private fun AddReceiptItemDialog(
             value = qtyStr,
             onValueChange = { qtyStr = it },
             label = { Text("Qty") },
+            readOnly = initialItem?.isImportedFromFinance == true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
             modifier = Modifier.weight(0.5f)
@@ -588,6 +591,7 @@ private fun AddReceiptItemDialog(
         Box(modifier = Modifier.fillMaxWidth()) {
           OutlinedButton(
             onClick = { payerMenuExpanded = true },
+            enabled = initialItem?.isImportedFromFinance != true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp)
           ) {
@@ -618,7 +622,7 @@ private fun AddReceiptItemDialog(
         if (selectedPayerId == participants.firstOrNull()?.id) {
           Text("Payment source", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
           Box(Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = { paymentSourceExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { paymentSourceExpanded = true }, enabled = initialItem?.isImportedFromFinance != true, modifier = Modifier.fillMaxWidth()) {
               Text(paymentSource, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
               Icon(Icons.Default.ArrowDropDown, null)
             }
