@@ -787,6 +787,9 @@ fun FinanceHubScreen(
               } else {
                 viewModel.addExpense(title, amount, "Split Bill", account.id, account.bankName, reference)
               }
+            },
+            onUndoSettlement = { reference ->
+              expenses.firstOrNull { it.notes == reference && it.categoryName == "Split Bill" }?.let(viewModel::deleteExpense)
             }
           )
         }
