@@ -308,6 +308,14 @@ fun MainScreen(
               onDismissRequest = { menuExpanded = false }
             ) {
               DropdownMenuItem(
+                text = { Text("Backup & Restore") },
+                onClick = {
+                  menuExpanded = false
+                  currentDestination = MainDestination.FINANCE
+                  financeViewModel.setShowBackupModal(true)
+                }
+              )
+              DropdownMenuItem(
                 text = { Text("About") },
                 onClick = {
                   menuExpanded = false
