@@ -25,6 +25,7 @@ data class SplitBillUiState(
   val showAddItemDialog: Boolean = false,
   val settledTransferKeys: Set<String> = emptySet(),
   val settledPaymentSources: Map<String, String> = emptyMap(),
+  val settledPaymentReferences: Map<String, String> = emptyMap(),
   val activeTab: Int = 0 // 0: Items & Split, 1: Diners & Claims, 2: Settlement Ledger
 )
 
@@ -205,13 +206,15 @@ class SplitBillViewModel : ViewModel() {
     applyParsedReceipt(parsed)
   }
 
-  fun toggleSettledTransfer(transferKey: String, paymentSource: String? = null) {
+  fun toggleSettledTransfer(transferKey: String, paymentSource: String? = null, financeReference: String? = null) {
     _uiState.update { state ->
       val wasSettled = transferKey in state.settledTransferKeys
       val updatedKeys = if (wasSettled) state.settledTransferKeys - transferKey else state.settledTransferKeys + transferKey
       val updatedSources = if (wasSettled) state.settledPaymentSources - transferKey
         else state.settledPaymentSources + (transferKey to paymentSource.orEmpty())
-      state.copy(settledTransferKeys = updatedKeys, settledPaymentSources = updatedSources)
+      val updatedReferences = if (wasSettled) state.settledPaymentReferences - transferKey
+        else state.settledPaymentReferences + (transferKey to financeReference.orEmpty())
+      state.copy(settledTransferKeys = updatedKeys, settledPaymentSources = updatedSources, settledPaymentReferences = updatedReferences)
     }
   }
 
