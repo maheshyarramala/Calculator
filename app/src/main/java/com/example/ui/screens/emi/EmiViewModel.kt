@@ -125,6 +125,16 @@ class EmiViewModel : ViewModel() {
     _uiState.update { it.copy(emiResult = result) }
   }
 
+  fun restoreFromRecord(record: CalculationRecord) {
+    fun value(key: String) = record.detailsText.lineSequence().firstOrNull { it.startsWith("$key:") }?.substringAfter(":")?.trim()
+    val principal = value("Input Principal") ?: return
+    val rate = value("Input Rate") ?: return
+    val tenure = value("Input Tenure") ?: return
+    val years = value("Input Tenure Unit") != "MONTHS"
+    _uiState.update { it.copy(principalInput = principal, interestRateInput = rate, tenureInput = tenure, isTenureYears = years, prepayments = emptyList()) }
+    recalculate()
+  }
+
   fun saveCalculation(context: Context) {
     val state = _uiState.value
     val res = state.emiResult
