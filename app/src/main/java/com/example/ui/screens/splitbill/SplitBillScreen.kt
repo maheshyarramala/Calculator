@@ -80,7 +80,7 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
         Text(state.billTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       Box {
-        FilledTonalButton(onClick = { currencyMenu = true }) { Text("\${state.currencyCode} \${state.currencySymbol}"); Icon(Icons.Default.ExpandMore, null) }
+        FilledTonalButton(onClick = { currencyMenu = true }) { Text("${state.currencyCode} ${state.currencySymbol}"); Icon(Icons.Default.ExpandMore, null) }
         DropdownMenu(currencyMenu, { currencyMenu = false }) {
           listOf("INR" to "₹", "USD" to "$", "EUR" to "€", "GBP" to "£", "AED" to "د.إ").forEach { (c, s) ->
             DropdownMenuItem(text = { Text("$c ($s)") }, onClick = { viewModel.setCurrency(c, s); currencyMenu = false })
@@ -92,11 +92,11 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
       Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("TOTAL BILL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-        Text("\${state.currencySymbol}\${String.format(Locale.US, "%,.2f", total)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", total)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
           SummaryMetric("PEOPLE", state.participants.size.toString())
           SummaryMetric("EXPENSES", state.items.size.toString())
-          SummaryMetric("PAID", "\${state.currencySymbol}\${String.format(Locale.US, "%,.2f", breakdowns.sumOf { it.paidAmount })}")
+          SummaryMetric("PAID", "${state.currencySymbol}${String.format(Locale.US, "%,.2f", breakdowns.sumOf { it.paidAmount })}")
         }
       }
     }
@@ -132,7 +132,7 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
                 Text("Shared: $names", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
               }
               Column(horizontalAlignment = Alignment.End) {
-                Text("\${state.currencySymbol}\${String.format(Locale.US, "%,.2f", item.price * item.quantity)}", fontWeight = FontWeight.Bold)
+                Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", item.price * item.quantity)}", fontWeight = FontWeight.Bold)
                 IconButton(onClick = { viewModel.removeItem(item.id) }) { Icon(Icons.Default.DeleteOutline, "Remove expense", tint = MaterialTheme.colorScheme.error) }
               }
             }
@@ -153,8 +153,8 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
               val avatar = runCatching { Color(android.graphics.Color.parseColor(person.participant.avatarColorHex)) }.getOrDefault(MaterialTheme.colorScheme.primary)
               Surface(shape = CircleShape, color = avatar.copy(alpha = .16f)) { Text(person.participant.name.take(1).uppercase(), Modifier.padding(13.dp), color = avatar, fontWeight = FontWeight.Bold) }
               Spacer(Modifier.width(12.dp))
-              Column(Modifier.weight(1f)) { Text(person.participant.name, fontWeight = FontWeight.SemiBold); Text("Paid \${state.currencySymbol}\${String.format(Locale.US, "%,.2f", person.paidAmount)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-              Column(horizontalAlignment = Alignment.End) { Text("\${state.currencySymbol}\${String.format(Locale.US, "%,.2f", person.totalToPay)}", fontWeight = FontWeight.Bold); Text("Your share", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+              Column(Modifier.weight(1f)) { Text(person.participant.name, fontWeight = FontWeight.SemiBold); Text("Paid ${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.paidAmount)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+              Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.totalToPay)}", fontWeight = FontWeight.Bold); Text("Your share", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
               if (state.participants.size > 1 && person.participant.id != state.participants.firstOrNull()?.id) IconButton(onClick = { viewModel.removeParticipant(person.participant.id) }) { Icon(Icons.Default.Close, "Remove member") }
             }
           }
@@ -163,23 +163,23 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
       else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
         item { Text("Settlement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("See who needs to pay whom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (transfers.isEmpty()) item { EmptySplitCard(Icons.Default.CheckCircle, "All settled", if (total <= 0.0) "Add expenses to calculate balances." else "There are no outstanding payments.", "Copy summary") {
-          val lines = breakdowns.joinToString("\n") { "\${it.participant.name}: \${state.currencySymbol}\${String.format(Locale.US, "%.2f", it.totalToPay)}" }
-          clipboard.setText(AnnotatedString("Split Bill\nTotal: \${state.currencySymbol}\${String.format(Locale.US, "%.2f", total)}\n$lines"))
+          val lines = breakdowns.joinToString("\n") { "${it.participant.name}: ${state.currencySymbol}${String.format(Locale.US, "%.2f", it.totalToPay)}" }
+          clipboard.setText(AnnotatedString("Split Bill\nTotal: ${state.currencySymbol}${String.format(Locale.US, "%.2f", total)}\n$lines"))
         } }
         items(transfers) { transfer ->
-          val key = "\${transfer.fromParticipant.id}_\${transfer.toParticipant.id}_\${transfer.amount}"
+          val key = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
           val settled = key in state.settledTransferKeys
           Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-              Column(Modifier.weight(1f)) { Text(transfer.fromParticipant.name, fontWeight = FontWeight.SemiBold); Text("pays \${transfer.toParticipant.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-              Column(horizontalAlignment = Alignment.End) { Text("\${state.currencySymbol}\${String.format(Locale.US, "%,.2f", transfer.amount)}", fontWeight = FontWeight.Bold); TextButton(onClick = { viewModel.toggleSettledTransfer(key) }) { Text(if (settled) "Undo" else "Mark paid") } }
+              Column(Modifier.weight(1f)) { Text(transfer.fromParticipant.name, fontWeight = FontWeight.SemiBold); Text("pays ${transfer.toParticipant.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+              Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}", fontWeight = FontWeight.Bold); TextButton(onClick = { viewModel.toggleSettledTransfer(key) }) { Text(if (settled) "Undo" else "Mark paid") } }
             }
           }
         }
         item {
           OutlinedButton(onClick = {
-            val lines = breakdowns.joinToString("\n") { "\${it.participant.name}: \${state.currencySymbol}\${String.format(Locale.US, "%.2f", it.totalToPay)}" }
-            clipboard.setText(AnnotatedString("Split Bill - \${state.billTitle}\nTotal: \${state.currencySymbol}\${String.format(Locale.US, "%.2f", total)}\n$lines"))
+            val lines = breakdowns.joinToString("\n") { "${it.participant.name}: ${state.currencySymbol}${String.format(Locale.US, "%.2f", it.totalToPay)}" }
+            clipboard.setText(AnnotatedString("Split Bill - ${state.billTitle}\nTotal: ${state.currencySymbol}${String.format(Locale.US, "%.2f", total)}\n$lines"))
           }, Modifier.fillMaxWidth()) { Icon(Icons.AutoMirrored.Filled.Send, null); Spacer(Modifier.width(8.dp)); Text("Copy split summary") }
         }
       }
@@ -204,6 +204,7 @@ private fun EmptySplitCard(icon: androidx.compose.ui.graphics.vector.ImageVector
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OcrScannerBottomSheet(
   onDismiss: () -> Unit,
