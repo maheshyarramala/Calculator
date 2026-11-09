@@ -127,8 +127,9 @@ class SplitBillViewModel : ViewModel() {
     quantity: Int,
     claimedIds: List<String>,
     paidByParticipantId: String? = null,
-    paymentSource: String = "Cash"
-  ) {
+    paymentSource: String = "Cash",
+    paymentAccountId: Long? = null
+  ): String {
     val newItem = ReceiptItem(
       id = UUID.randomUUID().toString(),
       title = title.ifBlank { "Item" },
@@ -136,9 +137,11 @@ class SplitBillViewModel : ViewModel() {
       quantity = quantity.coerceAtLeast(1),
       claimedParticipantIds = claimedIds,
       paidByParticipantId = paidByParticipantId,
-      paymentSource = paymentSource
+      paymentSource = paymentSource,
+      paymentAccountId = paymentAccountId
     )
     _uiState.update { it.copy(items = it.items + newItem) }
+    return newItem.id
   }
 
   fun updateItem(updated: ReceiptItem) {
