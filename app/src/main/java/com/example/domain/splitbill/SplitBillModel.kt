@@ -24,7 +24,8 @@ data class ReceiptItem(
   val claimedParticipantIds: List<String> = emptyList(),
   val paidByParticipantId: String? = null,
   val paymentSource: String = "Cash",
-  val paymentAccountId: Long? = null
+  val paymentAccountId: Long? = null,
+  val isImportedFromFinance: Boolean = false
 )
 
 data class PersonBreakdown(
