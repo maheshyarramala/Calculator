@@ -3,6 +3,7 @@ import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -100,7 +102,26 @@ fun InvestmentScreen(
     LazyColumn(
       modifier = Modifier
         .fillMaxSize()
-        .padding(paddingValues),
+        .padding(paddingValues)
+        .pointerInput(state.selectedTab) {
+          var horizontalDrag = 0f
+          detectHorizontalDragGestures(
+            onHorizontalDrag = { _, amount -> horizontalDrag += amount },
+            onDragEnd = {
+              if (kotlin.math.abs(horizontalDrag) >= 60.dp.toPx()) {
+                val tabs = InvestmentTab.values()
+                val nextIndex = (state.selectedTab.ordinal + if (horizontalDrag < 0f) 1 else -1)
+                  .coerceIn(0, tabs.lastIndex)
+                if (nextIndex != state.selectedTab.ordinal) {
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  viewModel.selectTab(tabs[nextIndex])
+                }
+              }
+              horizontalDrag = 0f
+            },
+            onDragCancel = { horizontalDrag = 0f }
+          )
+        },
       contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
