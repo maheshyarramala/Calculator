@@ -220,7 +220,7 @@ private fun OcrScannerBottomSheet(
   ) { uri: Uri? ->
     if (uri != null) {
       // Simulate multimodal OCR extraction from image uri
-      Toast.makeText(context, "Receipt captured! Parsing line items & taxes...", Toast.LENGTH_SHORT).show()
+      Toast.makeText(context, "Receipt captured! Reading expense items...", Toast.LENGTH_SHORT).show()
       onLoadDemo(ReceiptOcrParser.demoReceiptBistro, "Bistro Dinner (Scanned)")
       onDismiss()
     }
@@ -240,8 +240,8 @@ private fun OcrScannerBottomSheet(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Column {
-          Text("AI Receipt Scanner & OCR", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-          Text("Automatically extract items, prices, discounts & taxes", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("Receipt scanner", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+          Text("Extract expense names and prices from a receipt", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         IconButton(onClick = onDismiss) {
           Icon(Icons.Default.Close, contentDescription = "Close")
