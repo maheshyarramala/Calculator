@@ -800,6 +800,8 @@ fun FinanceHubScreen(
             viewModel = splitBillViewModel,
             modifier = Modifier.fillMaxSize(),
             accounts = bankAccounts,
+            trips = trips,
+            tripExpenses = expenses,
             onRecordSettlement = { isIncome, amount, account, title, reference ->
               if (isIncome) {
                 viewModel.addIncome(title, amount, "Split Bill", account.id, account.bankName, reference)
