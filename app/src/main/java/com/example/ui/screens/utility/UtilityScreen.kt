@@ -1,10 +1,7 @@
 package com.example.ui.screens.utility
 import com.example.ui.theme.performConfiguredHapticFeedback
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,8 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -35,7 +30,6 @@ import com.example.domain.calculator.CurrencyCalculator
 import com.example.domain.calculator.UnitConverter
 import com.example.ui.components.CurrencyFormatter
 import com.example.ui.components.NumberInputField
-import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +51,6 @@ fun UtilityScreen(
     )
   }
 
-  val swipeThreshold = with(LocalDensity.current) { 72.dp.toPx() }
   Scaffold(
     snackbarHost = {
       state.toastMessage?.let { msg ->
@@ -80,22 +73,6 @@ fun UtilityScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
-        .animateContentSize(animationSpec = tween(220))
-        .pointerInput(state.selectedTab, swipeThreshold) {
-          var dragTotal = 0f
-          detectHorizontalDragGestures(
-            onHorizontalDrag = { _, amount -> dragTotal += amount },
-            onDragEnd = {
-              if (abs(dragTotal) >= swipeThreshold) {
-                val tabs = UtilityTab.values()
-                val next = (state.selectedTab.ordinal + if (dragTotal < 0f) 1 else -1).coerceIn(0, tabs.lastIndex)
-                if (next != state.selectedTab.ordinal) viewModel.selectTab(tabs[next])
-              }
-              dragTotal = 0f
-            },
-            onDragCancel = { dragTotal = 0f }
-          )
-        }
     ) {
       // Sub-Tabs with distinctive icons so users can choose visually
       TabRow(
