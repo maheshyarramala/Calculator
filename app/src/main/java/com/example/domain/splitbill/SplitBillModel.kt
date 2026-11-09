@@ -23,7 +23,8 @@ data class ReceiptItem(
   val quantity: Int = 1,
   val claimedParticipantIds: List<String> = emptyList(),
   val paidByParticipantId: String? = null,
-  val paymentSource: String = "Cash"
+  val paymentSource: String = "Cash",
+  val paymentAccountId: Long? = null
 )
 
 data class PersonBreakdown(
