@@ -779,7 +779,15 @@ fun FinanceHubScreen(
           val splitBillViewModel: com.example.ui.screens.splitbill.SplitBillViewModel = viewModel()
           com.example.ui.screens.splitbill.SplitBillScreen(
             viewModel = splitBillViewModel,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            accounts = bankAccounts,
+            onRecordSettlement = { isIncome, amount, account, title, reference ->
+              if (isIncome) {
+                viewModel.addIncome(title, amount, "Split Bill", account.id, account.bankName, reference)
+              } else {
+                viewModel.addExpense(title, amount, "Split Bill", account.id, account.bankName, reference)
+              }
+            }
           )
         }
         FinanceTab.TRIPS -> TripsSection(
