@@ -307,10 +307,10 @@ class UtilityViewModel : ViewModel() {
         }
       }
       val savedRecord = record.copy(detailsText = record.detailsText +
-        "\\nInput Currency Base: ${state.currencyBaseCode}\\nInput Currency Target: ${state.currencyTargetCode}\\nInput Currency Amount: ${state.currencyAmountInput}" +
-        "\\nInput Unit Category: ${state.unitCategory.name}\\nInput From Unit: ${state.fromUnit.name}\\nInput To Unit: ${state.toUnit.name}\\nInput Unit Amount: ${state.unitInput}" +
-        "\\nInput Bill Amount: ${state.billAmount}\\nInput Tip Percent: ${state.tipPercent}\\nInput Persons: ${state.numPersons}" +
-        "\\nInput GST Amount: ${state.gstAmount}\\nInput GST Rate: ${state.gstRate}\\nInput GST Exclusive: ${state.gstIsExclusive}")
+        "\nInput Currency Base: ${state.currencyBaseCode}\nInput Currency Target: ${state.currencyTargetCode}\nInput Currency Amount: ${state.currencyAmountInput}" +
+        "\nInput Unit Category: ${state.unitCategory.name}\nInput From Unit: ${state.fromUnit.name}\nInput To Unit: ${state.toUnit.name}\nInput Unit Amount: ${state.unitInput}" +
+        "\nInput Bill Amount: ${state.billAmount}\nInput Tip Percent: ${state.tipPercent}\nInput Persons: ${state.numPersons}" +
+        "\nInput GST Amount: ${state.gstAmount}\nInput GST Rate: ${state.gstRate}\nInput GST Exclusive: ${state.gstIsExclusive}")
       db.calculationHistoryDao().insert(savedRecord)
       _uiState.update { it.copy(toastMessage = "${state.selectedTab.title} saved to history!") }
     }
