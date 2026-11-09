@@ -148,7 +148,7 @@ class InvestmentViewModel : ViewModel() {
     val state = _uiState.value
     val res = state.result
     val summary = "Invested: ${CurrencyFormatter.format(res.investedAmount)} | Total: ${CurrencyFormatter.format(res.totalValue)}"
-    val details = "Category: ${state.selectedTab.title}\n" +
+    val details = "Input SIP Monthly: ${state.sipMonthly}\\nInput SIP Rate: ${state.sipRate}\\nInput SIP Years: ${state.sipYears}\\n" +
       "Invested: ${CurrencyFormatter.format(res.investedAmount)}\n" +
       "Estimated Returns: ${CurrencyFormatter.format(res.estimatedReturns)}\n" +
       "Total Maturity Value: ${CurrencyFormatter.format(res.totalValue)}"
