@@ -45,6 +45,7 @@
                 <action android:name="com.example.action.SHOW_CARD_BILL_REMINDER" />
                 <action android:name="com.example.action.SHOW_DEBT_DUE_REMINDER" />
                 <action android:name="com.example.action.SHOW_LOAN_EMI_REMINDER" />
+                <action android:name="com.example.action.DAILY_EXPENSE_REMINDER" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
