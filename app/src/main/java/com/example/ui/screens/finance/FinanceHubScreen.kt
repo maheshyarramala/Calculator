@@ -4316,9 +4316,9 @@ private fun AddExpenseDialog(
   var paymentMethod by remember {
     mutableStateOf(
       when {
-        creditCardAccounts.isNotEmpty() -> ExpensePaymentMethod.CREDIT_CARD
         bankAccountsOnly.isNotEmpty() -> ExpensePaymentMethod.BANK
-        else -> ExpensePaymentMethod.CASH
+        cashAccounts.isNotEmpty() -> ExpensePaymentMethod.CASH
+        else -> ExpensePaymentMethod.CREDIT_CARD
       }
     )
   }
