@@ -3004,7 +3004,7 @@ private fun SpendingAnalyticsCard(
       containerColor = MaterialTheme.colorScheme.surface
     ),
     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    modifier = Modifier.fillMaxWidth().clickable { showTripActions = true }
+    modifier = Modifier.fillMaxWidth()
   ) {
     Column(
       modifier = Modifier.padding(18.dp),
