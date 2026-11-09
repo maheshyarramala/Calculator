@@ -44,11 +44,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.domain.splitbill.*
+import com.example.data.local.entity.BankAccount
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier) {
+fun SplitBillScreen(
+  viewModel: SplitBillViewModel,
+  modifier: Modifier = Modifier,
+  accounts: List<BankAccount> = emptyList(),
+  onRecordSettlement: (isIncome: Boolean, amount: Double, account: BankAccount, title: String, reference: String) -> Unit = { _, _, _, _, _ -> }
+) {
   val state by viewModel.uiState.collectAsState()
   val breakdowns = remember(state.participants, state.items) {
     DebtSimplifier.calculateBreakdowns(SplitMode.ITEMIZED, state.participants, state.items, 0.0, 0.0, 0.0, 0.0)
@@ -65,6 +71,8 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
   var personPendingDelete by remember { mutableStateOf<Participant?>(null) }
   var pendingTransfer by remember { mutableStateOf<PendingSplitTransfer?>(null) }
   var transferPaymentSource by remember { mutableStateOf("") }
+  var transferAccountId by remember(accounts) { mutableStateOf(accounts.firstOrNull { !it.accountType.equals("Credit Card", true) }?.id) }
+  var accountMenuExpanded by remember { mutableStateOf(false) }
 
   if (state.showAddParticipantDialog) AddParticipantDialog(
     onDismiss = { viewModel.setShowAddParticipantDialog(false) },
@@ -81,7 +89,44 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
   expensePendingDelete?.let { item -> AlertDialog(onDismissRequest = { expensePendingDelete = null }, title = { Text("Delete transaction?") }, text = { Text("Are you sure you want to delete '${item.title}'? This cannot be undone.") }, confirmButton = { TextButton(onClick = { viewModel.removeItem(item.id); expensePendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { expensePendingDelete = null }) { Text("Cancel") } }) }
   selectedPerson?.let { person -> AlertDialog(onDismissRequest = { selectedPerson = null }, title = { Text(person.name, fontWeight = FontWeight.Bold) }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("UPI: ${person.upiId.ifBlank { "Not added" }}"); Text("PayPal: ${person.paypalUsername.ifBlank { "Not added" }}"); Text("Amount paid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.paidAmount)}") } }, confirmButton = { TextButton(onClick = { selectedPerson = null; editingPerson = person }) { Text("Edit") } }, dismissButton = { Row { if (person.id != state.participants.firstOrNull()?.id && state.participants.size > 1) TextButton(onClick = { selectedPerson = null; personPendingDelete = person }) { Text("Delete", color = MaterialTheme.colorScheme.error) }; TextButton(onClick = { selectedPerson = null }) { Text("Close") } } }) }
   personPendingDelete?.let { person -> AlertDialog(onDismissRequest = { personPendingDelete = null }, title = { Text("Delete person?") }, text = { Text("Remove ${person.name} from this bill? Their expense shares will also be updated.") }, confirmButton = { TextButton(onClick = { viewModel.removeParticipant(person.id); personPendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { personPendingDelete = null }) { Text("Cancel") } }) }
-  pendingTransfer?.let { transfer -> val receiving = transfer.toId == state.participants.firstOrNull()?.id; AlertDialog(onDismissRequest = { pendingTransfer = null }, title = { Text(if (receiving) "Confirm money received" else "Confirm payment") }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text(if (receiving) "Enter the bank/account where you received the money." else "Enter how this payment was made (Cash, UPI, bank transfer, card, etc.)."); OutlinedTextField(value = transferPaymentSource, onValueChange = { transferPaymentSource = it }, label = { Text(if (receiving) "Receiving bank / account" else "Payment source") }, singleLine = true, modifier = Modifier.fillMaxWidth()) } }, confirmButton = { Button(onClick = { viewModel.toggleSettledTransfer(transfer.key, transferPaymentSource.ifBlank { if (receiving) "Bank account not specified" else "Payment source not specified" }); pendingTransfer = null }) { Text(if (receiving) "Confirm received" else "Confirm paid") } }, dismissButton = { TextButton(onClick = { pendingTransfer = null }) { Text("Cancel") } }) }
+  pendingTransfer?.let { transfer ->
+    val currentUserId = state.participants.firstOrNull()?.id
+    val receiving = transfer.toId == currentUserId
+    val selectedAccount = accounts.firstOrNull { it.id == transferAccountId }
+    AlertDialog(
+      onDismissRequest = { pendingTransfer = null },
+      title = { Text(if (receiving) "Confirm money received" else "Confirm payment") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text(if (receiving) "Choose the bank or cash account where this repayment was received. It will be added as Finance income." else "Choose the bank or cash account used for this payment. It will be recorded as a Finance expense.")
+          Box {
+            OutlinedButton(onClick = { accountMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+              Text(selectedAccount?.let { "${it.bankName} • ${it.accountType}" } ?: "Choose bank / cash account", modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+              Icon(Icons.Default.ExpandMore, null)
+            }
+            DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { accountMenuExpanded = false }) {
+              accounts.filterNot { it.accountType.equals("Credit Card", true) }.forEach { account ->
+                DropdownMenuItem(text = { Text("${account.bankName} • ${account.accountType}") }, onClick = { transferAccountId = account.id; transferPaymentSource = account.bankName; accountMenuExpanded = false })
+              }
+            }
+          }
+          if (accounts.none { !it.accountType.equals("Credit Card", true) }) {
+            Text("Add a bank or cash account in Finance before recording this settlement.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+          }
+        }
+      },
+      confirmButton = {
+        Button(enabled = selectedAccount != null, onClick = {
+          val account = selectedAccount ?: return@Button
+          val title = if (receiving) "Split Bill repayment from ${state.participants.firstOrNull { it.id == transfer.fromId }?.name ?: "friend"}" else "Split Bill payment to ${state.participants.firstOrNull { it.id == transfer.toId }?.name ?: "friend"}"
+          onRecordSettlement(receiving, transfer.amount, account, title, "Split Bill settlement ${transfer.key}")
+          viewModel.toggleSettledTransfer(transfer.key, account.bankName)
+          pendingTransfer = null
+        }) { Text(if (receiving) "Record received" else "Record payment") }
+      },
+      dismissButton = { TextButton(onClick = { pendingTransfer = null }) { Text("Cancel") } }
+    )
+  }
 
   if (state.showOcrDialog) OcrScannerBottomSheet(
     onDismiss = { viewModel.setShowOcrDialog(false) },
@@ -188,7 +233,7 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
           Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
               Column(Modifier.weight(1f)) { Text(transfer.fromParticipant.name, fontWeight = FontWeight.SemiBold); Text("pays ${transfer.toParticipant.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-              Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}", fontWeight = FontWeight.Bold); TextButton(onClick = { if (settled) viewModel.toggleSettledTransfer(key) else { transferPaymentSource = ""; pendingTransfer = PendingSplitTransfer(key, transfer.fromParticipant.id, transfer.toParticipant.id) } }) { Text(if (settled) "Undo" else "Mark paid") }; state.settledPaymentSources[key]?.takeIf { settled }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+              Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}", fontWeight = FontWeight.Bold); TextButton(onClick = { if (settled) viewModel.toggleSettledTransfer(key) else { transferPaymentSource = ""; pendingTransfer = PendingSplitTransfer(key, transfer.fromParticipant.id, transfer.toParticipant.id, transfer.amount) } }) { Text(if (settled) "Undo" else "Mark paid") }; state.settledPaymentSources[key]?.takeIf { settled }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
             }
           }
         }
@@ -203,7 +248,7 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
   }
 }
 
-private data class PendingSplitTransfer(val key: String, val fromId: String, val toId: String)
+private data class PendingSplitTransfer(val key: String, val fromId: String, val toId: String, val amount: Double)
 
 @Composable
 private fun SummaryMetric(label: String, value: String, contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer) {
