@@ -25,7 +25,8 @@ data class EmiUiState(
   val emiResult: EmiResult = EmiResult(1000000.0, 8.5, 120, 0.0, 0.0, 0.0, emptyList()),
   val scheduleFilterQuery: String = "",
   val showPrepaymentDialog: Boolean = false,
-  val toastMessage: String? = null
+  val toastMessage: String? = null,
+  val openCalculatorTabRequest: Int = 0
 )
 
 class EmiViewModel : ViewModel() {
@@ -127,11 +128,15 @@ class EmiViewModel : ViewModel() {
 
   fun restoreFromRecord(record: CalculationRecord) {
     fun value(key: String) = record.detailsText.lineSequence().firstOrNull { it.startsWith("$key:") }?.substringAfter(":")?.trim()
-    val principal = value("Input Principal") ?: return
+    val principal = value("Input Principal")
+    if (principal == null) {
+      _uiState.update { it.copy(openCalculatorTabRequest = it.openCalculatorTabRequest + 1) }
+      return
+    }
     val rate = value("Input Rate") ?: return
     val tenure = value("Input Tenure") ?: return
     val years = value("Input Tenure Unit") != "MONTHS"
-    _uiState.update { it.copy(principalInput = principal, interestRateInput = rate, tenureInput = tenure, isTenureYears = years, prepayments = emptyList()) }
+    _uiState.update { it.copy(principalInput = principal, interestRateInput = rate, tenureInput = tenure, isTenureYears = years, prepayments = emptyList(), openCalculatorTabRequest = it.openCalculatorTabRequest + 1) }
     recalculate()
   }
 
