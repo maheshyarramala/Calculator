@@ -24,6 +24,7 @@ data class SplitBillUiState(
   val showAddParticipantDialog: Boolean = false,
   val showAddItemDialog: Boolean = false,
   val settledTransferKeys: Set<String> = emptySet(),
+  val settledPaymentSources: Map<String, String> = emptyMap(),
   val activeTab: Int = 0 // 0: Items & Split, 1: Diners & Claims, 2: Settlement Ledger
 )
 
@@ -89,6 +90,12 @@ class SplitBillViewModel : ViewModel() {
     }
   }
 
+  fun updateParticipant(id: String, name: String, upiId: String, paypal: String, paid: Double) {
+    _uiState.update { state -> state.copy(participants = state.participants.map { p ->
+      if (p.id == id) p.copy(name = name.trim().ifBlank { p.name }, upiId = upiId.trim(), paypalUsername = paypal.trim(), paidAmount = nonNegative(paid)) else p
+    }) }
+  }
+
   fun removeParticipant(id: String) {
     _uiState.update { state ->
       val updatedParticipants = state.participants.filter { it.id != id }
@@ -118,7 +125,8 @@ class SplitBillViewModel : ViewModel() {
     price: Double,
     quantity: Int,
     claimedIds: List<String>,
-    paidByParticipantId: String? = null
+    paidByParticipantId: String? = null,
+    paymentSource: String = "Cash"
   ) {
     val newItem = ReceiptItem(
       id = UUID.randomUUID().toString(),
@@ -126,9 +134,14 @@ class SplitBillViewModel : ViewModel() {
       price = nonNegative(price),
       quantity = quantity.coerceAtLeast(1),
       claimedParticipantIds = claimedIds,
-      paidByParticipantId = paidByParticipantId
+      paidByParticipantId = paidByParticipantId,
+      paymentSource = paymentSource
     )
     _uiState.update { it.copy(items = it.items + newItem) }
+  }
+
+  fun updateItem(updated: ReceiptItem) {
+    _uiState.update { state -> state.copy(items = state.items.map { if (it.id == updated.id) updated else it }) }
   }
 
   fun removeItem(id: String) {
@@ -192,14 +205,13 @@ class SplitBillViewModel : ViewModel() {
     applyParsedReceipt(parsed)
   }
 
-  fun toggleSettledTransfer(transferKey: String) {
+  fun toggleSettledTransfer(transferKey: String, paymentSource: String? = null) {
     _uiState.update { state ->
-      val updated = if (state.settledTransferKeys.contains(transferKey)) {
-        state.settledTransferKeys - transferKey
-      } else {
-        state.settledTransferKeys + transferKey
-      }
-      state.copy(settledTransferKeys = updated)
+      val wasSettled = transferKey in state.settledTransferKeys
+      val updatedKeys = if (wasSettled) state.settledTransferKeys - transferKey else state.settledTransferKeys + transferKey
+      val updatedSources = if (wasSettled) state.settledPaymentSources - transferKey
+        else state.settledPaymentSources + (transferKey to paymentSource.orEmpty())
+      state.copy(settledTransferKeys = updatedKeys, settledPaymentSources = updatedSources)
     }
   }
 
