@@ -558,8 +558,20 @@ private fun AddReceiptItemDialog(
           }
         }
 
-        Text("Payment source", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
-        Box(Modifier.fillMaxWidth()) { OutlinedButton(onClick = { paymentSourceExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text(paymentSource, modifier = Modifier.weight(1f)); Icon(Icons.Default.ArrowDropDown, null) }; DropdownMenu(expanded = paymentSourceExpanded, onDismissRequest = { paymentSourceExpanded = false }) { listOf("Cash", "UPI", "Bank transfer", "Debit / Credit card", "Other").forEach { source -> DropdownMenuItem(text = { Text(source) }, onClick = { paymentSource = source; paymentSourceExpanded = false }) } } }
+        if (selectedPayerId == participants.firstOrNull()?.id) {
+          Text("Payment source", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+          Box(Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { paymentSourceExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+              Text(paymentSource, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+              Icon(Icons.Default.ArrowDropDown, null)
+            }
+            DropdownMenu(expanded = paymentSourceExpanded, onDismissRequest = { paymentSourceExpanded = false }) {
+              listOf("Cash", "UPI", "Bank transfer", "Debit / Credit card", "Other").forEach { source ->
+                DropdownMenuItem(text = { Text(source) }, onClick = { paymentSource = source; paymentSourceExpanded = false })
+              }
+            }
+          }
+        }
 
         // Who Shared this Dish
         Row(
