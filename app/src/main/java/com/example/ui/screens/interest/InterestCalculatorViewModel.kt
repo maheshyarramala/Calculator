@@ -205,11 +205,11 @@ class InterestCalculatorViewModel : ViewModel() {
         }
       }
       val savedRecord = record.copy(detailsText = record.detailsText +
-        "\\nInput Method: ${state.selectedMethod.name}" +
-        "\\nInput SI Principal: ${state.siPrincipal}\\nInput SI Rate: ${state.siRate}\\nInput SI Time: ${state.siTime}\\nInput SI Unit: ${state.siTimeUnit.name}" +
-        "\\nInput CI Principal: ${state.ciPrincipal}\\nInput CI Rate: ${state.ciRate}\\nInput CI Years: ${state.ciYears}\\nInput CI Frequency: ${state.ciFrequency.name}" +
-        "\\nInput Doubling Rate: ${state.doublingRate}\\nInput EAR Rate: ${state.earNominalRate}\\nInput EAR Frequency: ${state.earFrequency.name}" +
-        "\\nInput Flat Principal: ${state.flatPrincipal}\\nInput Flat Tenure: ${state.flatTenureMonths}\\nInput Flat Rate: ${state.flatRate}")
+        "\nInput Method: ${state.selectedMethod.name}" +
+        "\nInput SI Principal: ${state.siPrincipal}\nInput SI Rate: ${state.siRate}\nInput SI Time: ${state.siTime}\nInput SI Unit: ${state.siTimeUnit.name}" +
+        "\nInput CI Principal: ${state.ciPrincipal}\nInput CI Rate: ${state.ciRate}\nInput CI Years: ${state.ciYears}\nInput CI Frequency: ${state.ciFrequency.name}" +
+        "\nInput Doubling Rate: ${state.doublingRate}\nInput EAR Rate: ${state.earNominalRate}\nInput EAR Frequency: ${state.earFrequency.name}" +
+        "\nInput Flat Principal: ${state.flatPrincipal}\nInput Flat Tenure: ${state.flatTenureMonths}\nInput Flat Rate: ${state.flatRate}")
       db.calculationHistoryDao().insert(savedRecord)
       _uiState.update { it.copy(toastMessage = "Interest calculation saved to history!") }
     }
