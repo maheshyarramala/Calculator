@@ -814,7 +814,9 @@ fun FinanceHubScreen(
             },
             onUndoSettlement = { reference ->
               expenses.firstOrNull { it.notes == reference && it.categoryName == "Split Bill" }?.let(viewModel::deleteExpense)
-            }
+            },
+            onSyncExpense = { reference, title, amount, account -> viewModel.syncSplitBillExpense(reference, title, amount, account) },
+            onDeleteExpense = { reference -> viewModel.deleteSplitBillExpense(reference) }
           )
         }
         FinanceTab.TRIPS -> TripsSection(
