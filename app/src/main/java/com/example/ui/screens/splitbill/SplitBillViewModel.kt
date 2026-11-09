@@ -144,6 +144,21 @@ class SplitBillViewModel : ViewModel() {
     return newItem.id
   }
 
+  fun importTripExpenses(expenses: List<com.example.data.local.entity.ExpenseRecord>) {
+    val current = _uiState.value
+    val meId = current.participants.firstOrNull()?.id
+    val existingIds = current.items.map { it.id }.toSet()
+    val imported = expenses.filter { "trip-expense:${it.id}" !in existingIds }.map { expense ->
+      ReceiptItem(
+        id = "trip-expense:${expense.id}", title = expense.title, price = nonNegative(expense.amount), quantity = 1,
+        claimedParticipantIds = current.participants.map { it.id }, paidByParticipantId = meId,
+        paymentSource = expense.bankAccountName.ifBlank { "Finance" }, paymentAccountId = expense.bankAccountId,
+        isImportedFromFinance = true
+      )
+    }
+    _uiState.update { it.copy(items = it.items + imported) }
+  }
+
   fun updateItem(updated: ReceiptItem) {
     _uiState.update { state -> state.copy(items = state.items.map { if (it.id == updated.id) updated else it }) }
   }
