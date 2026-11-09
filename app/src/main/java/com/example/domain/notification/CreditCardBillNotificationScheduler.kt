@@ -130,7 +130,7 @@ object CreditCardBillNotificationScheduler {
       .build())
   }
 
-  private fun handleDailyExpenseReminder(context: Context) {
+  internal fun handleDailyExpenseReminder(context: Context) {
     showDailyExpenseReminder(context)
     scheduleDailyExpenseReminder(context.applicationContext)
   }
