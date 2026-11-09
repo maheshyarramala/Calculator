@@ -152,7 +152,33 @@ fun MainScreen(
   if (showHistorySheet) {
     HistoryBottomSheet(
       viewModel = historyViewModel,
-      onDismiss = { showHistorySheet = false }
+      onDismiss = { showHistorySheet = false },
+      onOpenRecord = { record ->
+        showHistorySheet = false
+        when (record.category.uppercase()) {
+          "EMI" -> currentDestination = MainDestination.EMI
+          "CALCULATOR" -> currentDestination = MainDestination.CALCULATOR
+          "SIP", "LUMPSUM", "COMPOUND", "PPF", "FD", "TRADE" -> {
+            currentDestination = MainDestination.INVESTMENTS
+            investmentViewModel.selectTab(runCatching { InvestmentTab.valueOf(record.category.uppercase()) }.getOrDefault(InvestmentTab.SIP))
+          }
+          "INTEREST" -> currentDestination = MainDestination.INTEREST
+          "AGE", "CALENDAR" -> {
+            currentDestination = MainDestination.AGE_CALENDAR
+            ageCalendarViewModel.selectTab(if (record.category.uppercase() == "AGE") AgeCalendarTab.AGE else AgeCalendarTab.DATE_DIFF)
+          }
+          "CURRENCY", "UNIT", "TIP", "GST" -> {
+            currentDestination = MainDestination.UTILITIES
+            utilityViewModel.selectTab(when (record.category.uppercase()) {
+              "UNIT" -> UtilityTab.UNIT_CONVERTER
+              "TIP" -> UtilityTab.TIP_SPLIT
+              "GST" -> UtilityTab.GST_TAX
+              else -> UtilityTab.CURRENCY
+            })
+          }
+          else -> currentDestination = MainDestination.CALCULATOR
+        }
+      }
     )
   }
 
