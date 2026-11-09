@@ -136,7 +136,13 @@ class EmiViewModel : ViewModel() {
     val rate = value("Input Rate") ?: return
     val tenure = value("Input Tenure") ?: return
     val years = value("Input Tenure Unit") != "MONTHS"
-    _uiState.update { it.copy(principalInput = principal, interestRateInput = rate, tenureInput = tenure, isTenureYears = years, prepayments = emptyList(), openCalculatorTabRequest = it.openCalculatorTabRequest + 1) }
+    val prepayments = value("Input Prepayments").orEmpty().split(",").mapNotNull { entry ->
+      val parts = entry.split(":")
+      val month = parts.getOrNull(0)?.toIntOrNull()
+      val amount = parts.getOrNull(1)?.toDoubleOrNull()
+      if (month != null && month > 0 && amount != null && amount > 0.0) PrepaymentEntry(month, amount) else null
+    }
+    _uiState.update { it.copy(principalInput = principal, interestRateInput = rate, tenureInput = tenure, isTenureYears = years, prepayments = prepayments, openCalculatorTabRequest = it.openCalculatorTabRequest + 1) }
     recalculate()
   }
 
@@ -148,7 +154,8 @@ class EmiViewModel : ViewModel() {
       "Rate: ${res.annualRate}%\n" +
       "Tenure: ${res.schedule.size} months\n" +
       "Interest: ${CurrencyFormatter.format(res.totalInterest)}\n" +
-      (if (res.interestSaved > 0) "Interest Saved: ${CurrencyFormatter.format(res.interestSaved)}\n" else "")
+      (if (res.interestSaved > 0) "Interest Saved: ${CurrencyFormatter.format(res.interestSaved)}\n" else "") +
+      "\nComplete Amortization Schedule\n" + EmiCalculator.exportAmortizationAsText(res)
 
     viewModelScope.launch {
       val db = AppDatabase.getDatabase(context)
