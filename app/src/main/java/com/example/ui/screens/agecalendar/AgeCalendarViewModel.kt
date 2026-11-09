@@ -210,10 +210,10 @@ class AgeCalendarViewModel : ViewModel() {
         }
       }
       val savedRecord = record.copy(detailsText = record.detailsText +
-        "\\nInput Calendar Tab: ${state.selectedTab.name}" +
-        "\\nInput Birth Date: ${state.birthDate}\\nInput As Of Date: ${state.ageAsOfDate}" +
-        "\\nInput Start Date: ${state.diffStartDate}\\nInput End Date: ${state.diffEndDate}\\nInput Include End Day: ${state.includeEndDay}" +
-        "\\nInput Base Date: ${state.adjBaseDate}\\nInput Addition: ${state.isAddition}\\nInput Years: ${state.adjYearsInput}\\nInput Months: ${state.adjMonthsInput}\\nInput Weeks: ${state.adjWeeksInput}\\nInput Days: ${state.adjDaysInput}")
+        "\nInput Calendar Tab: ${state.selectedTab.name}" +
+        "\nInput Birth Date: ${state.birthDate}\nInput As Of Date: ${state.ageAsOfDate}" +
+        "\nInput Start Date: ${state.diffStartDate}\nInput End Date: ${state.diffEndDate}\nInput Include End Day: ${state.includeEndDay}" +
+        "\nInput Base Date: ${state.adjBaseDate}\nInput Addition: ${state.isAddition}\nInput Years: ${state.adjYearsInput}\nInput Months: ${state.adjMonthsInput}\nInput Weeks: ${state.adjWeeksInput}\nInput Days: ${state.adjDaysInput}")
       db.calculationHistoryDao().insert(savedRecord)
       _uiState.update { it.copy(toastMessage = "${state.selectedTab.title} saved to history!") }
     }
