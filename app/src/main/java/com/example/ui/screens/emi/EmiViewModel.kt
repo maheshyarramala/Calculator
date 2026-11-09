@@ -140,7 +140,7 @@ class EmiViewModel : ViewModel() {
       val parts = entry.split(":")
       val month = parts.getOrNull(0)?.toIntOrNull()
       val amount = parts.getOrNull(1)?.toDoubleOrNull()
-      if (month != null && month > 0 && amount != null && amount > 0.0) PrepaymentEntry(month, amount) else null
+      if (month != null && month > 0 && amount != null && amount > 0.0) PrepaymentEntry(month = month, amount = amount) else null
     }
     _uiState.update { it.copy(principalInput = principal, interestRateInput = rate, tenureInput = tenure, isTenureYears = years, prepayments = prepayments, openCalculatorTabRequest = it.openCalculatorTabRequest + 1) }
     recalculate()
@@ -151,6 +151,7 @@ class EmiViewModel : ViewModel() {
     val res = state.emiResult
     val summary = "EMI: ${CurrencyFormatter.format(res.monthlyEmi)}/mo | Total: ${CurrencyFormatter.format(res.totalPayment)}"
     val details = "Input Principal: ${state.principalInput}\nInput Rate: ${state.interestRateInput}\nInput Tenure: ${state.tenureInput}\nInput Tenure Unit: ${if (state.isTenureYears) "YEARS" else "MONTHS"}\n" +
+      "Input Prepayments: ${state.prepayments.joinToString(",") { "${it.month}:${it.amount}" }}\n" +
       "Rate: ${res.annualRate}%\n" +
       "Tenure: ${res.schedule.size} months\n" +
       "Interest: ${CurrencyFormatter.format(res.totalInterest)}\n" +
