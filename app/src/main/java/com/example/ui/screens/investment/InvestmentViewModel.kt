@@ -130,6 +130,20 @@ class InvestmentViewModel : ViewModel() {
     _uiState.update { it.copy(result = res) }
   }
 
+  fun restoreFromRecord(record: CalculationRecord) {
+    fun value(key: String, fallback: String) = record.detailsText.lineSequence().firstOrNull { it.startsWith("$key:") }?.substringAfter(":")?.trim() ?: fallback
+    val tab = runCatching { InvestmentTab.valueOf(record.category.uppercase()) }.getOrDefault(InvestmentTab.SIP)
+    _uiState.update { s -> s.copy(
+      selectedTab = tab,
+      sipMonthly = value("Input SIP Monthly", s.sipMonthly), sipRate = value("Input SIP Rate", s.sipRate), sipYears = value("Input SIP Years", s.sipYears),
+      lumpPrincipal = value("Input Lump Principal", s.lumpPrincipal), lumpRate = value("Input Lump Rate", s.lumpRate), lumpYears = value("Input Lump Years", s.lumpYears),
+      ciPrincipal = value("Input CI Principal", s.ciPrincipal), ciRate = value("Input CI Rate", s.ciRate), ciYears = value("Input CI Years", s.ciYears),
+      ppfAnnualDeposit = value("Input PPF Annual Deposit", s.ppfAnnualDeposit), ppfYears = value("Input PPF Years", s.ppfYears),
+      fdDeposit = value("Input FD Deposit", s.fdDeposit), fdRate = value("Input FD Rate", s.fdRate), fdYears = value("Input FD Years", s.fdYears)
+    ) }
+    recalculate()
+  }
+
   fun saveCalculation(context: Context) {
     val state = _uiState.value
     val res = state.result
