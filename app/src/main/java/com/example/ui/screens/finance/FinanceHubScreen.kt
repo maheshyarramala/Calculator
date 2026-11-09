@@ -1008,8 +1008,14 @@ private fun AccountDetailsDialog(
           Spacer(Modifier.width(4.dp))
           Text(if (isCreditCard) "Edit Card" else "Edit Account")
         }
-        FilledTonalButton(onClick = onShowTransactions) {
-          Text("Transactions")
+        FilledTonalButton(
+          onClick = onShowTransactions,
+          modifier = Modifier.weight(1f),
+          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+        ) {
+          Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(Modifier.width(6.dp))
+          Text("Transactions", maxLines = 1, softWrap = false, fontSize = 12.sp)
         }
       }
     },
@@ -2987,7 +2993,7 @@ private fun SpendingAnalyticsCard(
       containerColor = MaterialTheme.colorScheme.surface
     ),
     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    modifier = Modifier.fillMaxWidth()
+    modifier = Modifier.fillMaxWidth().clickable { showTripActions = true }
   ) {
     Column(
       modifier = Modifier.padding(18.dp),
@@ -3671,40 +3677,6 @@ private fun TripsSection(
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
-    item(key = "trips_header") {
-      Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-          containerColor = Color(0xFF0D9488).copy(alpha = 0.12f)
-        ),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Row(
-          modifier = Modifier.padding(16.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Icon(
-            Icons.Default.FlightTakeoff,
-            contentDescription = null,
-            tint = Color(0xFF0D9488),
-            modifier = Modifier.size(32.dp)
-          )
-          Spacer(modifier = Modifier.width(12.dp))
-          Column {
-            Text(
-              text = "Trip & Vacation Budgets",
-              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-            )
-            Text(
-              text = "Set category caps, track live daily burn rate, and export PDF statements.",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-        }
-      }
-    }
-
     if (trips.isEmpty()) {
       item(key = "empty_trips") {
         Card(
@@ -3782,6 +3754,35 @@ private fun TripCardItem(
   val isOverBudget = spent > trip.budget
   val remaining = trip.budget - spent
   var showLedger by remember { mutableStateOf(false) }
+  var showTripActions by remember { mutableStateOf(false) }
+  var confirmTripDelete by remember { mutableStateOf(false) }
+
+  if (showTripActions) {
+    AlertDialog(
+      onDismissRequest = { showTripActions = false },
+      title = { Text(trip.tripName, fontWeight = FontWeight.Bold) },
+      text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(trip.destination, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Dates: ${trip.startDate} - ${trip.endDate}")
+        Text("Spent: ${CurrencyFormatter.format(spent)}")
+        Text("Budget: ${CurrencyFormatter.format(trip.budget)}")
+      } },
+      confirmButton = { TextButton(onClick = { showTripActions = false; onEdit() }) { Text("Edit") } },
+      dismissButton = { Row {
+        TextButton(onClick = { showTripActions = false; confirmTripDelete = true }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") }
+        TextButton(onClick = { showTripActions = false }) { Text("Close") }
+      } }
+    )
+  }
+  if (confirmTripDelete) {
+    AlertDialog(
+      onDismissRequest = { confirmTripDelete = false },
+      title = { Text("Delete trip?") },
+      text = { Text("Delete ${trip.tripName}? Your recorded Finance transactions will remain in Finance.") },
+      confirmButton = { TextButton(onClick = { confirmTripDelete = false; onDelete() }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } },
+      dismissButton = { TextButton(onClick = { confirmTripDelete = false }) { Text("Cancel") } }
+    )
+  }
 
   Card(
     shape = RoundedCornerShape(20.dp),
@@ -3829,30 +3830,7 @@ private fun TripCardItem(
           }
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          IconButton(
-            onClick = onEdit,
-            modifier = Modifier.size(32.dp)
-          ) {
-            Icon(
-              Icons.Default.Edit,
-              contentDescription = "Edit trip",
-              tint = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(18.dp)
-            )
-          }
-          IconButton(
-            onClick = onDelete,
-            modifier = Modifier.size(32.dp)
-          ) {
-            Icon(
-              Icons.Default.DeleteOutline,
-              contentDescription = "Delete trip",
-              tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.size(20.dp)
-            )
-          }
-        }
+        Icon(Icons.Default.ChevronRight, contentDescription = "Open trip details", tint = MaterialTheme.colorScheme.onSurfaceVariant)
       }
 
       if (trip.startDate.isNotBlank() || trip.endDate.isNotBlank()) {
@@ -6362,21 +6340,19 @@ private fun TripDailySpendingSpeedometer(
 
   Surface(
     shape = RoundedCornerShape(14.dp),
-    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
     modifier = Modifier.fillMaxWidth()
   ) {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(12.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.SpaceBetween
+    Column(
+      modifier = Modifier.fillMaxWidth().padding(14.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
       Column(modifier = Modifier.weight(1f)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Text(
             text = "Daily Burn Rate Tracker",
-            fontSize = 11.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -6386,7 +6362,7 @@ private fun TripDailySpendingSpeedometer(
             color = if (isExceeding) Color(0xFFFEE2E2) else Color(0xFFCCFBF1)
           ) {
             Text(
-              text = if (isExceeding) "Exceeding Daily Rate" else "On Track",
+              text = if (isExceeding) "Above target" else "On track",
               fontSize = 9.sp,
               fontWeight = FontWeight.Bold,
               color = if (isExceeding) Color(0xFFB91C1C) else Color(0xFF0F766E),
@@ -6395,21 +6371,15 @@ private fun TripDailySpendingSpeedometer(
           }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
 
-        Text(
-          text = "You are spending ${CurrencyFormatter.format(dailyRate)}/day",
-          fontSize = 13.sp,
-          fontWeight = FontWeight.ExtraBold,
-          color = if (isExceeding) Color(0xFFEF4444) else Color(0xFF0D9488)
-        )
-        Text(
-          text = "(Target Budget: ${CurrencyFormatter.format(dailyBudget)}/day • Day $elapsedDays of $totalDays)",
-          fontSize = 10.5.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
       }
 
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+          Text("Spending ${CurrencyFormatter.format(dailyRate)}/day", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = if (isExceeding) Color(0xFFEF4444) else Color(0xFF0D9488))
+          Text("Target ${CurrencyFormatter.format(dailyBudget)}/day", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("Day $elapsedDays of $totalDays", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
       // Visual Speedometer Gauge Canvas
       Canvas(modifier = Modifier.size(76.dp, 44.dp)) {
         val strokeW = 6.dp.toPx()
@@ -6460,6 +6430,7 @@ private fun TripDailySpendingSpeedometer(
           cap = StrokeCap.Round
         )
         drawCircle(color = Color(0xFF1E293B), radius = 3.5.dp.toPx(), center = Offset(centerX, centerY))
+      }
       }
     }
   }
