@@ -139,7 +139,7 @@ class EmiViewModel : ViewModel() {
     val state = _uiState.value
     val res = state.emiResult
     val summary = "EMI: ${CurrencyFormatter.format(res.monthlyEmi)}/mo | Total: ${CurrencyFormatter.format(res.totalPayment)}"
-    val details = "Principal: ${CurrencyFormatter.format(res.principal)}\n" +
+    val details = "Input Principal: ${state.principalInput}\\nInput Rate: ${state.interestRateInput}\\nInput Tenure: ${state.tenureInput}\\nInput Tenure Unit: ${if (state.isTenureYears) "YEARS" else "MONTHS"}\\n" +
       "Rate: ${res.annualRate}%\n" +
       "Tenure: ${res.schedule.size} months\n" +
       "Interest: ${CurrencyFormatter.format(res.totalInterest)}\n" +
