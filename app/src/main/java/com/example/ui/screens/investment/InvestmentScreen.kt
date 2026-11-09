@@ -1,7 +1,10 @@
 package com.example.ui.screens.investment
 import com.example.ui.theme.performConfiguredHapticFeedback
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +17,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -26,6 +31,7 @@ import com.example.domain.calculator.InvestmentCalculators
 import com.example.ui.components.*
 import com.example.ui.theme.ChartInvested
 import com.example.ui.theme.ChartWealthGain
+import kotlin.math.abs
 
 @Composable
 private fun TradeChargeRow(label: String, value: String, isBold: Boolean = false) {
@@ -70,6 +76,7 @@ fun InvestmentScreen(
   val isTradeInputValid = parsedBuyPrice?.let { it.isFinite() && it > 0.0 } == true &&
     parsedSellPrice?.let { it.isFinite() && it > 0.0 } == true &&
     parsedQuantity?.let { it > 0 } == true
+  val swipeThreshold = with(LocalDensity.current) { 72.dp.toPx() }
   val tradeResult = remember(tradeBuyPrice, tradeSellPrice, tradeQuantity, isIntraday) {
     InvestmentCalculators.calculateEquityTradePnl(
       buyPrice = parsedBuyPrice ?: 0.0,
@@ -96,6 +103,22 @@ fun InvestmentScreen(
       }
     },
     modifier = modifier.fillMaxSize()
+      .animateContentSize(animationSpec = tween(220))
+      .pointerInput(state.selectedTab, swipeThreshold) {
+        var dragTotal = 0f
+        detectHorizontalDragGestures(
+          onHorizontalDrag = { _, amount -> dragTotal += amount },
+          onDragEnd = {
+            if (abs(dragTotal) >= swipeThreshold) {
+              val tabs = InvestmentTab.values()
+              val next = (state.selectedTab.ordinal + if (dragTotal < 0f) 1 else -1).coerceIn(0, tabs.lastIndex)
+              if (next != state.selectedTab.ordinal) viewModel.selectTab(tabs[next])
+            }
+            dragTotal = 0f
+          },
+          onDragCancel = { dragTotal = 0f }
+        )
+      }
   ) { paddingValues ->
     LazyColumn(
       modifier = Modifier
