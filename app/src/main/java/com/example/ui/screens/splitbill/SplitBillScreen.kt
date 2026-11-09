@@ -105,14 +105,14 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
       }
     }
     Spacer(Modifier.height(14.dp))
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)) {
       Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("TOTAL BILL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-        Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", total)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        Text("TOTAL BILL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f))
+        Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", total)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimary)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          SummaryMetric("PEOPLE", state.participants.size.toString())
-          SummaryMetric("EXPENSES", state.items.size.toString())
-          SummaryMetric("PAID", "${state.currencySymbol}${String.format(Locale.US, "%,.2f", breakdowns.sumOf { it.paidAmount })}")
+          SummaryMetric("PEOPLE", state.participants.size.toString(), MaterialTheme.colorScheme.onPrimary)
+          SummaryMetric("EXPENSES", state.items.size.toString(), MaterialTheme.colorScheme.onPrimary)
+          SummaryMetric("PAID", "${state.currencySymbol}${String.format(Locale.US, "%,.2f", breakdowns.sumOf { it.paidAmount })}", MaterialTheme.colorScheme.onPrimary)
         }
       }
     }
@@ -206,8 +206,8 @@ fun SplitBillScreen(viewModel: SplitBillViewModel, modifier: Modifier = Modifier
 private data class PendingSplitTransfer(val key: String, val fromId: String, val toId: String)
 
 @Composable
-private fun SummaryMetric(label: String, value: String) {
-  Column { Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .7f)); Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+private fun SummaryMetric(label: String, value: String, contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer) {
+  Column { Text(label, style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = .78f)); Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = contentColor) }
 }
 
 @Composable
