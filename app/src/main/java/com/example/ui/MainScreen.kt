@@ -6,7 +6,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -27,7 +26,6 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -74,7 +72,6 @@ import com.example.ui.theme.AccentTheme
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.HapticStrength
 import com.example.ui.theme.ThemeManager
-import kotlin.math.abs
 
 enum class MainDestination(
   val labelRes: Int,
@@ -134,7 +131,6 @@ fun MainScreen(
   val historyViewModel: HistoryViewModel = viewModel()
 
   val haptic = LocalHapticFeedback.current
-  val swipeThreshold = with(LocalDensity.current) { 72.dp.toPx() }
 
   showAppInfoDialog?.let { info ->
     AppInfoModalDialog(
@@ -399,6 +395,9 @@ fun MainScreen(
             onClick = {
               haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               currentDestination = destination
+              if (destination == MainDestination.FINANCE) {
+                financeViewModel.selectTab(FinanceTab.EXPENSES)
+              }
             },
             icon = {
               Icon(destination.icon, contentDescription = stringResource(destination.labelRes))
@@ -427,26 +426,6 @@ fun MainScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
-        .pointerInput(currentDestination, swipeThreshold) {
-          var dragTotal = 0f
-          detectHorizontalDragGestures(
-            onHorizontalDrag = { _, amount -> dragTotal += amount },
-            onDragEnd = {
-              val destinations = MainDestination.values().filter { it.isBottomTab }
-              val currentIndex = destinations.indexOf(currentDestination)
-              if (currentDestination != MainDestination.FINANCE && abs(dragTotal) >= swipeThreshold && currentIndex >= 0) {
-                val nextIndex = (currentIndex + if (dragTotal < 0f) 1 else -1)
-                  .coerceIn(0, destinations.lastIndex)
-                if (nextIndex != currentIndex) {
-                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                  currentDestination = destinations[nextIndex]
-                }
-              }
-              dragTotal = 0f
-            },
-            onDragCancel = { dragTotal = 0f }
-          )
-        }
     ) { destination ->
       saveableStateHolder.SaveableStateProvider(destination.name) {
         when (destination) {
