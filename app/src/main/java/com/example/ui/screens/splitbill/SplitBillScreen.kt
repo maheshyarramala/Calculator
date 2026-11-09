@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.domain.splitbill.*
 import com.example.data.local.entity.BankAccount
+import com.example.data.local.entity.TripRecord
+import com.example.data.local.entity.ExpenseRecord
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +55,8 @@ fun SplitBillScreen(
   viewModel: SplitBillViewModel,
   modifier: Modifier = Modifier,
   accounts: List<BankAccount> = emptyList(),
+  trips: List<TripRecord> = emptyList(),
+  tripExpenses: List<ExpenseRecord> = emptyList(),
   onRecordSettlement: (isIncome: Boolean, amount: Double, account: BankAccount, title: String, reference: String) -> Unit = { _, _, _, _, _ -> },
   onUndoSettlement: (reference: String) -> Unit = {},
   onSyncExpense: (reference: String, title: String, amount: Double, account: BankAccount) -> Unit = { _, _, _, _ -> },
@@ -66,6 +70,7 @@ fun SplitBillScreen(
   val transfers = remember(breakdowns) { DebtSimplifier.simplifyDebts(breakdowns) }
   val clipboard = LocalClipboardManager.current
   var currencyMenu by remember { mutableStateOf(false) }
+  var showTripImportDialog by remember { mutableStateOf(false) }
   var selectedExpense by remember { mutableStateOf<ReceiptItem?>(null) }
   var editingExpense by remember { mutableStateOf<ReceiptItem?>(null) }
   var expensePendingDelete by remember { mutableStateOf<ReceiptItem?>(null) }
@@ -94,11 +99,13 @@ fun SplitBillScreen(
   editingExpense?.let { expense -> AddReceiptItemDialog(participants = state.participants, currencySymbol = state.currencySymbol, accounts = accounts, initialItem = expense, onDismiss = { editingExpense = null }, onConfirm = { t, p, q, ids, payer, source, accountId ->
       viewModel.updateItem(expense.copy(title = t, price = p, quantity = q, claimedParticipantIds = ids, paidByParticipantId = payer, paymentSource = source, paymentAccountId = accountId))
       val reference = "split-bill-item:${expense.id}"
-      if (payer == state.participants.firstOrNull()?.id) accounts.firstOrNull { it.id == accountId }?.let { onSyncExpense(reference, t, p * q, it) } else onDeleteExpense(reference)
+      if (!expense.isImportedFromFinance) {
+        if (payer == state.participants.firstOrNull()?.id) accounts.firstOrNull { it.id == accountId }?.let { onSyncExpense(reference, t, p * q, it) } else onDeleteExpense(reference)
+      }
       editingExpense = null
     }) }
   selectedExpense?.let { item -> AlertDialog(onDismissRequest = { selectedExpense = null }, title = { Text(item.title, fontWeight = FontWeight.Bold) }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Amount: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", item.price * item.quantity)}"); Text("Quantity: ${item.quantity}"); Text("Paid by: ${state.participants.firstOrNull { it.id == item.paidByParticipantId }?.name ?: "Not specified"}"); Text("Payment source: ${item.paymentSource}"); Text("Shared with: ${state.participants.filter { it.id in item.claimedParticipantIds }.joinToString { it.name }.ifBlank { "Everyone" }}") } }, confirmButton = { TextButton(onClick = { selectedExpense = null; editingExpense = item }) { Text("Edit") } }, dismissButton = { Row { TextButton(onClick = { selectedExpense = null; expensePendingDelete = item }) { Text("Delete", color = MaterialTheme.colorScheme.error) }; TextButton(onClick = { selectedExpense = null }) { Text("Close") } } } ) }
-  expensePendingDelete?.let { item -> AlertDialog(onDismissRequest = { expensePendingDelete = null }, title = { Text("Delete transaction?") }, text = { Text("Are you sure you want to delete '${item.title}'? This cannot be undone.") }, confirmButton = { TextButton(onClick = { onDeleteExpense("split-bill-item:${item.id}"); viewModel.removeItem(item.id); expensePendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { expensePendingDelete = null }) { Text("Cancel") } }) }
+  expensePendingDelete?.let { item -> AlertDialog(onDismissRequest = { expensePendingDelete = null }, title = { Text("Delete transaction?") }, text = { Text("Are you sure you want to delete '${item.title}'? This cannot be undone.") }, confirmButton = { TextButton(onClick = { if (!item.isImportedFromFinance) onDeleteExpense("split-bill-item:${item.id}"); viewModel.removeItem(item.id); expensePendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { expensePendingDelete = null }) { Text("Cancel") } }) }
   selectedPerson?.let { person -> AlertDialog(onDismissRequest = { selectedPerson = null }, title = { Text(person.name, fontWeight = FontWeight.Bold) }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("UPI: ${person.upiId.ifBlank { "Not added" }}"); Text("PayPal: ${person.paypalUsername.ifBlank { "Not added" }}"); Text("Amount paid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.paidAmount)}") } }, confirmButton = { TextButton(onClick = { selectedPerson = null; editingPerson = person }) { Text("Edit") } }, dismissButton = { Row { if (person.id != state.participants.firstOrNull()?.id && state.participants.size > 1) TextButton(onClick = { selectedPerson = null; personPendingDelete = person }) { Text("Delete", color = MaterialTheme.colorScheme.error) }; TextButton(onClick = { selectedPerson = null }) { Text("Close") } } }) }
   personPendingDelete?.let { person -> AlertDialog(onDismissRequest = { personPendingDelete = null }, title = { Text("Delete person?") }, text = { Text("Remove ${person.name} from this bill? Their expense shares will also be updated.") }, confirmButton = { TextButton(onClick = { viewModel.removeParticipant(person.id); personPendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { personPendingDelete = null }) { Text("Cancel") } }) }
   pendingTransfer?.let { transfer ->
@@ -140,6 +147,36 @@ fun SplitBillScreen(
     )
   }
 
+  if (showTripImportDialog) {
+    AlertDialog(
+      onDismissRequest = { showTripImportDialog = false },
+      title = { Text("Import trip expenses") },
+      text = {
+        Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("Existing trip expenses will be added to this split without creating duplicate Finance transactions. All people are selected by default; you can edit each item afterward.")
+          trips.forEach { trip ->
+            val count = tripExpenses.count { it.tripId == trip.id }
+            OutlinedButton(
+              onClick = {
+                viewModel.importTripExpenses(tripExpenses.filter { it.tripId == trip.id })
+                showTripImportDialog = false
+              },
+              modifier = Modifier.fillMaxWidth(),
+              enabled = count > 0
+            ) {
+              Column(Modifier.fillMaxWidth()) {
+                Text(trip.tripName, fontWeight = FontWeight.SemiBold)
+                Text("$count existing expenses", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+            }
+          }
+          if (trips.isEmpty()) Text("No trips found in Trip Manager.")
+        }
+      },
+      confirmButton = { TextButton(onClick = { showTripImportDialog = false }) { Text("Close") } }
+    )
+  }
+
   if (state.showOcrDialog) OcrScannerBottomSheet(
     onDismiss = { viewModel.setShowOcrDialog(false) },
     onApplyReceipt = { viewModel.applyParsedReceipt(it.copy(tax = 0.0, tip = 0.0, discount = 0.0)) },
@@ -151,6 +188,13 @@ fun SplitBillScreen(
       Column(Modifier.weight(1f)) {
         Text("Split Bill", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(state.billTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+      if (trips.isNotEmpty()) {
+        TextButton(onClick = { showTripImportDialog = true }) {
+          Icon(Icons.Default.FlightTakeoff, null, modifier = Modifier.size(16.dp))
+          Spacer(Modifier.width(3.dp))
+          Text("Import trip", fontSize = 11.sp)
+        }
       }
       Box {
         FilledTonalButton(onClick = { currencyMenu = true }) { Text("${state.currencyCode} ${state.currencySymbol}"); Icon(Icons.Default.ExpandMore, null) }
