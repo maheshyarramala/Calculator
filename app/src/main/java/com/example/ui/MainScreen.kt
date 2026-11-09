@@ -156,25 +156,23 @@ fun MainScreen(
       onOpenRecord = { record ->
         showHistorySheet = false
         when (record.category.uppercase()) {
-          "EMI" -> currentDestination = MainDestination.EMI
-          "CALCULATOR" -> currentDestination = MainDestination.CALCULATOR
-          "SIP", "LUMPSUM", "COMPOUND", "PPF", "FD", "TRADE" -> {
-            currentDestination = MainDestination.INVESTMENTS
-            investmentViewModel.selectTab(runCatching { InvestmentTab.valueOf(record.category.uppercase()) }.getOrDefault(InvestmentTab.SIP))
+          "EMI" -> { emiViewModel.restoreFromRecord(record); currentDestination = MainDestination.EMI }
+          "CALCULATOR" -> {
+            record.detailsText.lineSequence().firstOrNull { it.startsWith("Input:") }?.substringAfter("Input:")?.trim()?.let(calculatorViewModel::restoreFromHistory)
+            currentDestination = MainDestination.CALCULATOR
           }
-          "INTEREST" -> currentDestination = MainDestination.INTEREST
+          "SIP", "LUMPSUM", "COMPOUND", "PPF", "FD", "TRADE" -> {
+            investmentViewModel.restoreFromRecord(record)
+            currentDestination = MainDestination.INVESTMENTS
+          }
+          "INTEREST" -> { interestViewModel.restoreFromRecord(record); currentDestination = MainDestination.INTEREST }
           "AGE", "CALENDAR" -> {
+            ageCalendarViewModel.restoreFromRecord(record)
             currentDestination = MainDestination.AGE_CALENDAR
-            ageCalendarViewModel.selectTab(if (record.category.uppercase() == "AGE") AgeCalendarTab.AGE else AgeCalendarTab.DATE_DIFF)
           }
           "CURRENCY", "UNIT", "TIP", "GST" -> {
+            utilityViewModel.restoreFromRecord(record)
             currentDestination = MainDestination.UTILITIES
-            utilityViewModel.selectTab(when (record.category.uppercase()) {
-              "UNIT" -> UtilityTab.UNIT_CONVERTER
-              "TIP" -> UtilityTab.TIP_SPLIT
-              "GST" -> UtilityTab.GST_TAX
-              else -> UtilityTab.CURRENCY
-            })
           }
           else -> currentDestination = MainDestination.CALCULATOR
         }
