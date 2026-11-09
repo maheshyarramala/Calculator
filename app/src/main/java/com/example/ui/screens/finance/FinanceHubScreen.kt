@@ -3790,7 +3790,7 @@ private fun TripCardItem(
       containerColor = MaterialTheme.colorScheme.surface
     ),
     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    modifier = Modifier.fillMaxWidth()
+    modifier = Modifier.fillMaxWidth().clickable { showTripActions = true }
   ) {
     Column(
       modifier = Modifier.padding(18.dp),
@@ -6322,19 +6322,12 @@ private fun TripDailySpendingSpeedometer(
   trip: TripRecord,
   spent: Double
 ) {
-  val totalDays = remember(trip.startDate, trip.endDate) {
-    calculateTripDays(trip.startDate, trip.endDate)
-  }
+  val totalDays = remember(trip.startDate, trip.endDate) { calculateTripDays(trip.startDate, trip.endDate) }
   val dailyBudget = remember(trip.budget, totalDays) {
     if (totalDays > 0) trip.budget / totalDays else trip.budget / 7.0
   }
-  val elapsedDays = remember(trip.startDate) {
-    calculateElapsedDays(trip.startDate).coerceAtLeast(1)
-  }
-  val dailyRate = remember(spent, elapsedDays) {
-    spent / elapsedDays
-  }
-
+  val elapsedDays = remember(trip.startDate) { calculateElapsedDays(trip.startDate).coerceAtLeast(1) }
+  val dailyRate = remember(spent, elapsedDays) { spent / elapsedDays }
   val burnRatio = if (dailyBudget > 0) (dailyRate / dailyBudget).toFloat() else 0f
   val isExceeding = burnRatio > 1.05f
 
@@ -6345,93 +6338,44 @@ private fun TripDailySpendingSpeedometer(
   ) {
     Column(
       modifier = Modifier.fillMaxWidth().padding(14.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp)
+      verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-      Column(modifier = Modifier.weight(1f)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text("Daily Burn Rate Tracker", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = if (isExceeding) Color(0xFFFEE2E2) else Color(0xFFCCFBF1)
+        ) {
           Text(
-            text = "Daily Burn Rate Tracker",
-            fontSize = 13.sp,
+            if (isExceeding) "Above target" else "On track",
+            fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (isExceeding) Color(0xFFB91C1C) else Color(0xFF0F766E),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
           )
-          Spacer(modifier = Modifier.width(6.dp))
-          Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = if (isExceeding) Color(0xFFFEE2E2) else Color(0xFFCCFBF1)
-          ) {
-            Text(
-              text = if (isExceeding) "Above target" else "On track",
-              fontSize = 9.sp,
-              fontWeight = FontWeight.Bold,
-              color = if (isExceeding) Color(0xFFB91C1C) else Color(0xFF0F766E),
-              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-            )
-          }
         }
-
-
       }
-
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-          Text("Spending ${CurrencyFormatter.format(dailyRate)}/day", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = if (isExceeding) Color(0xFFEF4444) else Color(0xFF0D9488))
-          Text("Target ${CurrencyFormatter.format(dailyBudget)}/day", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text("Day $elapsedDays of $totalDays", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-      // Visual Speedometer Gauge Canvas
-      Canvas(modifier = Modifier.size(76.dp, 44.dp)) {
-        val strokeW = 6.dp.toPx()
-        val arcSize = Size(size.width, size.height * 1.8f)
-        val topLeft = Offset(0f, 0f)
-
-        // Background arc
-        drawArc(
-          color = Color.LightGray.copy(alpha = 0.35f),
-          startAngle = 180f,
-          sweepAngle = 180f,
-          useCenter = false,
-          topLeft = topLeft,
-          size = arcSize,
-          style = Stroke(width = strokeW, cap = StrokeCap.Round)
-        )
-
-        // Burn Rate Arc
-        val activeSweep = (burnRatio.coerceIn(0f, 1.5f) / 1.5f * 180f)
-        val arcColor = when {
-          burnRatio > 1.05f -> Color(0xFFEF4444)
-          burnRatio > 0.8f -> Color(0xFFF59E0B)
-          else -> Color(0xFF10B981)
-        }
-        drawArc(
-          color = arcColor,
-          startAngle = 180f,
-          sweepAngle = activeSweep,
-          useCenter = false,
-          topLeft = topLeft,
-          size = arcSize,
-          style = Stroke(width = strokeW, cap = StrokeCap.Round)
-        )
-
-        // Needle pointer
-        val needleAngle = (180f + activeSweep) * (PI / 180f).toFloat()
-        val centerX = size.width / 2f
-        val centerY = size.height * 0.9f
-        val needleLen = size.width * 0.38f
-        val endX = centerX + needleLen * cos(needleAngle)
-        val endY = centerY + needleLen * sin(needleAngle)
-
-        drawLine(
-          color = Color(0xFF1E293B),
-          start = Offset(centerX, centerY),
-          end = Offset(endX, endY),
-          strokeWidth = 3.dp.toPx(),
-          cap = StrokeCap.Round
-        )
-        drawCircle(color = Color(0xFF1E293B), radius = 3.5.dp.toPx(), center = Offset(centerX, centerY))
+      Text(
+        "Spending ${CurrencyFormatter.format(dailyRate)}/day",
+        fontSize = 15.sp,
+        fontWeight = FontWeight.ExtraBold,
+        color = if (isExceeding) Color(0xFFEF4444) else Color(0xFF0D9488)
+      )
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("Daily target", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${CurrencyFormatter.format(dailyBudget)}/day", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
       }
-      }
+      LinearProgressIndicator(
+        progress = { burnRatio.coerceIn(0f, 1f) },
+        modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(5.dp)),
+        color = if (isExceeding) Color(0xFFEF4444) else Color(0xFF0D9488),
+        trackColor = MaterialTheme.colorScheme.surface
+      )
+      Text("Day $elapsedDays of $totalDays", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
 }
