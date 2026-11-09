@@ -149,6 +149,24 @@ class AgeCalendarViewModel : ViewModel() {
     _uiState.update { it.copy(toastMessage = null) }
   }
 
+  fun restoreFromRecord(record: CalculationRecord) {
+    fun value(key: String, fallback: String = "") = record.detailsText.lineSequence().firstOrNull { it.startsWith("$key:") }?.substringAfter(":")?.trim() ?: fallback
+    fun date(key: String, fallback: LocalDate) = runCatching { LocalDate.parse(value(key, fallback.toString())) }.getOrDefault(fallback)
+    val tab = if (record.category.equals("AGE", true)) AgeCalendarTab.AGE else runCatching { AgeCalendarTab.valueOf(value("Input Calendar Tab", "DATE_DIFF")) }.getOrDefault(AgeCalendarTab.DATE_DIFF)
+    val birth = date("Input Birth Date", _uiState.value.birthDate)
+    val asOf = date("Input As Of Date", _uiState.value.ageAsOfDate)
+    val start = date("Input Start Date", _uiState.value.diffStartDate)
+    val end = date("Input End Date", _uiState.value.diffEndDate)
+    val base = date("Input Base Date", _uiState.value.adjBaseDate)
+    val addition = value("Input Addition", "true").toBoolean()
+    val years = value("Input Years", "0").toIntOrNull() ?: 0
+    val months = value("Input Months", "0").toIntOrNull() ?: 0
+    val weeks = value("Input Weeks", "0").toIntOrNull() ?: 0
+    val days = value("Input Days", "0").toIntOrNull() ?: 0
+    val includeEnd = value("Input Include End Day", "false").toBoolean()
+    _uiState.update { it.copy(selectedTab = tab, birthDate = birth, ageAsOfDate = asOf, ageResult = AgeCalculator.calculateAge(birth, asOf), diffStartDate = start, diffEndDate = end, includeEndDay = includeEnd, diffResult = CalendarCalculator.calculateDifference(start, end, includeEnd), adjBaseDate = base, isAddition = addition, adjYearsInput = years.toString(), adjMonthsInput = months.toString(), adjWeeksInput = weeks.toString(), adjDaysInput = days.toString(), adjResult = CalendarCalculator.adjustDate(base, addition, years, months, weeks, days)) }
+  }
+
   fun saveCalculation(context: Context) {
     val state = _uiState.value
     viewModelScope.launch {
@@ -191,7 +209,12 @@ class AgeCalendarViewModel : ViewModel() {
           )
         }
       }
-      db.calculationHistoryDao().insert(record)
+      val savedRecord = record.copy(detailsText = record.detailsText +
+        "\\nInput Calendar Tab: ${state.selectedTab.name}" +
+        "\\nInput Birth Date: ${state.birthDate}\\nInput As Of Date: ${state.ageAsOfDate}" +
+        "\\nInput Start Date: ${state.diffStartDate}\\nInput End Date: ${state.diffEndDate}\\nInput Include End Day: ${state.includeEndDay}" +
+        "\\nInput Base Date: ${state.adjBaseDate}\\nInput Addition: ${state.isAddition}\\nInput Years: ${state.adjYearsInput}\\nInput Months: ${state.adjMonthsInput}\\nInput Weeks: ${state.adjWeeksInput}\\nInput Days: ${state.adjDaysInput}")
+      db.calculationHistoryDao().insert(savedRecord)
       _uiState.update { it.copy(toastMessage = "${state.selectedTab.title} saved to history!") }
     }
   }
