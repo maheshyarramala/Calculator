@@ -434,7 +434,7 @@ fun MainScreen(
             onDragEnd = {
               val destinations = MainDestination.values().filter { it.isBottomTab }
               val currentIndex = destinations.indexOf(currentDestination)
-              if (abs(dragTotal) >= swipeThreshold && currentIndex >= 0) {
+              if (currentDestination != MainDestination.FINANCE && abs(dragTotal) >= swipeThreshold && currentIndex >= 0) {
                 val nextIndex = (currentIndex + if (dragTotal < 0f) 1 else -1)
                   .coerceIn(0, destinations.lastIndex)
                 if (nextIndex != currentIndex) {
