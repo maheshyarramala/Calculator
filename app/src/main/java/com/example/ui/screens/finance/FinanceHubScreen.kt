@@ -649,53 +649,7 @@ fun FinanceHubScreen(
         .fillMaxSize()
         .padding(paddingValues)
     ) {
-      // Top Header with Backup / Restore Quick Action
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-          Text(
-            text = "Finance & Money",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-          Text(
-            text = "Custom categories, bank accounts & trips",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-        }
-
-        FilledTonalButton(
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-            viewModel.setShowBackupModal(true)
-          },
-          shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-          modifier = Modifier.height(34.dp).testTag("backup_restore_header_btn")
-        ) {
-          Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(15.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text(
-            text = "Backup",
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            softWrap = false
-          )
-        }
-      }
-
-      // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Split Bill, Trip Manager)
+            // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Split Bill, Trip Manager)
       ScrollableTabRow(
         selectedTabIndex = uiState.selectedTab.ordinal,
         edgePadding = 12.dp,
