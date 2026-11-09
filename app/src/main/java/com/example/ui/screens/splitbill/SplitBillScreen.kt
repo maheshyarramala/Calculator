@@ -53,7 +53,8 @@ fun SplitBillScreen(
   viewModel: SplitBillViewModel,
   modifier: Modifier = Modifier,
   accounts: List<BankAccount> = emptyList(),
-  onRecordSettlement: (isIncome: Boolean, amount: Double, account: BankAccount, title: String, reference: String) -> Unit = { _, _, _, _, _ -> }
+  onRecordSettlement: (isIncome: Boolean, amount: Double, account: BankAccount, title: String, reference: String) -> Unit = { _, _, _, _, _ -> },
+  onUndoSettlement: (reference: String) -> Unit = {}
 ) {
   val state by viewModel.uiState.collectAsState()
   val breakdowns = remember(state.participants, state.items) {
@@ -120,7 +121,7 @@ fun SplitBillScreen(
           val account = selectedAccount ?: return@Button
           val title = if (receiving) "Split Bill repayment from ${state.participants.firstOrNull { it.id == transfer.fromId }?.name ?: "friend"}" else "Split Bill payment to ${state.participants.firstOrNull { it.id == transfer.toId }?.name ?: "friend"}"
           onRecordSettlement(receiving, transfer.amount, account, title, "Split Bill settlement ${transfer.key}")
-          viewModel.toggleSettledTransfer(transfer.key, account.bankName)
+          viewModel.toggleSettledTransfer(transfer.key, account.bankName, "Split Bill settlement ${transfer.key}")
           pendingTransfer = null
         }) { Text(if (receiving) "Record received" else "Record payment") }
       },
@@ -233,7 +234,7 @@ fun SplitBillScreen(
           Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
               Column(Modifier.weight(1f)) { Text(transfer.fromParticipant.name, fontWeight = FontWeight.SemiBold); Text("pays ${transfer.toParticipant.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-              Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}", fontWeight = FontWeight.Bold); TextButton(onClick = { if (settled) viewModel.toggleSettledTransfer(key) else { transferPaymentSource = ""; pendingTransfer = PendingSplitTransfer(key, transfer.fromParticipant.id, transfer.toParticipant.id, transfer.amount) } }) { Text(if (settled) "Undo" else "Mark paid") }; state.settledPaymentSources[key]?.takeIf { settled }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+              Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}", fontWeight = FontWeight.Bold); TextButton(onClick = { if (settled) { state.settledPaymentReferences[key]?.let(onUndoSettlement); viewModel.toggleSettledTransfer(key) } else { transferPaymentSource = ""; pendingTransfer = PendingSplitTransfer(key, transfer.fromParticipant.id, transfer.toParticipant.id, transfer.amount) } }) { Text(if (settled) "Undo" else "Mark paid") }; state.settledPaymentSources[key]?.takeIf { settled }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
             }
           }
         }
