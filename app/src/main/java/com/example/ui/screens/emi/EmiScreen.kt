@@ -50,13 +50,13 @@ fun EmiScreen(
   modifier: Modifier = Modifier
 ) {
   val state by viewModel.uiState.collectAsState()
-  LaunchedEffect(state.openCalculatorTabRequest) {
-    if (state.openCalculatorTabRequest > 0) selectedSubTab = EmiSubTab.CALCULATOR
-  }
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
   val loanViewModel: LoanTrackerViewModel = viewModel()
   var selectedSubTab by rememberSaveable { mutableStateOf(EmiSubTab.CALCULATOR) }
+  LaunchedEffect(state.openCalculatorTabRequest) {
+    if (state.openCalculatorTabRequest > 0) selectedSubTab = EmiSubTab.CALCULATOR
+  }
 
   // Filter schedule if filter query is provided
   val filteredSchedule = remember(state.emiResult.schedule, state.scheduleFilterQuery) {
