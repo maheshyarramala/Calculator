@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -71,6 +73,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.format.ResolverStyle
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import com.example.ui.components.CreditCardBillReminderDialog
@@ -585,6 +588,27 @@ fun FinanceHubScreen(
       SnackbarHost(hostState = snackbarHostState)
     },
     floatingActionButton = {
+      Box(
+        modifier = Modifier
+          .weight(1f)
+          .fillMaxWidth()
+          .pointerInput(uiState.selectedTab) {
+            var horizontalDrag = 0f
+            detectHorizontalDragGestures(
+              onHorizontalDrag = { _, dragAmount -> horizontalDrag += dragAmount },
+              onDragEnd = {
+                if (abs(horizontalDrag) > 90f) {
+                  val tabs = FinanceTab.values()
+                  val direction = if (horizontalDrag < 0f) 1 else -1
+                  val nextIndex = (uiState.selectedTab.ordinal + direction).coerceIn(tabs.indices)
+                  if (nextIndex != uiState.selectedTab.ordinal) viewModel.selectTab(tabs[nextIndex])
+                }
+                horizontalDrag = 0f
+              },
+              onDragCancel = { horizontalDrag = 0f }
+            )
+          }
+      ) {
       when (uiState.selectedTab) {
         FinanceTab.EXPENSES -> {
           FloatingActionButton(
@@ -814,6 +838,7 @@ fun FinanceHubScreen(
           },
           onDeleteTrip = { viewModel.deleteTrip(it) }
         )
+      }
       }
     }
   }
