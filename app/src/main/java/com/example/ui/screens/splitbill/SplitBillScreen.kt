@@ -54,7 +54,9 @@ fun SplitBillScreen(
   modifier: Modifier = Modifier,
   accounts: List<BankAccount> = emptyList(),
   onRecordSettlement: (isIncome: Boolean, amount: Double, account: BankAccount, title: String, reference: String) -> Unit = { _, _, _, _, _ -> },
-  onUndoSettlement: (reference: String) -> Unit = {}
+  onUndoSettlement: (reference: String) -> Unit = {},
+  onSyncExpense: (reference: String, title: String, amount: Double, account: BankAccount) -> Unit = { _, _, _, _ -> },
+  onDeleteExpense: (reference: String) -> Unit = {}
 ) {
   val state by viewModel.uiState.collectAsState()
   val breakdowns = remember(state.participants, state.items) {
@@ -81,13 +83,22 @@ fun SplitBillScreen(
   )
   editingPerson?.let { person -> AddParticipantDialog(initialParticipant = person, onDismiss = { editingPerson = null }, onConfirm = { n, u, p, a -> viewModel.updateParticipant(person.id, n, u, p, a); editingPerson = null }) }
   if (state.showAddItemDialog) AddReceiptItemDialog(
-    participants = state.participants, currencySymbol = state.currencySymbol,
+    participants = state.participants, currencySymbol = state.currencySymbol, accounts = accounts,
     onDismiss = { viewModel.setShowAddItemDialog(false) },
-    onConfirm = { t, p, q, ids, payer, source -> viewModel.addItem(t, p, q, ids, payer, source); viewModel.setShowAddItemDialog(false) }
+    onConfirm = { t, p, q, ids, payer, source, accountId ->
+      val itemId = viewModel.addItem(t, p, q, ids, payer, source, accountId)
+      if (payer == state.participants.firstOrNull()?.id) accounts.firstOrNull { it.id == accountId }?.let { onSyncExpense("split-bill-item:$itemId", t, p * q, it) }
+      viewModel.setShowAddItemDialog(false)
+    }
   )
-  editingExpense?.let { expense -> AddReceiptItemDialog(participants = state.participants, currencySymbol = state.currencySymbol, initialItem = expense, onDismiss = { editingExpense = null }, onConfirm = { t, p, q, ids, payer, source -> viewModel.updateItem(expense.copy(title = t, price = p, quantity = q, claimedParticipantIds = ids, paidByParticipantId = payer, paymentSource = source)); editingExpense = null }) }
+  editingExpense?.let { expense -> AddReceiptItemDialog(participants = state.participants, currencySymbol = state.currencySymbol, accounts = accounts, initialItem = expense, onDismiss = { editingExpense = null }, onConfirm = { t, p, q, ids, payer, source, accountId ->
+      viewModel.updateItem(expense.copy(title = t, price = p, quantity = q, claimedParticipantIds = ids, paidByParticipantId = payer, paymentSource = source, paymentAccountId = accountId))
+      val reference = "split-bill-item:${expense.id}"
+      if (payer == state.participants.firstOrNull()?.id) accounts.firstOrNull { it.id == accountId }?.let { onSyncExpense(reference, t, p * q, it) } else onDeleteExpense(reference)
+      editingExpense = null
+    }) }
   selectedExpense?.let { item -> AlertDialog(onDismissRequest = { selectedExpense = null }, title = { Text(item.title, fontWeight = FontWeight.Bold) }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Amount: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", item.price * item.quantity)}"); Text("Quantity: ${item.quantity}"); Text("Paid by: ${state.participants.firstOrNull { it.id == item.paidByParticipantId }?.name ?: "Not specified"}"); Text("Payment source: ${item.paymentSource}"); Text("Shared with: ${state.participants.filter { it.id in item.claimedParticipantIds }.joinToString { it.name }.ifBlank { "Everyone" }}") } }, confirmButton = { TextButton(onClick = { selectedExpense = null; editingExpense = item }) { Text("Edit") } }, dismissButton = { Row { TextButton(onClick = { selectedExpense = null; expensePendingDelete = item }) { Text("Delete", color = MaterialTheme.colorScheme.error) }; TextButton(onClick = { selectedExpense = null }) { Text("Close") } } } ) }
-  expensePendingDelete?.let { item -> AlertDialog(onDismissRequest = { expensePendingDelete = null }, title = { Text("Delete transaction?") }, text = { Text("Are you sure you want to delete '${item.title}'? This cannot be undone.") }, confirmButton = { TextButton(onClick = { viewModel.removeItem(item.id); expensePendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { expensePendingDelete = null }) { Text("Cancel") } }) }
+  expensePendingDelete?.let { item -> AlertDialog(onDismissRequest = { expensePendingDelete = null }, title = { Text("Delete transaction?") }, text = { Text("Are you sure you want to delete '${item.title}'? This cannot be undone.") }, confirmButton = { TextButton(onClick = { onDeleteExpense("split-bill-item:${item.id}"); viewModel.removeItem(item.id); expensePendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { expensePendingDelete = null }) { Text("Cancel") } }) }
   selectedPerson?.let { person -> AlertDialog(onDismissRequest = { selectedPerson = null }, title = { Text(person.name, fontWeight = FontWeight.Bold) }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("UPI: ${person.upiId.ifBlank { "Not added" }}"); Text("PayPal: ${person.paypalUsername.ifBlank { "Not added" }}"); Text("Amount paid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.paidAmount)}") } }, confirmButton = { TextButton(onClick = { selectedPerson = null; editingPerson = person }) { Text("Edit") } }, dismissButton = { Row { if (person.id != state.participants.firstOrNull()?.id && state.participants.size > 1) TextButton(onClick = { selectedPerson = null; personPendingDelete = person }) { Text("Delete", color = MaterialTheme.colorScheme.error) }; TextButton(onClick = { selectedPerson = null }) { Text("Close") } } }) }
   personPendingDelete?.let { person -> AlertDialog(onDismissRequest = { personPendingDelete = null }, title = { Text("Delete person?") }, text = { Text("Remove ${person.name} from this bill? Their expense shares will also be updated.") }, confirmButton = { TextButton(onClick = { viewModel.removeParticipant(person.id); personPendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { personPendingDelete = null }) { Text("Cancel") } }) }
   pendingTransfer?.let { transfer ->
@@ -467,14 +478,16 @@ private fun AddParticipantDialog(
 private fun AddReceiptItemDialog(
   participants: List<Participant>,
   currencySymbol: String,
+  accounts: List<BankAccount>,
   initialItem: ReceiptItem? = null,
   onDismiss: () -> Unit,
-  onConfirm: (title: String, price: Double, qty: Int, claimedIds: List<String>, paidByParticipantId: String?, paymentSource: String) -> Unit
+  onConfirm: (title: String, price: Double, qty: Int, claimedIds: List<String>, paidByParticipantId: String?, paymentSource: String, paymentAccountId: Long?) -> Unit
 ) {
   var title by remember(initialItem) { mutableStateOf(initialItem?.title ?: "") }
   var priceStr by remember(initialItem) { mutableStateOf(initialItem?.price?.toString() ?: "") }
   var qtyStr by remember(initialItem) { mutableStateOf(initialItem?.quantity?.toString() ?: "1") }
-  var paymentSource by remember(initialItem) { mutableStateOf(initialItem?.paymentSource ?: "Cash") }
+  var paymentSource by remember(initialItem, accounts) { mutableStateOf(initialItem?.paymentSource ?: accounts.firstOrNull { it.id == initialItem?.paymentAccountId }?.bankName ?: "Choose account") }
+  var selectedPaymentAccountId by remember(initialItem, accounts) { mutableStateOf(initialItem?.paymentAccountId ?: accounts.firstOrNull { !it.accountType.equals("Credit Card", true) }?.id) }
   var paymentSourceExpanded by remember { mutableStateOf(false) }
   var selectedParticipantIds by remember(participants, initialItem) { mutableStateOf(initialItem?.claimedParticipantIds?.ifEmpty { participants.map { it.id } } ?: participants.map { it.id }) }
   var selectedPayerId by remember(initialItem, participants) { mutableStateOf(initialItem?.paidByParticipantId ?: participants.firstOrNull()?.id) }
@@ -566,10 +579,16 @@ private fun AddReceiptItemDialog(
               Icon(Icons.Default.ArrowDropDown, null)
             }
             DropdownMenu(expanded = paymentSourceExpanded, onDismissRequest = { paymentSourceExpanded = false }) {
-              listOf("Cash", "UPI", "Bank transfer", "Debit / Credit card", "Other").forEach { source ->
-                DropdownMenuItem(text = { Text(source) }, onClick = { paymentSource = source; paymentSourceExpanded = false })
+              accounts.filterNot { it.accountType.equals("Credit Card", true) }.forEach { account ->
+                DropdownMenuItem(
+                  text = { Text("${account.bankName} • ${account.accountType}") },
+                  onClick = { selectedPaymentAccountId = account.id; paymentSource = account.bankName; paymentSourceExpanded = false }
+                )
               }
             }
+          }
+          if (accounts.none { !it.accountType.equals("Credit Card", true) }) {
+            Text("Add a bank or cash account in Finance before saving an expense paid by you.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
           }
         }
 
@@ -638,9 +657,9 @@ private fun AddReceiptItemDialog(
       Button(
         onClick = {
           val qty = qtyStr.toIntOrNull() ?: 1
-          onConfirm(title.trim(), parsedPrice, qty, selectedParticipantIds, selectedPayerId, paymentSource)
+          onConfirm(title.trim(), parsedPrice, qty, selectedParticipantIds, selectedPayerId, paymentSource, if (selectedPayerId == participants.firstOrNull()?.id) selectedPaymentAccountId else null)
         },
-        enabled = canAdd,
+        enabled = canAdd && (selectedPayerId != participants.firstOrNull()?.id || accounts.any { it.id == selectedPaymentAccountId && !it.accountType.equals("Credit Card", true) }),
         shape = RoundedCornerShape(10.dp)
       ) {
         Text(if (initialItem == null) "Add Dish" else "Save changes")
