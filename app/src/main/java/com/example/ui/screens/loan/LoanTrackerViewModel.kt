@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.AccountWithBalance
 import com.example.data.local.entity.LoanRecord
+import com.example.data.local.entity.ExpenseRecord
 import com.example.data.repository.FinanceRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,6 +40,8 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
   private val _selectedCategoryFilter = MutableStateFlow<String?>(null)
   private val _showAddLoanDialog = MutableStateFlow(false)
   private val _selectedLoanDetail = MutableStateFlow<LoanRecord?>(null)
+  private val _paymentHistory = MutableStateFlow<List<ExpenseRecord>>(emptyList())
+  val paymentHistory: StateFlow<List<ExpenseRecord>> = _paymentHistory.asStateFlow()
   private val _userMessage = MutableStateFlow<String?>(null)
 
   val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
@@ -102,6 +105,14 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
 
   fun selectLoanForDetail(loan: LoanRecord?) {
     _selectedLoanDetail.value = loan
+    if (loan == null) {
+      _paymentHistory.value = emptyList()
+    } else {
+      viewModelScope.launch {
+        _paymentHistory.value = database.financeDao().getExpensesByLoanId(loan.id)
+          .sortedByDescending { it.dateTimestamp }
+      }
+    }
   }
 
   fun clearUserMessage() {
@@ -218,6 +229,7 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
             )
           }
         }
+        _paymentHistory.value = database.financeDao().getExpensesByLoanId(info.loanId).sortedByDescending { it.dateTimestamp }
         _userMessage.value = info.message
       }.onFailure { err ->
         _userMessage.value = err.message ?: "Failed to record EMI payment"
@@ -243,6 +255,7 @@ class LoanTrackerViewModel(application: Application) : AndroidViewModel(applicat
             updatedLoan
           )
         }
+        _paymentHistory.value = database.financeDao().getExpensesByLoanId(targetLoanId).sortedByDescending { it.dateTimestamp }
         _userMessage.value = msg
       }.onFailure { err ->
         _userMessage.value = err.message ?: "Failed to undo EMI payment"
