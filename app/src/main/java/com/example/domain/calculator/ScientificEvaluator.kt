@@ -90,26 +90,34 @@ object ScientificEvaluator {
     }
 
     private fun parseTerm(): Double {
-      var x = parseFactor()
+      var x = parseUnary()
       while (true) {
         when {
-          eat('*'.code) -> x *= parseFactor()
+          eat('*'.code) -> x *= parseUnary()
           eat('/'.code) -> {
-            val divisor = parseFactor()
+            val divisor = parseUnary()
             if (abs(divisor) < 1e-15) throw ArithmeticException("Division by zero")
             x /= divisor
           }
-          eat('%'.code) -> x %= parseFactor()
-          isImplicitMultiplyNext() -> x *= parseFactor()
+          eat('%'.code) -> x %= parseUnary()
+          isImplicitMultiplyNext() -> x *= parseUnary()
           else -> return x
         }
       }
     }
 
-    private fun parseFactor(): Double {
-      if (eat('+'.code)) return parseFactor()
-      if (eat('-'.code)) return -parseFactor()
+    private fun parseUnary(): Double {
+      if (eat('+'.code)) return parseUnary()
+      if (eat('-'.code)) return -parseUnary()
+      return parsePower()
+    }
 
+    private fun parsePower(): Double {
+      val base = parsePrimary()
+      return if (eat('^'.code)) base.pow(parseUnary()) else base
+    }
+
+    private fun parsePrimary(): Double {
       var x: Double
       val startPos = pos
       if (eat('('.code)) {
@@ -141,11 +149,6 @@ object ScientificEvaluator {
         throw IllegalArgumentException(
           "Unexpected character: " + if (ch != -1) ch.toChar().toString() else "end of input"
         )
-      }
-
-      if (eat('^'.code)) {
-        val exponent = parseFactor()
-        x = x.pow(exponent)
       }
 
       return x

@@ -21,8 +21,10 @@ data class ExpenseRecord(
   val title: String,
   val amount: Double,
   val categoryName: String,
+  @ColumnInfo(defaultValue = "'EXPENSE'")
   val type: String = "EXPENSE", // "EXPENSE" or "INCOME"
   val bankAccountId: Long? = null,
+  @ColumnInfo(defaultValue = "''")
   val bankAccountName: String = "",
   val dateTimestamp: Long = System.currentTimeMillis(),
   val notes: String = "",
@@ -40,6 +42,7 @@ data class BankAccount(
   val accountNumber: String = "",
   val ifscOrRouting: String = "",
   val holderName: String = "",
+  @ColumnInfo(defaultValue = "0.0")
   val openingBalance: Double = 0.0,
   val balance: Double = 0.0,
   val notes: String = ""
@@ -67,6 +70,7 @@ data class TripRecord(
   val startDate: String,
   val endDate: String,
   val notes: String = "",
+  @ColumnInfo(defaultValue = "'{}'")
   val categoryCapsJson: String = "{}"
 )
 

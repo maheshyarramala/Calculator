@@ -50,12 +50,14 @@ object DebtSimplifier {
     val subtotalCentsByParticipant = participants.associate { it.id to 0L }.toMutableMap()
     val allParticipantIds = participants.map { it.id }
     items.forEach { item ->
-      val claimants = if (item.claimedParticipantIds.isEmpty()) {
+      val claimants = if (item.isUnassigned) {
+        emptyList()
+      } else if (item.claimedParticipantIds.isEmpty()) {
         allParticipantIds
       } else {
         item.claimedParticipantIds.filter { id -> id in subtotalCentsByParticipant }
       }
-      val effectiveClaimants = if (claimants.isEmpty()) allParticipantIds else claimants
+      val effectiveClaimants = if (claimants.isEmpty() && !item.isUnassigned) allParticipantIds else claimants
       if (effectiveClaimants.isNotEmpty()) {
         val itemCents = toCents(nonNegative(item.price) * item.quantity.coerceAtLeast(1))
         val itemShares = distributeCents(itemCents, List(effectiveClaimants.size) { 1.0 })
@@ -70,7 +72,7 @@ object DebtSimplifier {
     val weights = subtotals.map { it.coerceAtLeast(0.0) }
     val paymentsByParticipant = participants.associate { participant ->
       val itemPayments = items
-        .filter { it.paidByParticipantId == participant.id }
+        .filter { !it.isUnassigned && it.paidByParticipantId == participant.id }
         .sumOf { toCents(nonNegative(it.price) * it.quantity.coerceAtLeast(1)) / 100.0 }
       participant.id to (nonNegative(participant.paidAmount) + itemPayments)
     }
