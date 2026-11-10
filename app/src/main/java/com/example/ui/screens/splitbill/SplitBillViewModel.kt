@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.update
 import java.util.UUID
 
 data class SplitBillUiState(
-  val billTitle: String = "Split Bill",
+  val billTitle: String = "Split 1",
+  val activeGroupId: String = "group-1",
+  val groups: List<SplitBillGroup> = listOf(SplitBillGroup("group-1", "Split 1", "INR", "₹", listOf(Participant(id = "p1", name = "You (Me)", avatarColorHex = "#4F46E5", paidAmount = 0.0)), emptyList(), emptySet(), emptyMap(), emptyMap())),
   val currencyCode: String = "INR",
   val currencySymbol: String = "₹",
   val participants: List<Participant> = listOf(
@@ -29,10 +31,64 @@ data class SplitBillUiState(
   val activeTab: Int = 0 // 0: Items & Split, 1: Diners & Claims, 2: Settlement Ledger
 )
 
+
+data class SplitBillGroup(
+  val id: String,
+  val name: String,
+  val currencyCode: String,
+  val currencySymbol: String,
+  val participants: List<Participant>,
+  val items: List<ReceiptItem>,
+  val settledTransferKeys: Set<String>,
+  val settledPaymentSources: Map<String, String>,
+  val settledPaymentReferences: Map<String, String>
+)
+
 class SplitBillViewModel : ViewModel() {
 
   private val _uiState = MutableStateFlow(SplitBillUiState())
   val uiState: StateFlow<SplitBillUiState> = _uiState.asStateFlow()
+
+
+  private fun currentGroup(state: SplitBillUiState) = SplitBillGroup(
+    id = state.activeGroupId, name = state.billTitle, currencyCode = state.currencyCode,
+    currencySymbol = state.currencySymbol, participants = state.participants, items = state.items,
+    settledTransferKeys = state.settledTransferKeys, settledPaymentSources = state.settledPaymentSources,
+    settledPaymentReferences = state.settledPaymentReferences
+  )
+
+  fun createNewGroup(name: String) {
+    val cleanName = name.trim().ifBlank { "Split ${_uiState.value.groups.size + 1}" }
+    _uiState.update { state ->
+      val saved = currentGroup(state)
+      val id = UUID.randomUUID().toString()
+      val next = SplitBillGroup(id, cleanName, state.currencyCode, state.currencySymbol,
+        listOf(Participant(id = "p1", name = "You (Me)", avatarColorHex = "#4F46E5")),
+        emptyList(), emptySet(), emptyMap(), emptyMap())
+      state.copy(
+        billTitle = cleanName, activeGroupId = id, groups = state.groups.filterNot { it.id == saved.id } + saved + next,
+        participants = next.participants, items = emptyList(), settledTransferKeys = emptySet(),
+        settledPaymentSources = emptyMap(), settledPaymentReferences = emptyMap(), activeTab = 0
+      )
+    }
+  }
+
+  fun selectGroup(groupId: String) {
+    _uiState.update { state ->
+      if (groupId == state.activeGroupId) return@update state
+      val savedCurrent = currentGroup(state)
+      val target = state.groups.firstOrNull { it.id == groupId } ?: return@update state
+      state.copy(
+        billTitle = target.name, activeGroupId = target.id,
+        groups = state.groups.filterNot { it.id == savedCurrent.id } + savedCurrent,
+        currencyCode = target.currencyCode, currencySymbol = target.currencySymbol,
+        participants = target.participants, items = target.items,
+        settledTransferKeys = target.settledTransferKeys,
+        settledPaymentSources = target.settledPaymentSources,
+        settledPaymentReferences = target.settledPaymentReferences, activeTab = 0
+      )
+    }
+  }
 
   fun setTab(index: Int) {
     _uiState.update { it.copy(activeTab = index) }
