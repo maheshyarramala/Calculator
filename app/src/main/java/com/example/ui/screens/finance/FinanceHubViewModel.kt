@@ -525,14 +525,12 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   fun deleteBankAccount(account: BankAccount) {
     viewModelScope.launch {
-      val linkedCount = dao.getAccountLinkedRecordCount(account.id)
-      if (linkedCount > 0) {
-        _uiState.update { it.copy(toastMessage = "This account has $linkedCount linked records. Keep it to preserve your financial history.") }
+      val deleted = repository.deleteBankAccount(account)
+      if (!deleted) {
+        _uiState.update { it.copy(toastMessage = "This account has linked financial records. Keep it to preserve your history.") }
         return@launch
       }
-      dao.deleteCreditCardBillReminder(account.id)
       CreditCardBillNotificationScheduler.cancel(getApplication(), account.id)
-      dao.deleteBankAccount(account)
       _uiState.update { it.copy(toastMessage = "Account removed") }
     }
   }
