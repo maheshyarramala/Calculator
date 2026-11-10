@@ -44,1097 +44,306 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.domain.splitbill.*
+import com.example.data.local.entity.BankAccount
+import com.example.data.local.entity.TripRecord
+import com.example.data.local.entity.ExpenseRecord
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SplitBillScreen(
   viewModel: SplitBillViewModel,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  accounts: List<BankAccount> = emptyList(),
+  trips: List<TripRecord> = emptyList(),
+  tripExpenses: List<ExpenseRecord> = emptyList(),
+  onRecordSettlement: (isIncome: Boolean, amount: Double, account: BankAccount, title: String, reference: String) -> Unit = { _, _, _, _, _ -> },
+  onUndoSettlement: (reference: String) -> Unit = {},
+  onSyncExpense: (reference: String, title: String, amount: Double, account: BankAccount) -> Unit = { _, _, _, _ -> },
+  onDeleteExpense: (reference: String) -> Unit = {}
 ) {
   val state by viewModel.uiState.collectAsState()
-  val context = LocalContext.current
-  val haptic = LocalHapticFeedback.current
-  val clipboard = LocalClipboardManager.current
-
-  // Calculate dynamic breakdowns and debt settlements using DebtSimplifier
-  val breakdowns = remember(
-    state.participants,
-    state.items,
-    state.taxAmount,
-    state.tipAmount,
-    state.discountAmount
-  ) {
-    DebtSimplifier.calculateBreakdowns(
-      mode = SplitMode.ITEMIZED,
-      participants = state.participants,
-      items = state.items,
-      tax = state.taxAmount,
-      tip = state.tipAmount,
-      discount = state.discountAmount,
-      manualBillTotal = 0.0
-    )
+  val breakdowns = remember(state.participants, state.items) {
+    DebtSimplifier.calculateBreakdowns(SplitMode.ITEMIZED, state.participants, state.items, 0.0, 0.0, 0.0, 0.0)
   }
-
-  val totalBill = remember(breakdowns) {
-    breakdowns.sumOf { it.totalToPay }
-  }
-
-  val totalPaid = remember(breakdowns) {
-    breakdowns.sumOf { it.paidAmount }
-  }
-
-  val simplifiedTransfers = remember(breakdowns, state.simplifyDebtsEnabled) {
-    if (state.simplifyDebtsEnabled) {
-      DebtSimplifier.simplifyDebts(breakdowns)
-    } else {
-      DebtSimplifier.directTransfers(breakdowns)
-    }
-  }
-
-  // Modals
-  if (state.showOcrDialog) {
-    OcrScannerBottomSheet(
-      onDismiss = { viewModel.setShowOcrDialog(false) },
-      onApplyReceipt = { viewModel.applyParsedReceipt(it) },
-      onLoadDemo = { text, title -> viewModel.loadDemo(text, title) }
-    )
-  }
-
-  if (state.showAddParticipantDialog) {
-    AddParticipantDialog(
-      onDismiss = { viewModel.setShowAddParticipantDialog(false) },
-      onConfirm = { name, upi, paypal, paid ->
-        viewModel.addParticipant(name, upi, paypal, paid)
-        viewModel.setShowAddParticipantDialog(false)
-      }
-    )
-  }
-
-  if (state.showAddItemDialog) {
-    AddReceiptItemDialog(
-      participants = state.participants,
-      currencySymbol = state.currencySymbol,
-      onDismiss = { viewModel.setShowAddItemDialog(false) },
-      onConfirm = { title, price, qty, claimedIds, paidById ->
-        viewModel.addItem(title, price, qty, claimedIds, paidById)
-        viewModel.setShowAddItemDialog(false)
-      }
-    )
-  }
-
-  Column(
-    modifier = modifier
-      .fillMaxSize()
-      .padding(horizontal = 16.dp, vertical = 8.dp)
-  ) {
-    // Top Bar: Bill Title, Currency & OCR Action
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-        Text(
-          text = state.billTitle,
-          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
-        Text(
-          text = "${state.participants.size} participants",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
-      }
-
-      Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        // AI Receipt Scan / OCR Button
-        FilledTonalButton(
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-            viewModel.setShowOcrDialog(true)
-          },
-          shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-          colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.primary
-          ),
-          modifier = Modifier.testTag("scan_receipt_btn")
-        ) {
-          Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("Scan Receipt", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
-        }
-      }
-    }
-
-    Spacer(modifier = Modifier.height(10.dp))
-
-    // Grand Total Overview Card (High Contrast & Clear Visibility)
-    Card(
-      shape = RoundedCornerShape(18.dp),
-      colors = CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-      ),
-      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Column(modifier = Modifier.padding(16.dp)) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Column {
-            Text(
-              text = "Total Group Bill",
-              style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-              color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-              text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", totalBill)}",
-              style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
-              color = MaterialTheme.colorScheme.primary
-            )
-          }
-
-          // Currency Switcher Dropdown
-          var showCurrencyMenu by remember { mutableStateOf(false) }
-          Box {
-            FilledTonalButton(
-              onClick = { showCurrencyMenu = true },
-              shape = RoundedCornerShape(10.dp),
-              contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-              Text("${state.currencyCode} (${state.currencySymbol})", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-              Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
-            }
-            DropdownMenu(expanded = showCurrencyMenu, onDismissRequest = { showCurrencyMenu = false }) {
-              listOf(
-                "INR" to "₹", "USD" to "$", "EUR" to "€", "GBP" to "£",
-                "AED" to "د.إ", "CAD" to "$", "AUD" to "$", "JPY" to "¥"
-              ).forEach { (code, sym) ->
-                DropdownMenuItem(
-                  text = { Text("$code ($sym)", fontWeight = FontWeight.Medium) },
-                  onClick = {
-                    viewModel.setCurrency(code, sym)
-                    showCurrencyMenu = false
-                  }
-                )
-              }
-            }
-          }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        val diff = totalPaid - totalBill
-        Text(
-          text = when {
-            totalBill <= 0.0 -> "No Items"
-            Math.abs(diff) < 0.005 -> "Fully Paid ✓"
-            diff < 0.0 -> "Owed: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", -diff)}"
-            else -> "Overpaid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", diff)}"
-          },
-          fontSize = 11.sp,
-          fontWeight = FontWeight.Bold,
-          color = when {
-            totalBill <= 0.0 -> MaterialTheme.colorScheme.onSurfaceVariant
-            Math.abs(diff) < 0.005 -> Color(0xFF059669)
-            else -> Color(0xFFDC2626)
-          }
-        )
-      }
-    }
-
-    Spacer(modifier = Modifier.height(10.dp))
-
-    // Sub-Tabs: [0: Items / Split] [1: Diners & Claims] [2: Settlement & Pay]
-    TabRow(
-      selectedTabIndex = state.activeTab,
-      containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-      modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-    ) {
-      Tab(
-        selected = state.activeTab == 0,
-        onClick = { viewModel.setTab(0) },
-        text = { Text("Items & Bill", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold) },
-        icon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp)) }
-      )
-      Tab(
-        selected = state.activeTab == 1,
-        onClick = { viewModel.setTab(1) },
-        text = { Text("Diners (${state.participants.size})", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold) },
-        icon = { Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(16.dp)) }
-      )
-      Tab(
-        selected = state.activeTab == 2,
-        onClick = { viewModel.setTab(2) },
-        text = { Text("Settlement", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold) },
-        icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(16.dp)) }
-      )
-    }
-
-    Spacer(modifier = Modifier.height(10.dp))
-
-    // Active Tab Content
-    when (state.activeTab) {
-      0 -> ItemsAndBillTab(
-        state = state,
-        viewModel = viewModel,
-        onAddItemClick = { viewModel.setShowAddItemDialog(true) }
-      )
-      1 -> DinersAndClaimsTab(
-        state = state,
-        breakdowns = breakdowns,
-        transfers = simplifiedTransfers,
-        viewModel = viewModel,
-        onAddDinerClick = { viewModel.setShowAddParticipantDialog(true) }
-      )
-      2 -> SettlementLedgerTab(
-        state = state,
-        breakdowns = breakdowns,
-        transfers = simplifiedTransfers,
-        totalBill = totalBill,
-        viewModel = viewModel
-      )
-    }
-  }
-}
-
-@Composable
-private fun ItemsAndBillTab(
-  state: SplitBillUiState,
-  viewModel: SplitBillViewModel,
-  onAddItemClick: () -> Unit
-) {
-  val haptic = LocalHapticFeedback.current
-
-  LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    verticalArrangement = Arrangement.spacedBy(10.dp),
-    contentPadding = PaddingValues(bottom = 80.dp)
-  ) {
-    // Items Section Header
-    item {
-      Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-          text = "Dishes & Line Items (${state.items.size})",
-          style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-        )
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Text(
-            text = "Tap diner avatar to assign who ate/drank each item",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f).padding(end = 8.dp)
-          )
-          FilledTonalButton(
-            onClick = {
-              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-              onAddItemClick()
-            },
-            shape = RoundedCornerShape(10.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-          ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Add dish", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
-          }
-        }
-      }
-    }
-
-    // Empty state when no items exist
-    if (state.items.isEmpty()) {
-      item {
-        Card(
-          shape = RoundedCornerShape(16.dp),
-          colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-          ),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-          ) {
-            Icon(
-              Icons.Default.RestaurantMenu,
-              contentDescription = null,
-              modifier = Modifier.size(44.dp),
-              tint = MaterialTheme.colorScheme.primary
-            )
-            Text(
-              text = "No dishes added yet",
-              fontWeight = FontWeight.Bold,
-              fontSize = 16.sp,
-              color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-              text = "Add dishes manually or scan your receipt to claim items",
-              fontSize = 12.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              textAlign = TextAlign.Center
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-              Button(
-                onClick = onAddItemClick,
-                shape = RoundedCornerShape(10.dp)
-              ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Add Dish")
-              }
-              OutlinedButton(
-                onClick = { viewModel.setShowOcrDialog(true) },
-                shape = RoundedCornerShape(10.dp)
-              ) {
-                Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Scan Receipt")
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Itemized Line Items Cards
-    items(state.items, key = { it.id }) { item ->
-      val itemTotal = item.price * item.quantity
-      Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-              Text(
-                text = "${if (item.quantity > 1) "${item.quantity}x " else ""}${item.title}",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.5.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-              )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", itemTotal)}",
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 15.sp
-              )
-              IconButton(
-                onClick = { viewModel.removeItem(item.id) },
-                modifier = Modifier.size(28.dp).padding(start = 4.dp)
-              ) {
-                Icon(Icons.Default.Close, contentDescription = "Delete item", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-              }
-            }
-          }
-
-          val payerName = state.participants.firstOrNull {
-            it.id == item.paidByParticipantId
-          }?.name
-          if (payerName != null) {
-            Text(
-              text = "Paid by $payerName",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-
-          Spacer(modifier = Modifier.height(10.dp))
-
-          // Avatar Claim Chips: Tap to toggle claim for each person
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Text("Claimed by:", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-              TextButton(
-                onClick = { viewModel.claimItemForAll(item.id) },
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-              ) {
-                Text("All Split", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-              }
-            }
-          }
-
-          LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-          ) {
-            items(state.participants) { p ->
-              val isClaimed = item.claimedParticipantIds.contains(p.id) || item.claimedParticipantIds.isEmpty()
-              val color = try {
-                Color(android.graphics.Color.parseColor(p.avatarColorHex))
-              } catch (e: Exception) {
-                MaterialTheme.colorScheme.primary
-              }
-
-              Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (isClaimed) color.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(1.5.dp, if (isClaimed) color else MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.clickable {
-                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                  viewModel.toggleItemClaim(item.id, p.id)
-                }
-              ) {
-                Row(
-                  verticalAlignment = Alignment.CenterVertically,
-                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                  Box(
-                    modifier = Modifier
-                      .size(12.dp)
-                      .clip(CircleShape)
-                      .background(if (isClaimed) color else MaterialTheme.colorScheme.onSurfaceVariant)
-                  )
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text(
-                    text = p.name,
-                    fontSize = 11.sp,
-                    fontWeight = if (isClaimed) FontWeight.Bold else FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                  )
-                }
-              }
-            }
-
-            // Quick Add Person Chip
-            item {
-              Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
-                modifier = Modifier.clickable {
-                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                  viewModel.setShowAddParticipantDialog(true)
-                }
-              ) {
-                Row(
-                  verticalAlignment = Alignment.CenterVertically,
-                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                  Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
-                  Spacer(modifier = Modifier.width(3.dp))
-                  Text(
-                    text = "Add Person",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                  )
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun DinersAndClaimsTab(
-  state: SplitBillUiState,
-  breakdowns: List<PersonBreakdown>,
-  transfers: List<DebtTransfer>,
-  viewModel: SplitBillViewModel,
-  onAddDinerClick: () -> Unit
-) {
-  val haptic = LocalHapticFeedback.current
-
-  LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    verticalArrangement = Arrangement.spacedBy(10.dp),
-    contentPadding = PaddingValues(bottom = 80.dp)
-  ) {
-    item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Column(
-          modifier = Modifier.weight(1f).padding(end = 8.dp)
-        ) {
-          Text(
-            text = "Diners & Individual Shares",
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-            maxLines = 2
-          )
-          Text(
-            text = "Track consumed share, who paid, and net balance",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2
-          )
-        }
-
-        FilledTonalButton(
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onAddDinerClick()
-          },
-          shape = RoundedCornerShape(10.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-        ) {
-          Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("+ Diner", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-        }
-      }
-    }
-
-    // Inline Quick Add Person Input
-    item {
-      Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        var quickName by remember { mutableStateOf("") }
-        Row(
-          modifier = Modifier.fillMaxWidth().padding(10.dp),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          OutlinedTextField(
-            value = quickName,
-            onValueChange = { quickName = it },
-            placeholder = { Text("Add diner name (e.g. Rahul, Priya)...", fontSize = 12.sp) },
-            singleLine = true,
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(10.dp)
-          )
-          Button(
-            onClick = {
-              if (quickName.isNotBlank()) {
-                viewModel.addParticipant(quickName.trim(), "", "", 0.0)
-                quickName = ""
-              }
-            },
-            enabled = quickName.isNotBlank(),
-            shape = RoundedCornerShape(10.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-          ) {
-            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-          }
-        }
-      }
-    }
-
-    if (breakdowns.isNotEmpty()) {
-      item {
-        ShareDistributionChart(
-          breakdowns = breakdowns,
-          currencySymbol = state.currencySymbol
-        )
-      }
-    }
-
-    if (breakdowns.isEmpty()) {
-      item {
-        Card(
-          shape = RoundedCornerShape(16.dp),
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(
-            modifier = Modifier.fillMaxWidth().padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
-            Text("No Diners Added", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text("Type a name above or tap '+ Diner' to add people to split this bill.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-          }
-        }
-      }
-    }
-
-    items(breakdowns, key = { it.participant.id }) { b ->
-      val p = b.participant
-      var paidAmountInput by remember(p.id) {
-        mutableStateOf(amountInputText(p.paidAmount))
-      }
-      val avatarColor = try {
-        Color(android.graphics.Color.parseColor(p.avatarColorHex))
-      } catch (e: Exception) {
-        MaterialTheme.colorScheme.primary
-      }
-
-      Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-              Box(
-                modifier = Modifier
-                  .size(38.dp)
-                  .clip(CircleShape)
-                  .background(avatarColor),
-                contentAlignment = Alignment.Center
-              ) {
-                Text(
-                  text = p.name.take(1).uppercase(),
-                  color = Color.White,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 16.sp
-                )
-              }
-              Spacer(modifier = Modifier.width(10.dp))
-              Column {
-                Text(p.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
-                if (p.upiId.isNotBlank()) {
-                  Text("UPI: ${p.upiId}", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-              }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Column(horizontalAlignment = Alignment.End) {
-                Text(
-                  text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.totalToPay)}",
-                  fontWeight = FontWeight.ExtraBold,
-                  fontSize = 16.sp,
-                  color = MaterialTheme.colorScheme.primary
-                )
-                Text("Total Share", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-              }
-              Spacer(modifier = Modifier.width(6.dp))
-              IconButton(
-                onClick = {
-                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-                  viewModel.removeParticipant(p.id)
-                },
-                modifier = Modifier.size(32.dp)
-              ) {
-                Icon(
-                  Icons.Default.DeleteOutline,
-                  contentDescription = "Remove diner",
-                  tint = MaterialTheme.colorScheme.error,
-                  modifier = Modifier.size(18.dp)
-                )
-              }
-            }
-          }
-
-          Spacer(modifier = Modifier.height(10.dp))
-
-          Spacer(modifier = Modifier.height(8.dp))
-          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-          Spacer(modifier = Modifier.height(8.dp))
-
-          // Amount Paid Input (Did this person pay the restaurant?)
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-              Text(
-                text = "Paid ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.paidAmount)} of ${state.currencySymbol}${String.format(Locale.US, "%,.2f", b.totalToPay)} share",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurface
-              )
-              val outgoingTransfers = transfers.filter { it.fromParticipant.id == p.id }
-              val incomingTransfers = transfers.filter { it.toParticipant.id == p.id }
-              outgoingTransfers.forEach { transfer ->
-                Text(
-                  text = "Owes ${transfer.toParticipant.name} ${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}",
-                  fontSize = 12.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = Color(0xFFDC2626)
-                )
-              }
-              incomingTransfers.forEach { transfer ->
-                Text(
-                  text = "Gets back ${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)} from ${transfer.fromParticipant.name}",
-                  fontSize = 12.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = Color(0xFF059669)
-                )
-              }
-              if (outgoingTransfers.isEmpty() && incomingTransfers.isEmpty()) {
-                Text(
-                  text = "Settled",
-                  fontSize = 11.sp,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-              }
-            }
-
-            OutlinedTextField(
-              value = paidAmountInput,
-              onValueChange = {
-                paidAmountInput = it
-                it.toDoubleOrNull()?.let { amount -> viewModel.updateParticipantPaid(p.id, amount) }
-              },
-              label = { Text("Other paid", fontSize = 10.sp) },
-              prefix = { Text(state.currencySymbol, fontSize = 11.sp) },
-              singleLine = true,
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-              modifier = Modifier.width(115.dp)
-            )
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun ShareDistributionChart(
-  breakdowns: List<PersonBreakdown>,
-  currencySymbol: String
-) {
   val total = breakdowns.sumOf { it.totalToPay }
-  Card(
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-    modifier = Modifier.fillMaxWidth()
-  ) {
-    Column(
-      modifier = Modifier.padding(14.dp),
-      verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Text("Share distribution", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        Text(
-          text = "$currencySymbol${String.format(Locale.US, "%,.2f", total)} total",
-          fontWeight = FontWeight.Bold,
-          fontSize = 12.sp,
-          color = MaterialTheme.colorScheme.primary
-        )
+  val transfers = remember(breakdowns) { DebtSimplifier.simplifyDebts(breakdowns) }
+  val clipboard = LocalClipboardManager.current
+  var currencyMenu by remember { mutableStateOf(false) }
+  var showTripImportDialog by remember { mutableStateOf(false) }
+  var showNewGroupDialog by remember { mutableStateOf(false) }
+  var newGroupName by remember { mutableStateOf("") }
+  var groupMenuExpanded by remember { mutableStateOf(false) }
+  var selectedExpense by remember { mutableStateOf<ReceiptItem?>(null) }
+  var editingExpense by remember { mutableStateOf<ReceiptItem?>(null) }
+  var expensePendingDelete by remember { mutableStateOf<ReceiptItem?>(null) }
+  var selectedPerson by remember { mutableStateOf<Participant?>(null) }
+  var editingPerson by remember { mutableStateOf<Participant?>(null) }
+  var personPendingDelete by remember { mutableStateOf<Participant?>(null) }
+  var pendingTransfer by remember { mutableStateOf<PendingSplitTransfer?>(null) }
+  var transferPaymentSource by remember { mutableStateOf("") }
+  var transferAccountId by remember(accounts) { mutableStateOf(accounts.firstOrNull { !it.accountType.equals("Credit Card", true) }?.id) }
+  var accountMenuExpanded by remember { mutableStateOf(false) }
+
+  if (state.showAddParticipantDialog) AddParticipantDialog(
+    onDismiss = { viewModel.setShowAddParticipantDialog(false) },
+    onConfirm = { n, u, p, a -> viewModel.addParticipant(n, u, p, a); viewModel.setShowAddParticipantDialog(false) }
+  )
+  editingPerson?.let { person -> AddParticipantDialog(initialParticipant = person, onDismiss = { editingPerson = null }, onConfirm = { n, u, p, a -> viewModel.updateParticipant(person.id, n, u, p, a); editingPerson = null }) }
+  if (state.showAddItemDialog) AddReceiptItemDialog(
+    participants = state.participants, currencySymbol = state.currencySymbol, accounts = accounts,
+    onDismiss = { viewModel.setShowAddItemDialog(false) },
+    onConfirm = { t, p, q, ids, payer, source, accountId ->
+      val itemId = viewModel.addItem(t, p, q, ids, payer, source, accountId)
+      if (payer == state.participants.firstOrNull()?.id) accounts.firstOrNull { it.id == accountId }?.let { onSyncExpense("split-bill-item:$itemId", t, p * q, it) }
+      viewModel.setShowAddItemDialog(false)
+    }
+  )
+  editingExpense?.let { expense -> AddReceiptItemDialog(participants = state.participants, currencySymbol = state.currencySymbol, accounts = accounts, initialItem = expense, onDismiss = { editingExpense = null }, onConfirm = { t, p, q, ids, payer, source, accountId ->
+      viewModel.updateItem(expense.copy(title = t, price = p, quantity = q, claimedParticipantIds = ids, paidByParticipantId = payer, paymentSource = source, paymentAccountId = accountId))
+      val reference = "split-bill-item:${expense.id}"
+      if (!expense.isImportedFromFinance) {
+        if (payer == state.participants.firstOrNull()?.id) accounts.firstOrNull { it.id == accountId }?.let { onSyncExpense(reference, t, p * q, it) } else onDeleteExpense(reference)
       }
-      breakdowns.forEach { breakdown ->
-        val fraction = if (total > 0.0) {
-          (breakdown.totalToPay / total).toFloat().coerceIn(0f, 1f)
-        } else {
-          0f
-        }
-        val color = try {
-          Color(android.graphics.Color.parseColor(breakdown.participant.avatarColorHex))
-        } catch (_: IllegalArgumentException) {
-          MaterialTheme.colorScheme.primary
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Text(
-              text = breakdown.participant.name,
-              style = MaterialTheme.typography.labelMedium,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-              modifier = Modifier.weight(1f)
-            )
-            Text(
-              text = "$currencySymbol${String.format(Locale.US, "%,.2f", breakdown.totalToPay)}  ${String.format(Locale.US, "%.1f", fraction * 100)}%",
-              style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-              color = MaterialTheme.colorScheme.onSurface
-            )
+      editingExpense = null
+    }) }
+  selectedExpense?.let { item -> AlertDialog(onDismissRequest = { selectedExpense = null }, title = { Text(item.title, fontWeight = FontWeight.Bold) }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Amount: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", item.price * item.quantity)}"); Text("Quantity: ${item.quantity}"); Text("Paid by: ${state.participants.firstOrNull { it.id == item.paidByParticipantId }?.name ?: "Not specified"}"); Text("Payment source: ${item.paymentSource}"); Text("Shared with: ${state.participants.filter { it.id in item.claimedParticipantIds }.joinToString { it.name }.ifBlank { "Everyone" }}") } }, confirmButton = { TextButton(onClick = { selectedExpense = null; editingExpense = item }) { Text("Edit") } }, dismissButton = { Row { TextButton(onClick = { selectedExpense = null; expensePendingDelete = item }) { Text("Delete", color = MaterialTheme.colorScheme.error) }; TextButton(onClick = { selectedExpense = null }) { Text("Close") } } } ) }
+  expensePendingDelete?.let { item -> AlertDialog(onDismissRequest = { expensePendingDelete = null }, title = { Text("Delete transaction?") }, text = { Text("Are you sure you want to delete '${item.title}'? This cannot be undone.") }, confirmButton = { TextButton(onClick = { if (!item.isImportedFromFinance) onDeleteExpense("split-bill-item:${item.id}"); viewModel.removeItem(item.id); expensePendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { expensePendingDelete = null }) { Text("Cancel") } }) }
+  selectedPerson?.let { person -> AlertDialog(onDismissRequest = { selectedPerson = null }, title = { Text(person.name, fontWeight = FontWeight.Bold) }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("UPI: ${person.upiId.ifBlank { "Not added" }}"); Text("PayPal: ${person.paypalUsername.ifBlank { "Not added" }}"); Text("Amount paid: ${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.paidAmount)}") } }, confirmButton = { TextButton(onClick = { selectedPerson = null; editingPerson = person }) { Text("Edit") } }, dismissButton = { Row { if (person.id != state.participants.firstOrNull()?.id && state.participants.size > 1) TextButton(onClick = { selectedPerson = null; personPendingDelete = person }) { Text("Delete", color = MaterialTheme.colorScheme.error) }; TextButton(onClick = { selectedPerson = null }) { Text("Close") } } }) }
+  personPendingDelete?.let { person -> AlertDialog(onDismissRequest = { personPendingDelete = null }, title = { Text("Delete person?") }, text = { Text("Remove ${person.name} from this bill? Their expense shares will also be updated.") }, confirmButton = { TextButton(onClick = { viewModel.removeParticipant(person.id); personPendingDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { personPendingDelete = null }) { Text("Cancel") } }) }
+  pendingTransfer?.let { transfer ->
+    val currentUserId = state.participants.firstOrNull()?.id
+    val receiving = transfer.toId == currentUserId
+    val selectedAccount = accounts.firstOrNull { it.id == transferAccountId }
+    AlertDialog(
+      onDismissRequest = { pendingTransfer = null },
+      title = { Text(if (receiving) "Confirm money received" else "Confirm payment") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text(if (receiving) "Choose the bank or cash account where this repayment was received. It will be added as Finance income." else "Choose the bank or cash account used for this payment. It will be recorded as a Finance expense.")
+          Box {
+            OutlinedButton(onClick = { accountMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+              Text(selectedAccount?.let { "${it.bankName} • ${it.accountType}" } ?: "Choose bank / cash account", modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+              Icon(Icons.Default.ExpandMore, null)
+            }
+            DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { accountMenuExpanded = false }) {
+              accounts.filterNot { it.accountType.equals("Credit Card", true) }.forEach { account ->
+                DropdownMenuItem(text = { Text("${account.bankName} • ${account.accountType}") }, onClick = { transferAccountId = account.id; transferPaymentSource = account.bankName; accountMenuExpanded = false })
+              }
+            }
           }
-          Box(
-            modifier = Modifier
-              .fillMaxWidth()
-              .height(8.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.surface)
-          ) {
-            Box(
-              modifier = Modifier
-                .fillMaxWidth(fraction)
-                .fillMaxHeight()
-                .background(color)
-            )
+          if (accounts.none { !it.accountType.equals("Credit Card", true) }) {
+            Text("Add a bank or cash account in Finance before recording this settlement.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
           }
+        }
+      },
+      confirmButton = {
+        Button(enabled = selectedAccount != null, onClick = {
+          val account = selectedAccount ?: return@Button
+          val title = if (receiving) "Split Bill repayment from ${state.participants.firstOrNull { it.id == transfer.fromId }?.name ?: "friend"}" else "Split Bill payment to ${state.participants.firstOrNull { it.id == transfer.toId }?.name ?: "friend"}"
+          onRecordSettlement(receiving, transfer.amount, account, title, "Split Bill settlement ${transfer.key}")
+          viewModel.toggleSettledTransfer(transfer.key, account.bankName, "Split Bill settlement ${transfer.key}")
+          pendingTransfer = null
+        }) { Text(if (receiving) "Record received" else "Record payment") }
+      },
+      dismissButton = { TextButton(onClick = { pendingTransfer = null }) { Text("Cancel") } }
+    )
+  }
+
+  if (showTripImportDialog) {
+    AlertDialog(
+      onDismissRequest = { showTripImportDialog = false },
+      title = { Text("Import trip expenses") },
+      text = {
+        Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("Existing trip expenses will be added to this split without creating duplicate Finance transactions. All people are selected by default; you can edit each item afterward.")
+          trips.forEach { trip ->
+            val count = tripExpenses.count { it.tripId == trip.id }
+            OutlinedButton(
+              onClick = {
+                viewModel.importTripExpenses(tripExpenses.filter { it.tripId == trip.id })
+                showTripImportDialog = false
+              },
+              modifier = Modifier.fillMaxWidth(),
+              enabled = count > 0
+            ) {
+              Column(Modifier.fillMaxWidth()) {
+                Text(trip.tripName, fontWeight = FontWeight.SemiBold)
+                Text("$count existing expenses", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+            }
+          }
+          if (trips.isEmpty()) Text("No trips found in Trip Manager.")
+        }
+      },
+      confirmButton = { TextButton(onClick = { showTripImportDialog = false }) { Text("Close") } }
+    )
+  }
+
+
+  if (showNewGroupDialog) AlertDialog(
+    onDismissRequest = { showNewGroupDialog = false },
+    title = { Text("Create a new split") },
+    text = { OutlinedTextField(value = newGroupName, onValueChange = { newGroupName = it }, label = { Text("Group name") }, placeholder = { Text("e.g. Family Trip") }, singleLine = true) },
+    confirmButton = { Button(onClick = { viewModel.createNewGroup(newGroupName); newGroupName = ""; showNewGroupDialog = false }) { Text("Create split") } },
+    dismissButton = { TextButton(onClick = { showNewGroupDialog = false; newGroupName = "" }) { Text("Cancel") } }
+  )
+
+  if (state.showOcrDialog) OcrScannerBottomSheet(
+    onDismiss = { viewModel.setShowOcrDialog(false) },
+    onApplyReceipt = { viewModel.applyParsedReceipt(it.copy(tax = 0.0, tip = 0.0, discount = 0.0)) },
+    onLoadDemo = { text, title -> viewModel.loadDemo(text, title) }
+  )
+
+  Column(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      Column(Modifier.weight(1f)) {
+        Text("Split Bill", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Box {
+          TextButton(onClick = { groupMenuExpanded = true }, contentPadding = PaddingValues(0.dp)) {
+            Text(state.billTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.ExpandMore, null, modifier = Modifier.size(16.dp))
+          }
+          DropdownMenu(expanded = groupMenuExpanded, onDismissRequest = { groupMenuExpanded = false }) {
+            state.groups.forEach { group ->
+              DropdownMenuItem(text = { Text(group.name) }, onClick = { viewModel.selectGroup(group.id); groupMenuExpanded = false })
+            }
+          }
+        }
+      }
+      FilledTonalButton(onClick = { newGroupName = ""; showNewGroupDialog = true }) {
+        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+        Text("New split", fontSize = 11.sp)
+      }
+      if (trips.isNotEmpty()) {
+        TextButton(onClick = { showTripImportDialog = true }) {
+          Icon(Icons.Default.FlightTakeoff, null, modifier = Modifier.size(16.dp))
+          Spacer(Modifier.width(3.dp))
+          Text("Import trip", fontSize = 11.sp)
+        }
+      }
+      Box {
+        FilledTonalButton(onClick = { currencyMenu = true }) { Text("${state.currencyCode} ${state.currencySymbol}"); Icon(Icons.Default.ExpandMore, null) }
+        DropdownMenu(currencyMenu, { currencyMenu = false }) {
+          listOf("INR" to "₹", "USD" to "$", "EUR" to "€", "GBP" to "£", "AED" to "د.إ").forEach { (c, s) ->
+            DropdownMenuItem(text = { Text("$c ($s)") }, onClick = { viewModel.setCurrency(c, s); currencyMenu = false })
+          }
+        }
+      }
+    }
+    Spacer(Modifier.height(14.dp))
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)) {
+      Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("TOTAL BILL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f))
+        Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", total)}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimary)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          SummaryMetric("PEOPLE", state.participants.size.toString(), MaterialTheme.colorScheme.onPrimary)
+          SummaryMetric("EXPENSES", state.items.size.toString(), MaterialTheme.colorScheme.onPrimary)
+          SummaryMetric("PAID", "${state.currencySymbol}${String.format(Locale.US, "%,.2f", breakdowns.sumOf { it.paidAmount })}", MaterialTheme.colorScheme.onPrimary)
+        }
+      }
+    }
+    Spacer(Modifier.height(14.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+      listOf("Expenses", "People", "Settle").forEachIndexed { i, label ->
+        val selected = state.activeTab == i
+        Surface(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { viewModel.setTab(i) }, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp)) {
+          Text(label, Modifier.padding(vertical = 12.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+    }
+    Spacer(Modifier.height(12.dp))
+    when (state.activeTab) {
+      0 -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
+        item {
+          Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column { Text("Your expenses", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Add what the group spent", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            FilledTonalButton(onClick = { viewModel.setShowAddItemDialog(true) }) { Icon(Icons.Default.Add, null); Text("Add") }
+          }
+        }
+        if (state.items.isEmpty()) item { EmptySplitCard(Icons.AutoMirrored.Filled.ReceiptLong, "No expenses yet", "Add the first expense to start splitting the bill.", "Add expense") { viewModel.setShowAddItemDialog(true) } }
+        items(state.items, key = { it.id }) { item ->
+          val payer = state.participants.firstOrNull { it.id == item.paidByParticipantId }?.name ?: "Not specified"
+          val names = state.participants.filter { it.id in item.claimedParticipantIds }.joinToString { it.name }.ifBlank { state.participants.joinToString { it.name } }
+          Card(Modifier.fillMaxWidth().clickable { selectedExpense = item }, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))) {
+            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+              Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) { Icon(Icons.Default.ReceiptLong, null, Modifier.padding(11.dp)) }
+              Spacer(Modifier.width(12.dp))
+              Column(Modifier.weight(1f)) {
+                Text(item.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Paid by $payer · ${item.paymentSource}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Shared: $names", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+              }
+              Column(horizontalAlignment = Alignment.End) {
+                Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", item.price * item.quantity)}", fontWeight = FontWeight.Bold)
+                Text("View details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+              }
+            }
+          }
+        }
+        item { OutlinedButton(onClick = { viewModel.setShowOcrDialog(true) }, Modifier.fillMaxWidth()) { Icon(Icons.Default.DocumentScanner, null); Spacer(Modifier.width(8.dp)); Text("Scan or import receipt") } }
+      }
+      1 -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
+        item {
+          Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column { Text("Group members", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Manage who shares this bill", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            FilledTonalButton(onClick = { viewModel.setShowAddParticipantDialog(true) }) { Icon(Icons.Default.PersonAdd, null); Text("Add") }
+          }
+        }
+        items(breakdowns, key = { it.participant.id }) { person ->
+          Card(Modifier.fillMaxWidth().clickable { selectedPerson = person.participant }, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))) {
+            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+              val avatar = runCatching { Color(android.graphics.Color.parseColor(person.participant.avatarColorHex)) }.getOrDefault(MaterialTheme.colorScheme.primary)
+              Surface(shape = CircleShape, color = avatar.copy(alpha = .16f)) { Text(person.participant.name.take(1).uppercase(), Modifier.padding(13.dp), color = avatar, fontWeight = FontWeight.Bold) }
+              Spacer(Modifier.width(12.dp))
+              Column(Modifier.weight(1f)) { Text(person.participant.name, fontWeight = FontWeight.SemiBold); Text("Paid ${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.paidAmount)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+              Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.totalToPay)}", fontWeight = FontWeight.Bold); Text("Your share", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+          }
+        }
+      }
+      else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
+        item { Text("Settlement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("See who needs to pay whom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (transfers.isEmpty()) item { EmptySplitCard(Icons.Default.CheckCircle, "All settled", if (total <= 0.0) "Add expenses to calculate balances." else "There are no outstanding payments.", "Copy summary") {
+          val lines = breakdowns.joinToString("\n") { "${it.participant.name}: ${state.currencySymbol}${String.format(Locale.US, "%.2f", it.totalToPay)}" }
+          clipboard.setText(AnnotatedString("Split Bill\nTotal: ${state.currencySymbol}${String.format(Locale.US, "%.2f", total)}\n$lines"))
+        } }
+        items(transfers) { transfer ->
+          val key = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
+          val settled = key in state.settledTransferKeys
+          Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+              Column(Modifier.weight(1f)) { Text(transfer.fromParticipant.name, fontWeight = FontWeight.SemiBold); Text("pays ${transfer.toParticipant.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+              Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}", fontWeight = FontWeight.Bold); TextButton(onClick = { if (settled) { state.settledPaymentReferences[key]?.let(onUndoSettlement); viewModel.toggleSettledTransfer(key) } else { transferPaymentSource = ""; pendingTransfer = PendingSplitTransfer(key, transfer.fromParticipant.id, transfer.toParticipant.id, transfer.amount) } }) { Text(if (settled) "Undo" else "Mark paid") }; state.settledPaymentSources[key]?.takeIf { settled }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+            }
+          }
+        }
+        item {
+          OutlinedButton(onClick = {
+            val lines = breakdowns.joinToString("\n") { "${it.participant.name}: ${state.currencySymbol}${String.format(Locale.US, "%.2f", it.totalToPay)}" }
+            clipboard.setText(AnnotatedString("Split Bill - ${state.billTitle}\nTotal: ${state.currencySymbol}${String.format(Locale.US, "%.2f", total)}\n$lines"))
+          }, Modifier.fillMaxWidth()) { Icon(Icons.AutoMirrored.Filled.Send, null); Spacer(Modifier.width(8.dp)); Text("Copy split summary") }
         }
       }
     }
   }
 }
 
-private fun amountInputText(amount: Double): String =
-  if (amount <= 0.0 || !amount.isFinite()) "" else amount.toString().removeSuffix(".0")
+private data class PendingSplitTransfer(val key: String, val fromId: String, val toId: String, val amount: Double)
 
 @Composable
-private fun SettlementLedgerTab(
-  state: SplitBillUiState,
-  breakdowns: List<PersonBreakdown>,
-  transfers: List<DebtTransfer>,
-  totalBill: Double,
-  viewModel: SplitBillViewModel
-) {
-  val context = LocalContext.current
-  val haptic = LocalHapticFeedback.current
+private fun SummaryMetric(label: String, value: String, contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer) {
+  Column { Text(label, style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = .78f)); Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = contentColor) }
+}
 
-  LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-    contentPadding = PaddingValues(bottom = 80.dp)
-  ) {
-    // Debt Simplification Toggle Banner
-    item {
-      Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(14.dp),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.Route, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-              Text("Simplify Debts (Graph Minimization)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-              Text("Minimizes total number of payments across group", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-          }
-          Switch(
-            checked = state.simplifyDebtsEnabled,
-            onCheckedChange = { viewModel.toggleSimplifyDebts() }
-          )
-        }
-      }
-    }
-
-    // Settlement Actions Header
-    item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Text("Who Owes Whom (${transfers.size} transactions)", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
-
-        // WhatsApp Share Button
-        FilledTonalButton(
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-            PaymentDeepLinkHelper.shareBreakdown(
-              context = context,
-              billTitle = state.billTitle,
-              currencySymbol = state.currencySymbol,
-              grandTotal = totalBill,
-              breakdowns = breakdowns,
-              transfers = transfers
-            )
-          },
-          shape = RoundedCornerShape(10.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-          colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = Color(0xFF25D366).copy(alpha = 0.15f),
-            contentColor = Color(0xFF15803D)
-          )
-        ) {
-          Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(15.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("Share WhatsApp", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-        }
-      }
-    }
-
-    if (transfers.isEmpty()) {
-      item {
-        Card(
-          shape = RoundedCornerShape(16.dp),
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-          ) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(36.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("All Debts Settled!", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            Text("Everyone has paid their exact share or no debts remain.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          }
-        }
-      }
-    } else {
-      items(transfers) { transfer ->
-        val transferKey = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
-        val isSettled = state.settledTransferKeys.contains(transferKey)
-
-        Card(
-          shape = RoundedCornerShape(16.dp),
-          colors = CardDefaults.cardColors(
-            containerColor = if (isSettled) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface
-          ),
-          border = if (isSettled) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Text(transfer.fromParticipant.name, fontWeight = FontWeight.Bold, fontSize = 14.5.sp, color = MaterialTheme.colorScheme.onSurface)
-                  Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(14.dp).padding(horizontal = 4.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                  Text(transfer.toParticipant.name, fontWeight = FontWeight.Bold, fontSize = 14.5.sp, color = MaterialTheme.colorScheme.onSurface)
-                }
-                if (transfer.toParticipant.upiId.isNotBlank()) {
-                  Text("UPI: ${transfer.toParticipant.upiId}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-              }
-
-              Text(
-                text = "${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = if (isSettled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
-              )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Action Buttons: Pay UPI | PayPal | Nudge | Mark Settled
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(6.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              // Direct UPI Deep Link
-              if (transfer.toParticipant.upiId.isNotBlank()) {
-                FilledTonalButton(
-                  onClick = {
-                    PaymentDeepLinkHelper.launchUpiPayment(
-                      context = context,
-                      upiId = transfer.toParticipant.upiId,
-                      payeeName = transfer.toParticipant.name,
-                      amount = transfer.amount,
-                      currency = state.currencyCode,
-                      note = "OmniCalc: ${state.billTitle}"
-                    )
-                  },
-                  shape = RoundedCornerShape(10.dp),
-                  contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                  modifier = Modifier.weight(1f)
-                ) {
-                  Text("Pay UPI", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-              }
-
-              // PayPal Deep Link
-              if (transfer.toParticipant.paypalUsername.isNotBlank()) {
-                FilledTonalButton(
-                  onClick = {
-                    PaymentDeepLinkHelper.launchPayPal(
-                      context = context,
-                      paypalUsername = transfer.toParticipant.paypalUsername,
-                      amount = transfer.amount
-                    )
-                  },
-                  shape = RoundedCornerShape(10.dp),
-                  contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                  modifier = Modifier.weight(1f)
-                ) {
-                  Text("PayPal", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-              }
-
-              // Nudge Reminder
-              OutlinedButton(
-                onClick = {
-                  PaymentDeepLinkHelper.sendNudgeReminder(
-                    context = context,
-                    debtorName = transfer.fromParticipant.name,
-                    creditorName = transfer.toParticipant.name,
-                    amount = transfer.amount,
-                    currencySymbol = state.currencySymbol,
-                    billTitle = state.billTitle,
-                    creditorUpiId = transfer.toParticipant.upiId
-                  )
-                },
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-              ) {
-                Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(3.dp))
-                Text("Nudge", fontSize = 10.5.sp)
-              }
-
-              Spacer(modifier = Modifier.weight(1f))
-
-              // Prominent Mark Settled Button
-              Button(
-                onClick = {
-                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-                  viewModel.toggleSettledTransfer(transferKey)
-                },
-                colors = ButtonDefaults.buttonColors(
-                  containerColor = if (isSettled) Color(0xFF10B981) else MaterialTheme.colorScheme.primaryContainer,
-                  contentColor = if (isSettled) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
-                ),
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-              ) {
-                Icon(
-                  if (isSettled) Icons.Default.CheckCircle else Icons.Default.Check,
-                  contentDescription = null,
-                  modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                  text = if (isSettled) "Settled ✓" else "Settle",
-                  fontSize = 11.5.sp,
-                  fontWeight = FontWeight.Bold
-                )
-              }
-            }
-          }
-        }
-      }
+@Composable
+private fun EmptySplitCard(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, action: String, onAction: () -> Unit) {
+  Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .4f))) {
+    Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Icon(icon, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
+      Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+      Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+      Button(onClick = onAction) { Text(action) }
     }
   }
 }
@@ -1156,7 +365,7 @@ private fun OcrScannerBottomSheet(
   ) { uri: Uri? ->
     if (uri != null) {
       // Simulate multimodal OCR extraction from image uri
-      Toast.makeText(context, "Receipt captured! Parsing line items & taxes...", Toast.LENGTH_SHORT).show()
+      Toast.makeText(context, "Receipt captured! Reading expense items...", Toast.LENGTH_SHORT).show()
       onLoadDemo(ReceiptOcrParser.demoReceiptBistro, "Bistro Dinner (Scanned)")
       onDismiss()
     }
@@ -1176,8 +385,8 @@ private fun OcrScannerBottomSheet(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Column {
-          Text("AI Receipt Scanner & OCR", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-          Text("Automatically extract items, prices, discounts & taxes", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("Receipt scanner", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+          Text("Extract expense names and prices from a receipt", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         IconButton(onClick = onDismiss) {
           Icon(Icons.Default.Close, contentDescription = "Close")
@@ -1276,17 +485,18 @@ private fun OcrScannerBottomSheet(
 
 @Composable
 private fun AddParticipantDialog(
+  initialParticipant: Participant? = null,
   onDismiss: () -> Unit,
   onConfirm: (name: String, upi: String, paypal: String, paid: Double) -> Unit
 ) {
-  var name by remember { mutableStateOf("") }
-  var upi by remember { mutableStateOf("") }
-  var paypal by remember { mutableStateOf("") }
-  var paidStr by remember { mutableStateOf("") }
+  var name by remember(initialParticipant) { mutableStateOf(initialParticipant?.name ?: "") }
+  var upi by remember(initialParticipant) { mutableStateOf(initialParticipant?.upiId ?: "") }
+  var paypal by remember(initialParticipant) { mutableStateOf(initialParticipant?.paypalUsername ?: "") }
+  var paidStr by remember(initialParticipant) { mutableStateOf(initialParticipant?.paidAmount?.takeIf { it > 0 }?.toString() ?: "") }
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Add Participant / Diner") },
+    title = { Text(if (initialParticipant == null) "Add Participant / Diner" else "Edit Person") },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -1324,7 +534,7 @@ private fun AddParticipantDialog(
     },
     confirmButton = {
       Button(onClick = { onConfirm(name, upi, paypal, paidStr.toDoubleOrNull() ?: 0.0) }) {
-        Text("Add Diner")
+        Text(if (initialParticipant == null) "Add Diner" else "Save changes")
       }
     },
     dismissButton = {
@@ -1337,26 +547,25 @@ private fun AddParticipantDialog(
 private fun AddReceiptItemDialog(
   participants: List<Participant>,
   currencySymbol: String,
+  accounts: List<BankAccount>,
+  initialItem: ReceiptItem? = null,
   onDismiss: () -> Unit,
-  onConfirm: (
-    title: String,
-    price: Double,
-    qty: Int,
-    claimedIds: List<String>,
-    paidByParticipantId: String?
-  ) -> Unit
+  onConfirm: (title: String, price: Double, qty: Int, claimedIds: List<String>, paidByParticipantId: String?, paymentSource: String, paymentAccountId: Long?) -> Unit
 ) {
-  var title by remember { mutableStateOf("") }
-  var priceStr by remember { mutableStateOf("") }
-  var qtyStr by remember { mutableStateOf("1") }
-  var selectedParticipantIds by remember(participants) { mutableStateOf(participants.map { it.id }) }
-  var selectedPayerId by remember { mutableStateOf(participants.firstOrNull()?.id) }
+  var title by remember(initialItem) { mutableStateOf(initialItem?.title ?: "") }
+  var priceStr by remember(initialItem) { mutableStateOf(initialItem?.price?.toString() ?: "") }
+  var qtyStr by remember(initialItem) { mutableStateOf(initialItem?.quantity?.toString() ?: "1") }
+  var paymentSource by remember(initialItem, accounts) { mutableStateOf(initialItem?.paymentSource ?: accounts.firstOrNull { it.id == initialItem?.paymentAccountId }?.bankName ?: "Choose account") }
+  var selectedPaymentAccountId by remember(initialItem, accounts) { mutableStateOf(initialItem?.paymentAccountId ?: accounts.firstOrNull { !it.accountType.equals("Credit Card", true) }?.id) }
+  var paymentSourceExpanded by remember { mutableStateOf(false) }
+  var selectedParticipantIds by remember(participants, initialItem) { mutableStateOf(initialItem?.claimedParticipantIds?.ifEmpty { participants.map { it.id } } ?: participants.map { it.id }) }
+  var selectedPayerId by remember(initialItem, participants) { mutableStateOf(initialItem?.paidByParticipantId ?: participants.firstOrNull()?.id) }
   var payerMenuExpanded by remember { mutableStateOf(false) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
     shape = RoundedCornerShape(20.dp),
-    title = { Text("Add Dish / Expense", fontWeight = FontWeight.Bold) },
+    title = { Text(if (initialItem == null) "Add Dish / Expense" else "Edit Dish / Expense", fontWeight = FontWeight.Bold) },
     text = {
       Column(
         modifier = Modifier
@@ -1370,6 +579,7 @@ private fun AddReceiptItemDialog(
           onValueChange = { title = it },
           label = { Text("Dish / Item Name") },
           placeholder = { Text("e.g. Biryani, Drinks, Pizza") },
+          readOnly = initialItem?.isImportedFromFinance == true,
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
@@ -1380,6 +590,7 @@ private fun AddReceiptItemDialog(
             onValueChange = { priceStr = it },
             label = { Text("Price ($currencySymbol)") },
             placeholder = { Text("0.00") },
+            readOnly = initialItem?.isImportedFromFinance == true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
             modifier = Modifier.weight(1f)
@@ -1388,6 +599,7 @@ private fun AddReceiptItemDialog(
             value = qtyStr,
             onValueChange = { qtyStr = it },
             label = { Text("Qty") },
+            readOnly = initialItem?.isImportedFromFinance == true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
             modifier = Modifier.weight(0.5f)
@@ -1404,6 +616,7 @@ private fun AddReceiptItemDialog(
         Box(modifier = Modifier.fillMaxWidth()) {
           OutlinedButton(
             onClick = { payerMenuExpanded = true },
+            enabled = initialItem?.isImportedFromFinance != true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp)
           ) {
@@ -1428,6 +641,27 @@ private fun AddReceiptItemDialog(
                 }
               )
             }
+          }
+        }
+
+        if (selectedPayerId == participants.firstOrNull()?.id) {
+          Text("Payment source", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+          Box(Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { paymentSourceExpanded = true }, enabled = initialItem?.isImportedFromFinance != true, modifier = Modifier.fillMaxWidth()) {
+              Text(paymentSource, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+              Icon(Icons.Default.ArrowDropDown, null)
+            }
+            DropdownMenu(expanded = paymentSourceExpanded, onDismissRequest = { paymentSourceExpanded = false }) {
+              accounts.filterNot { it.accountType.equals("Credit Card", true) }.forEach { account ->
+                DropdownMenuItem(
+                  text = { Text("${account.bankName} • ${account.accountType}") },
+                  onClick = { selectedPaymentAccountId = account.id; paymentSource = account.bankName; paymentSourceExpanded = false }
+                )
+              }
+            }
+          }
+          if (accounts.none { !it.accountType.equals("Credit Card", true) }) {
+            Text("Add a bank or cash account in Finance before saving an expense paid by you.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
           }
         }
 
@@ -1496,12 +730,12 @@ private fun AddReceiptItemDialog(
       Button(
         onClick = {
           val qty = qtyStr.toIntOrNull() ?: 1
-          onConfirm(title.trim(), parsedPrice, qty, selectedParticipantIds, selectedPayerId)
+          onConfirm(title.trim(), parsedPrice, qty, selectedParticipantIds, selectedPayerId, paymentSource, if (selectedPayerId == participants.firstOrNull()?.id) selectedPaymentAccountId else null)
         },
-        enabled = canAdd,
+        enabled = canAdd && (selectedPayerId != participants.firstOrNull()?.id || accounts.any { it.id == selectedPaymentAccountId && !it.accountType.equals("Credit Card", true) }),
         shape = RoundedCornerShape(10.dp)
       ) {
-        Text("Add Dish")
+        Text(if (initialItem == null) "Add Dish" else "Save changes")
       }
     },
     dismissButton = {

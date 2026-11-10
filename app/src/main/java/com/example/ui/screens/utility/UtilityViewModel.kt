@@ -241,6 +241,23 @@ class UtilityViewModel : ViewModel() {
     _uiState.update { it.copy(toastMessage = null) }
   }
 
+  fun restoreFromRecord(record: CalculationRecord) {
+    fun value(key: String, fallback: String = "") = record.detailsText.lineSequence().firstOrNull { it.startsWith("$key:") }?.substringAfter(":")?.trim() ?: fallback
+    when (record.category.uppercase()) {
+      "CURRENCY" -> { _uiState.update { it.copy(selectedTab = UtilityTab.CURRENCY, currencyBaseCode = value("Input Currency Base", it.currencyBaseCode), currencyTargetCode = value("Input Currency Target", it.currencyTargetCode)) }; updateCurrencyAmount(value("Input Currency Amount", _uiState.value.currencyAmountInput)) }
+      "UNIT" -> {
+        val category = runCatching { UnitConverter.Category.valueOf(value("Input Unit Category", "LENGTH")) }.getOrDefault(UnitConverter.Category.LENGTH)
+        val units = when (category) { UnitConverter.Category.LENGTH -> UnitConverter.lengthUnits; UnitConverter.Category.WEIGHT -> UnitConverter.weightUnits; UnitConverter.Category.TEMPERATURE -> UnitConverter.temperatureUnits; UnitConverter.Category.CURRENCY -> UnitConverter.currencyUnits }
+        val from = units.firstOrNull { it.name == value("Input From Unit") } ?: units.first()
+        val to = units.firstOrNull { it.name == value("Input To Unit") } ?: units.getOrElse(1) { units.first() }
+        _uiState.update { it.copy(selectedTab = UtilityTab.UNIT_CONVERTER, unitCategory = category, fromUnit = from, toUnit = to) }
+        updateUnitInput(value("Input Unit Amount", _uiState.value.unitInput))
+      }
+      "TIP" -> { _uiState.update { it.copy(selectedTab = UtilityTab.TIP_SPLIT) }; updateBillAmount(value("Input Bill Amount", _uiState.value.billAmount)); updateTipPercent(value("Input Tip Percent", _uiState.value.tipPercent.toString()).toDoubleOrNull() ?: 0.0); updateNumPersons(value("Input Persons", _uiState.value.numPersons.toString()).toIntOrNull() ?: 1) }
+      "GST" -> { _uiState.update { it.copy(selectedTab = UtilityTab.GST_TAX) }; updateGstAmount(value("Input GST Amount", _uiState.value.gstAmount)); updateGstRate(value("Input GST Rate", _uiState.value.gstRate.toString()).toDoubleOrNull() ?: 18.0); updateGstExclusive(value("Input GST Exclusive", _uiState.value.gstIsExclusive.toString()).toBoolean()) }
+    }
+  }
+
   fun saveCalculation(context: Context) {
     val state = _uiState.value
     viewModelScope.launch {
@@ -289,7 +306,12 @@ class UtilityViewModel : ViewModel() {
           )
         }
       }
-      db.calculationHistoryDao().insert(record)
+      val savedRecord = record.copy(detailsText = record.detailsText +
+        "\nInput Currency Base: ${state.currencyBaseCode}\nInput Currency Target: ${state.currencyTargetCode}\nInput Currency Amount: ${state.currencyAmountInput}" +
+        "\nInput Unit Category: ${state.unitCategory.name}\nInput From Unit: ${state.fromUnit.name}\nInput To Unit: ${state.toUnit.name}\nInput Unit Amount: ${state.unitInput}" +
+        "\nInput Bill Amount: ${state.billAmount}\nInput Tip Percent: ${state.tipPercent}\nInput Persons: ${state.numPersons}" +
+        "\nInput GST Amount: ${state.gstAmount}\nInput GST Rate: ${state.gstRate}\nInput GST Exclusive: ${state.gstIsExclusive}")
+      db.calculationHistoryDao().insert(savedRecord)
       _uiState.update { it.copy(toastMessage = "${state.selectedTab.title} saved to history!") }
     }
   }

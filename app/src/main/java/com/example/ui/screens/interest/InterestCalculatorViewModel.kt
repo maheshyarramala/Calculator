@@ -135,6 +135,19 @@ class InterestCalculatorViewModel : ViewModel() {
     _uiState.update { it.copy(toastMessage = null) }
   }
 
+  fun restoreFromRecord(record: CalculationRecord) {
+    fun value(key: String, fallback: String = "") = record.detailsText.lineSequence().firstOrNull { it.startsWith("$key:") }?.substringAfter(":")?.trim() ?: fallback
+    val method = runCatching { InterestMethod.valueOf(value("Input Method", "SIMPLE")) }.getOrDefault(InterestMethod.SIMPLE)
+    selectMethod(method)
+    when (method) {
+      InterestMethod.SIMPLE -> updateSi(value("Input SI Principal", _uiState.value.siPrincipal), value("Input SI Rate", _uiState.value.siRate), value("Input SI Time", _uiState.value.siTime), runCatching { InterestCalculator.TimeUnit.valueOf(value("Input SI Unit", "YEARS")) }.getOrDefault(InterestCalculator.TimeUnit.YEARS))
+      InterestMethod.COMPOUND -> updateCi(value("Input CI Principal", _uiState.value.ciPrincipal), value("Input CI Rate", _uiState.value.ciRate), value("Input CI Years", _uiState.value.ciYears), runCatching { InterestCalculator.CompoundingFrequency.valueOf(value("Input CI Frequency", "ANNUALLY")) }.getOrDefault(InterestCalculator.CompoundingFrequency.ANNUALLY))
+      InterestMethod.DOUBLING -> updateDoubling(value("Input Doubling Rate", _uiState.value.doublingRate))
+      InterestMethod.EAR -> updateEar(value("Input EAR Rate", _uiState.value.earNominalRate), runCatching { InterestCalculator.CompoundingFrequency.valueOf(value("Input EAR Frequency", "MONTHLY")) }.getOrDefault(InterestCalculator.CompoundingFrequency.MONTHLY))
+      InterestMethod.FLAT_VS_REDUCING -> updateFlatVsReducing(value("Input Flat Principal", _uiState.value.flatPrincipal), value("Input Flat Tenure", _uiState.value.flatTenureMonths), value("Input Flat Rate", _uiState.value.flatRate))
+    }
+  }
+
   fun saveCalculation(context: Context) {
     val state = _uiState.value
     viewModelScope.launch {
@@ -191,7 +204,13 @@ class InterestCalculatorViewModel : ViewModel() {
           )
         }
       }
-      db.calculationHistoryDao().insert(record)
+      val savedRecord = record.copy(detailsText = record.detailsText +
+        "\nInput Method: ${state.selectedMethod.name}" +
+        "\nInput SI Principal: ${state.siPrincipal}\nInput SI Rate: ${state.siRate}\nInput SI Time: ${state.siTime}\nInput SI Unit: ${state.siTimeUnit.name}" +
+        "\nInput CI Principal: ${state.ciPrincipal}\nInput CI Rate: ${state.ciRate}\nInput CI Years: ${state.ciYears}\nInput CI Frequency: ${state.ciFrequency.name}" +
+        "\nInput Doubling Rate: ${state.doublingRate}\nInput EAR Rate: ${state.earNominalRate}\nInput EAR Frequency: ${state.earFrequency.name}" +
+        "\nInput Flat Principal: ${state.flatPrincipal}\nInput Flat Tenure: ${state.flatTenureMonths}\nInput Flat Rate: ${state.flatRate}")
+      db.calculationHistoryDao().insert(savedRecord)
       _uiState.update { it.copy(toastMessage = "Interest calculation saved to history!") }
     }
   }

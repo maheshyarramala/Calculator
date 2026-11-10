@@ -51,6 +51,7 @@ fun LoanTrackerScreen(
 ) {
   val state by viewModel.uiState.collectAsState()
   val userMessage by viewModel.userMessage.collectAsState()
+  val paymentHistory by viewModel.paymentHistory.collectAsState()
   val snackbarHostState = remember { SnackbarHostState() }
   var loanPendingEmiPayment by remember { mutableStateOf<LoanRecord?>(null) }
 
@@ -286,6 +287,7 @@ fun LoanTrackerScreen(
     LoanDetailDialog(
       loan = loan,
       bankAccounts = state.bankAccounts,
+      paymentHistory = paymentHistory,
       onDismiss = { viewModel.selectLoanForDetail(null) },
       onEdit = {
         val target = loan
@@ -870,6 +872,7 @@ private fun LoanItemCard(
 private fun LoanDetailDialog(
   loan: LoanRecord,
   bankAccounts: List<AccountWithBalance>,
+  paymentHistory: List<com.example.data.local.entity.ExpenseRecord>,
   onDismiss: () -> Unit,
   onEdit: () -> Unit,
   onPayEmi: (Long?, String) -> Unit,
@@ -926,6 +929,52 @@ private fun LoanDetailDialog(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
           DetailItem("Principal Paid", CurrencyFormatter.format(loan.cumulativePrincipalPaid))
           DetailItem("Principal Pending", CurrencyFormatter.format(loan.remainingPrincipal))
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          DetailItem("Total EMI Paid", CurrencyFormatter.format(loan.totalPaidAmount))
+          DetailItem("EMIs Remaining", "${loan.remainingEmisCount}")
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(10.dp))
+        Text("Payment History", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+        if (paymentHistory.isEmpty()) {
+          Text("No EMI payment transactions recorded yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+          paymentHistory.sortedByDescending { it.dateTimestamp }.forEach { payment ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+              Column(Modifier.weight(1f)) {
+                Text(payment.title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                Text("${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(payment.dateTimestamp))} • ${payment.bankAccountName.ifBlank { "No account" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+              Text(CurrencyFormatter.format(payment.amount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+            }
+          }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(10.dp))
+        Text("Month-wise Principal & Interest", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Text("EMI", Modifier.weight(0.7f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+          Text("Principal", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+          Text("Interest", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+          Text("Balance", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+        }
+        var outstanding = loan.principalAmount
+        val monthlyRate = loan.annualInterestRate / 1200.0
+        for (month in 1..loan.tenureMonths) {
+          val interestPart = outstanding * monthlyRate
+          val principalPart = minOf(outstanding, maxOf(0.0, loan.emiAmount - interestPart))
+          outstanding = maxOf(0.0, outstanding - principalPart)
+          Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("$month", Modifier.weight(0.7f), style = MaterialTheme.typography.labelSmall)
+            Text(CurrencyFormatter.format(principalPart), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+            Text(CurrencyFormatter.format(interestPart), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+            Text(CurrencyFormatter.format(outstanding), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+          }
         }
 
         Spacer(modifier = Modifier.height(14.dp))

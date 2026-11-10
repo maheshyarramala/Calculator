@@ -306,6 +306,20 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
+  fun syncSplitBillExpense(reference: String, title: String, amount: Double, account: BankAccount) {
+    if (title.isBlank() || !amount.isFinite() || amount <= 0.0) return
+    viewModelScope.launch {
+      val existing = dao.getExpenseByNotes(reference)
+      val transaction = existing?.copy(title = title.trim(), amount = amount, categoryName = "Split Bill", type = "EXPENSE", bankAccountId = account.id, bankAccountName = account.bankName, notes = reference)
+        ?: ExpenseRecord(title = title.trim(), amount = amount, categoryName = "Split Bill", type = "EXPENSE", bankAccountId = account.id, bankAccountName = account.bankName, notes = reference)
+      dao.insertExpense(transaction)
+    }
+  }
+
+  fun deleteSplitBillExpense(reference: String) {
+    viewModelScope.launch { dao.getExpenseByNotes(reference)?.let { repository.deleteExpense(it) } }
+  }
+
   fun addIncome(
     title: String,
     amount: Double,

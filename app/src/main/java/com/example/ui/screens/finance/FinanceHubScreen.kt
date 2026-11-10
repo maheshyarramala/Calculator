@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -71,6 +73,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.format.ResolverStyle
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import com.example.ui.components.CreditCardBillReminderDialog
@@ -648,54 +651,24 @@ fun FinanceHubScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
+        .pointerInput(uiState.selectedTab) {
+          var horizontalDrag = 0f
+          detectHorizontalDragGestures(
+            onHorizontalDrag = { _, dragAmount -> horizontalDrag += dragAmount },
+            onDragEnd = {
+              if (abs(horizontalDrag) > 90f) {
+                val tabs = FinanceTab.values()
+                val direction = if (horizontalDrag < 0f) 1 else -1
+                val nextIndex = (uiState.selectedTab.ordinal + direction).coerceIn(tabs.indices)
+                if (nextIndex != uiState.selectedTab.ordinal) viewModel.selectTab(tabs[nextIndex])
+              }
+              horizontalDrag = 0f
+            },
+            onDragCancel = { horizontalDrag = 0f }
+          )
+        }
     ) {
-      // Top Header with Backup / Restore Quick Action
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-          Text(
-            text = "Finance & Money",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-          Text(
-            text = "Custom categories, bank accounts & trips",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-        }
-
-        FilledTonalButton(
-          onClick = {
-            haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-            viewModel.setShowBackupModal(true)
-          },
-          shape = RoundedCornerShape(12.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-          modifier = Modifier.height(34.dp).testTag("backup_restore_header_btn")
-        ) {
-          Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(15.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text(
-            text = "Backup",
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            softWrap = false
-          )
-        }
-      }
-
-      // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Split Bill, Trip Manager)
+            // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Split Bill, Trip Manager)
       ScrollableTabRow(
         selectedTabIndex = uiState.selectedTab.ordinal,
         edgePadding = 12.dp,
@@ -825,7 +798,22 @@ fun FinanceHubScreen(
           val splitBillViewModel: com.example.ui.screens.splitbill.SplitBillViewModel = viewModel()
           com.example.ui.screens.splitbill.SplitBillScreen(
             viewModel = splitBillViewModel,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            accounts = bankAccounts,
+            trips = trips,
+            tripExpenses = expenses,
+            onRecordSettlement = { isIncome, amount, account, title, reference ->
+              if (isIncome) {
+                viewModel.addIncome(title, amount, "Split Bill", account.id, account.bankName, reference)
+              } else {
+                viewModel.addExpense(title, amount, "Split Bill", account.id, account.bankName, reference)
+              }
+            },
+            onUndoSettlement = { reference ->
+              expenses.firstOrNull { it.notes == reference && it.categoryName == "Split Bill" }?.let(viewModel::deleteExpense)
+            },
+            onSyncExpense = { reference, title, amount, account -> viewModel.syncSplitBillExpense(reference, title, amount, account) },
+            onDeleteExpense = { reference -> viewModel.deleteSplitBillExpense(reference) }
           )
         }
         FinanceTab.TRIPS -> TripsSection(
@@ -1054,8 +1042,14 @@ private fun AccountDetailsDialog(
           Spacer(Modifier.width(4.dp))
           Text(if (isCreditCard) "Edit Card" else "Edit Account")
         }
-        FilledTonalButton(onClick = onShowTransactions) {
-          Text("Transactions")
+        FilledTonalButton(
+          onClick = onShowTransactions,
+          modifier = Modifier.weight(1f),
+          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+        ) {
+          Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(Modifier.width(6.dp))
+          Text("Transactions", maxLines = 1, softWrap = false, fontSize = 12.sp)
         }
       }
     },
@@ -1431,8 +1425,14 @@ private fun ExpensesSection(
       .sortedBy { it.lowercase() }
   }
 
+  val creditCardAccountIds = remember(accountsWithBalances) {
+    accountsWithBalances.asSequence()
+      .filter { it.account.accountType.equals("Credit Card", ignoreCase = true) }
+      .map { it.account.id }
+      .toSet()
+  }
   val creditCardAccounts = remember(accountsWithBalances) {
-    accountsWithBalances.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) }
+    accountsWithBalances.filter { it.account.id in creditCardAccountIds }
   }
   val bankAndCashAccounts = remember(accountsWithBalances) {
     accountsWithBalances.filter { !it.account.accountType.equals("Credit Card", ignoreCase = true) }
@@ -2309,10 +2309,12 @@ private fun ExpensesSection(
         }
       }
     } else {
-      items(filteredExpenses, key = { it.id }) { expense ->
-        val isCc = remember(expense.bankAccountId, creditCardAccounts) {
-          creditCardAccounts.any { it.account.id == expense.bankAccountId }
-        }
+      items(
+        items = filteredExpenses,
+        key = { it.id },
+        contentType = { "expense_transaction" }
+      ) { expense ->
+        val isCc = expense.bankAccountId in creditCardAccountIds
         ExpenseItemCard(
           expense = expense,
           categories = categories,
@@ -3717,40 +3719,6 @@ private fun TripsSection(
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
-    item(key = "trips_header") {
-      Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-          containerColor = Color(0xFF0D9488).copy(alpha = 0.12f)
-        ),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Row(
-          modifier = Modifier.padding(16.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Icon(
-            Icons.Default.FlightTakeoff,
-            contentDescription = null,
-            tint = Color(0xFF0D9488),
-            modifier = Modifier.size(32.dp)
-          )
-          Spacer(modifier = Modifier.width(12.dp))
-          Column {
-            Text(
-              text = "Trip & Vacation Budgets",
-              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-            )
-            Text(
-              text = "Set category caps, track live daily burn rate, and export PDF statements.",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-        }
-      }
-    }
-
     if (trips.isEmpty()) {
       item(key = "empty_trips") {
         Card(
@@ -3828,6 +3796,35 @@ private fun TripCardItem(
   val isOverBudget = spent > trip.budget
   val remaining = trip.budget - spent
   var showLedger by remember { mutableStateOf(false) }
+  var showTripActions by remember { mutableStateOf(false) }
+  var confirmTripDelete by remember { mutableStateOf(false) }
+
+  if (showTripActions) {
+    AlertDialog(
+      onDismissRequest = { showTripActions = false },
+      title = { Text(trip.tripName, fontWeight = FontWeight.Bold) },
+      text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(trip.destination, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Dates: ${trip.startDate} - ${trip.endDate}")
+        Text("Spent: ${CurrencyFormatter.format(spent)}")
+        Text("Budget: ${CurrencyFormatter.format(trip.budget)}")
+      } },
+      confirmButton = { TextButton(onClick = { showTripActions = false; onEdit() }) { Text("Edit") } },
+      dismissButton = { Row {
+        TextButton(onClick = { showTripActions = false; confirmTripDelete = true }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") }
+        TextButton(onClick = { showTripActions = false }) { Text("Close") }
+      } }
+    )
+  }
+  if (confirmTripDelete) {
+    AlertDialog(
+      onDismissRequest = { confirmTripDelete = false },
+      title = { Text("Delete trip?") },
+      text = { Text("Delete ${trip.tripName}? Your recorded Finance transactions will remain in Finance.") },
+      confirmButton = { TextButton(onClick = { confirmTripDelete = false; onDelete() }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") } },
+      dismissButton = { TextButton(onClick = { confirmTripDelete = false }) { Text("Cancel") } }
+    )
+  }
 
   Card(
     shape = RoundedCornerShape(20.dp),
@@ -3835,7 +3832,7 @@ private fun TripCardItem(
       containerColor = MaterialTheme.colorScheme.surface
     ),
     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    modifier = Modifier.fillMaxWidth()
+    modifier = Modifier.fillMaxWidth().clickable { showTripActions = true }
   ) {
     Column(
       modifier = Modifier.padding(18.dp),
@@ -3875,30 +3872,7 @@ private fun TripCardItem(
           }
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          IconButton(
-            onClick = onEdit,
-            modifier = Modifier.size(32.dp)
-          ) {
-            Icon(
-              Icons.Default.Edit,
-              contentDescription = "Edit trip",
-              tint = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(18.dp)
-            )
-          }
-          IconButton(
-            onClick = onDelete,
-            modifier = Modifier.size(32.dp)
-          ) {
-            Icon(
-              Icons.Default.DeleteOutline,
-              contentDescription = "Delete trip",
-              tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.size(20.dp)
-            )
-          }
-        }
+        Icon(Icons.Default.ChevronRight, contentDescription = "Open trip details", tint = MaterialTheme.colorScheme.onSurfaceVariant)
       }
 
       if (trip.startDate.isNotBlank() || trip.endDate.isNotBlank()) {
@@ -4350,9 +4324,9 @@ private fun AddExpenseDialog(
   var paymentMethod by remember {
     mutableStateOf(
       when {
-        creditCardAccounts.isNotEmpty() -> ExpensePaymentMethod.CREDIT_CARD
         bankAccountsOnly.isNotEmpty() -> ExpensePaymentMethod.BANK
-        else -> ExpensePaymentMethod.CASH
+        cashAccounts.isNotEmpty() -> ExpensePaymentMethod.CASH
+        else -> ExpensePaymentMethod.CREDIT_CARD
       }
     )
   }
@@ -6390,123 +6364,60 @@ private fun TripDailySpendingSpeedometer(
   trip: TripRecord,
   spent: Double
 ) {
-  val totalDays = remember(trip.startDate, trip.endDate) {
-    calculateTripDays(trip.startDate, trip.endDate)
-  }
+  val totalDays = remember(trip.startDate, trip.endDate) { calculateTripDays(trip.startDate, trip.endDate) }
   val dailyBudget = remember(trip.budget, totalDays) {
     if (totalDays > 0) trip.budget / totalDays else trip.budget / 7.0
   }
-  val elapsedDays = remember(trip.startDate) {
-    calculateElapsedDays(trip.startDate).coerceAtLeast(1)
-  }
-  val dailyRate = remember(spent, elapsedDays) {
-    spent / elapsedDays
-  }
-
+  val elapsedDays = remember(trip.startDate) { calculateElapsedDays(trip.startDate).coerceAtLeast(1) }
+  val dailyRate = remember(spent, elapsedDays) { spent / elapsedDays }
   val burnRatio = if (dailyBudget > 0) (dailyRate / dailyBudget).toFloat() else 0f
   val isExceeding = burnRatio > 1.05f
 
   Surface(
     shape = RoundedCornerShape(14.dp),
-    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
     modifier = Modifier.fillMaxWidth()
   ) {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(12.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.SpaceBetween
+    Column(
+      modifier = Modifier.fillMaxWidth().padding(14.dp),
+      verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-      Column(modifier = Modifier.weight(1f)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text("Daily Burn Rate Tracker", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = if (isExceeding) Color(0xFFFEE2E2) else Color(0xFFCCFBF1)
+        ) {
           Text(
-            text = "Daily Burn Rate Tracker",
-            fontSize = 11.sp,
+            if (isExceeding) "Above target" else "On track",
+            fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (isExceeding) Color(0xFFB91C1C) else Color(0xFF0F766E),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
           )
-          Spacer(modifier = Modifier.width(6.dp))
-          Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = if (isExceeding) Color(0xFFFEE2E2) else Color(0xFFCCFBF1)
-          ) {
-            Text(
-              text = if (isExceeding) "Exceeding Daily Rate" else "On Track",
-              fontSize = 9.sp,
-              fontWeight = FontWeight.Bold,
-              color = if (isExceeding) Color(0xFFB91C1C) else Color(0xFF0F766E),
-              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-            )
-          }
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-          text = "You are spending ${CurrencyFormatter.format(dailyRate)}/day",
-          fontSize = 13.sp,
-          fontWeight = FontWeight.ExtraBold,
-          color = if (isExceeding) Color(0xFFEF4444) else Color(0xFF0D9488)
-        )
-        Text(
-          text = "(Target Budget: ${CurrencyFormatter.format(dailyBudget)}/day • Day $elapsedDays of $totalDays)",
-          fontSize = 10.5.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
       }
-
-      // Visual Speedometer Gauge Canvas
-      Canvas(modifier = Modifier.size(76.dp, 44.dp)) {
-        val strokeW = 6.dp.toPx()
-        val arcSize = Size(size.width, size.height * 1.8f)
-        val topLeft = Offset(0f, 0f)
-
-        // Background arc
-        drawArc(
-          color = Color.LightGray.copy(alpha = 0.35f),
-          startAngle = 180f,
-          sweepAngle = 180f,
-          useCenter = false,
-          topLeft = topLeft,
-          size = arcSize,
-          style = Stroke(width = strokeW, cap = StrokeCap.Round)
-        )
-
-        // Burn Rate Arc
-        val activeSweep = (burnRatio.coerceIn(0f, 1.5f) / 1.5f * 180f)
-        val arcColor = when {
-          burnRatio > 1.05f -> Color(0xFFEF4444)
-          burnRatio > 0.8f -> Color(0xFFF59E0B)
-          else -> Color(0xFF10B981)
-        }
-        drawArc(
-          color = arcColor,
-          startAngle = 180f,
-          sweepAngle = activeSweep,
-          useCenter = false,
-          topLeft = topLeft,
-          size = arcSize,
-          style = Stroke(width = strokeW, cap = StrokeCap.Round)
-        )
-
-        // Needle pointer
-        val needleAngle = (180f + activeSweep) * (PI / 180f).toFloat()
-        val centerX = size.width / 2f
-        val centerY = size.height * 0.9f
-        val needleLen = size.width * 0.38f
-        val endX = centerX + needleLen * cos(needleAngle)
-        val endY = centerY + needleLen * sin(needleAngle)
-
-        drawLine(
-          color = Color(0xFF1E293B),
-          start = Offset(centerX, centerY),
-          end = Offset(endX, endY),
-          strokeWidth = 3.dp.toPx(),
-          cap = StrokeCap.Round
-        )
-        drawCircle(color = Color(0xFF1E293B), radius = 3.5.dp.toPx(), center = Offset(centerX, centerY))
+      Text(
+        "Spending ${CurrencyFormatter.format(dailyRate)}/day",
+        fontSize = 15.sp,
+        fontWeight = FontWeight.ExtraBold,
+        color = if (isExceeding) Color(0xFFEF4444) else Color(0xFF0D9488)
+      )
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("Daily target", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${CurrencyFormatter.format(dailyBudget)}/day", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
       }
+      LinearProgressIndicator(
+        progress = { burnRatio.coerceIn(0f, 1f) },
+        modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(5.dp)),
+        color = if (isExceeding) Color(0xFFEF4444) else Color(0xFF0D9488),
+        trackColor = MaterialTheme.colorScheme.surface
+      )
+      Text("Day $elapsedDays of $totalDays", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
 }

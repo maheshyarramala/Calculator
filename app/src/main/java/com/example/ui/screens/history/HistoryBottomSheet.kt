@@ -2,9 +2,12 @@ package com.example.ui.screens.history
 import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -27,13 +30,15 @@ import java.util.*
 @Composable
 fun HistoryBottomSheet(
   viewModel: HistoryViewModel,
-  onDismiss: () -> Unit
+  onDismiss: () -> Unit,
+  onOpenRecord: (CalculationRecord) -> Unit = {}
 ) {
   val historyList by viewModel.historyList.collectAsState()
   val selectedFilter by viewModel.selectedFilter.collectAsState()
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
   var showClearConfirm by remember { mutableStateOf(false) }
+  var selectedRecord by remember { mutableStateOf<CalculationRecord?>(null) }
 
   val dateFormat = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
 
@@ -71,6 +76,19 @@ fun HistoryBottomSheet(
           Text("Cancel")
         }
       }
+    )
+  }
+
+  selectedRecord?.let { record ->
+    AlertDialog(
+      onDismissRequest = { selectedRecord = null },
+      title = { Text(record.title, fontWeight = FontWeight.Bold) },
+      text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(record.summary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(record.detailsText, style = MaterialTheme.typography.bodySmall)
+      } },
+      confirmButton = { TextButton(onClick = { onOpenRecord(record); selectedRecord = null }) { Text("Open calculator") } },
+      dismissButton = { TextButton(onClick = { selectedRecord = null }) { Text("Close") } }
     )
   }
 
@@ -172,7 +190,8 @@ fun HistoryBottomSheet(
               item = item,
               dateFormat = dateFormat,
               onShare = { viewModel.shareRecord(context, item) },
-              onDelete = { viewModel.delete(item) }
+              onDelete = { viewModel.delete(item) },
+              onClick = { selectedRecord = item }
             )
           }
         }
@@ -186,12 +205,13 @@ private fun HistoryItemCard(
   item: CalculationRecord,
   dateFormat: SimpleDateFormat,
   onShare: () -> Unit,
-  onDelete: () -> Unit
+  onDelete: () -> Unit,
+  onClick: () -> Unit
 ) {
   Card(
     shape = RoundedCornerShape(14.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-    modifier = Modifier.fillMaxWidth()
+    modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
   ) {
     Column(modifier = Modifier.padding(14.dp)) {
       Row(

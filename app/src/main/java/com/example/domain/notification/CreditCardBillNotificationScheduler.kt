@@ -76,7 +76,67 @@ object CreditCardBillNotificationScheduler {
     }
   }
 
+  private const val ACTION_DAILY_EXPENSE_REMINDER = "com.example.action.DAILY_EXPENSE_REMINDER"
+  private const val DAILY_EXPENSE_CHANNEL_ID = "daily_expense_reminder"
+  private const val DAILY_EXPENSE_REQUEST_CODE = 70019
+
+  /** Schedules the next 7:00 PM local-time reminder. Repeated after each delivery. */
+  fun scheduleDailyExpenseReminder(context: Context) {
+    val alarmManager = context.getSystemService(AlarmManager::class.java)
+    val now = java.time.ZonedDateTime.now(ZoneId.systemDefault())
+    var next = now.toLocalDate().atTime(19, 0).atZone(ZoneId.systemDefault())
+    if (!next.isAfter(now)) next = next.plusDays(1)
+    val intent = Intent(context, CreditCardBillNotificationReceiver::class.java).apply {
+      action = ACTION_DAILY_EXPENSE_REMINDER
+      data = Uri.parse("omni-calc://daily-expense-reminder")
+    }
+    val pendingIntent = PendingIntent.getBroadcast(
+      context, DAILY_EXPENSE_REQUEST_CODE, intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next.toInstant().toEpochMilli(), pendingIntent)
+  }
+
+  private fun showDailyExpenseReminder(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) return
+    val manager = context.getSystemService(NotificationManager::class.java)
+    if (!manager.areNotificationsEnabled()) return
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      manager.createNotificationChannel(NotificationChannel(
+        DAILY_EXPENSE_CHANNEL_ID, "Daily expense reminder", NotificationManager.IMPORTANCE_DEFAULT
+      ).apply { description = "A daily reminder to record today's expenses" })
+    }
+    val openApp = PendingIntent.getActivity(
+      context, DAILY_EXPENSE_REQUEST_CODE,
+      Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+      }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+      Notification.Builder(context, DAILY_EXPENSE_CHANNEL_ID) else {
+      @Suppress("DEPRECATION")
+      Notification.Builder(context)
+    }
+    manager.notify(DAILY_EXPENSE_REQUEST_CODE, builder
+      .setSmallIcon(R.drawable.ic_notification)
+      .setContentTitle("Update Your Expenses")
+      .setContentText("Have you recorded all your expenses for today?")
+      .setStyle(Notification.BigTextStyle().bigText("Take a moment to record today's expenses in OmniCalc."))
+      .setContentIntent(openApp)
+      .setAutoCancel(true)
+      .setCategory(Notification.CATEGORY_REMINDER)
+      .build())
+  }
+
+  internal fun handleDailyExpenseReminder(context: Context) {
+    showDailyExpenseReminder(context)
+    scheduleDailyExpenseReminder(context.applicationContext)
+  }
+
   internal fun rescheduleAll(context: Context) {
+    scheduleDailyExpenseReminder(context.applicationContext)
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
       try {
         val db = AppDatabase.getDatabase(context)
@@ -433,6 +493,7 @@ object CreditCardBillNotificationScheduler {
     }
   }
 
+  internal fun isDailyExpenseReminderAction(action: String?): Boolean = action == ACTION_DAILY_EXPENSE_REMINDER
   internal fun isReminderAction(action: String?): Boolean = action == ACTION_SHOW_BILL_REMINDER
   internal fun isDebtAction(action: String?): Boolean = action == ACTION_SHOW_DEBT_REMINDER
   internal fun isLoanAction(action: String?): Boolean = action == ACTION_SHOW_LOAN_REMINDER
@@ -455,6 +516,9 @@ object CreditCardBillNotificationScheduler {
 class CreditCardBillNotificationReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     when {
+      CreditCardBillNotificationScheduler.isDailyExpenseReminderAction(intent.action) -> {
+        CreditCardBillNotificationScheduler.handleDailyExpenseReminder(context.applicationContext)
+      }
       CreditCardBillNotificationScheduler.isReminderAction(intent.action) -> {
         CreditCardBillNotificationScheduler.showNotification(
           context,

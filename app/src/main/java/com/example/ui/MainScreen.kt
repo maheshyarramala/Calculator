@@ -4,6 +4,7 @@ import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -152,7 +154,31 @@ fun MainScreen(
   if (showHistorySheet) {
     HistoryBottomSheet(
       viewModel = historyViewModel,
-      onDismiss = { showHistorySheet = false }
+      onDismiss = { showHistorySheet = false },
+      onOpenRecord = { record ->
+        showHistorySheet = false
+        when (record.category.uppercase()) {
+          "EMI" -> { emiViewModel.restoreFromRecord(record); currentDestination = MainDestination.EMI }
+          "CALCULATOR" -> {
+            record.detailsText.lineSequence().firstOrNull { it.startsWith("Input:") }?.substringAfter("Input:")?.trim()?.let(calculatorViewModel::restoreFromHistory)
+            currentDestination = MainDestination.CALCULATOR
+          }
+          "SIP", "LUMPSUM", "COMPOUND", "PPF", "FD", "TRADE" -> {
+            investmentViewModel.restoreFromRecord(record)
+            currentDestination = MainDestination.INVESTMENTS
+          }
+          "INTEREST" -> { interestViewModel.restoreFromRecord(record); currentDestination = MainDestination.INTEREST }
+          "AGE", "CALENDAR" -> {
+            ageCalendarViewModel.restoreFromRecord(record)
+            currentDestination = MainDestination.AGE_CALENDAR
+          }
+          "CURRENCY", "UNIT", "TIP", "GST" -> {
+            utilityViewModel.restoreFromRecord(record)
+            currentDestination = MainDestination.UTILITIES
+          }
+          else -> currentDestination = MainDestination.CALCULATOR
+        }
+      }
     )
   }
 
@@ -308,6 +334,14 @@ fun MainScreen(
               onDismissRequest = { menuExpanded = false }
             ) {
               DropdownMenuItem(
+                text = { Text("Backup & Restore") },
+                onClick = {
+                  menuExpanded = false
+                  currentDestination = MainDestination.FINANCE
+                  financeViewModel.setShowBackupModal(true)
+                }
+              )
+              DropdownMenuItem(
                 text = { Text("About") },
                 onClick = {
                   menuExpanded = false
@@ -361,6 +395,9 @@ fun MainScreen(
             onClick = {
               haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               currentDestination = destination
+              if (destination == MainDestination.FINANCE) {
+                financeViewModel.selectTab(FinanceTab.EXPENSES)
+              }
             },
             icon = {
               Icon(destination.icon, contentDescription = stringResource(destination.labelRes))
@@ -384,6 +421,7 @@ fun MainScreen(
   ) { paddingValues ->
     Crossfade(
       targetState = currentDestination,
+      animationSpec = tween(durationMillis = 260),
       label = "screenTransition",
       modifier = Modifier
         .fillMaxSize()

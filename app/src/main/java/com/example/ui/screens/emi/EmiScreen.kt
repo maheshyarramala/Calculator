@@ -3,6 +3,7 @@ import com.example.ui.theme.performConfiguredHapticFeedback
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -54,6 +56,9 @@ fun EmiScreen(
   val haptic = LocalHapticFeedback.current
   val loanViewModel: LoanTrackerViewModel = viewModel()
   var selectedSubTab by rememberSaveable { mutableStateOf(EmiSubTab.CALCULATOR) }
+  LaunchedEffect(state.openCalculatorTabRequest) {
+    if (state.openCalculatorTabRequest > 0) selectedSubTab = EmiSubTab.CALCULATOR
+  }
 
   // Filter schedule if filter query is provided
   val filteredSchedule = remember(state.emiResult.schedule, state.scheduleFilterQuery) {
@@ -80,7 +85,27 @@ fun EmiScreen(
     )
   }
 
-  Column(modifier = modifier.fillMaxSize()) {
+  Column(
+    modifier = modifier.fillMaxSize().pointerInput(selectedSubTab) {
+      var horizontalDrag = 0f
+      detectHorizontalDragGestures(
+        onHorizontalDrag = { _, amount -> horizontalDrag += amount },
+        onDragEnd = {
+          if (kotlin.math.abs(horizontalDrag) >= 60.dp.toPx()) {
+            val tabs = EmiSubTab.values()
+            val nextIndex = (selectedSubTab.ordinal + if (horizontalDrag < 0f) 1 else -1)
+              .coerceIn(0, tabs.lastIndex)
+            if (nextIndex != selectedSubTab.ordinal) {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+              selectedSubTab = tabs[nextIndex]
+            }
+          }
+          horizontalDrag = 0f
+        },
+        onDragCancel = { horizontalDrag = 0f }
+      )
+    }
+  ) {
     PrimaryTabRow(
       selectedTabIndex = selectedSubTab.ordinal,
       containerColor = MaterialTheme.colorScheme.surface,
