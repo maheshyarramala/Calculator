@@ -138,6 +138,8 @@ fun InvestmentScreen(
           InvestmentTab.values().forEach { tab ->
             val icon = when (tab) {
               InvestmentTab.SIP -> Icons.AutoMirrored.Filled.TrendingUp
+              InvestmentTab.STEP_UP_SIP -> Icons.Default.TrendingUp
+              InvestmentTab.GOAL_PLANNER -> Icons.Default.TrackChanges
               InvestmentTab.LUMPSUM -> Icons.Default.Payments
               InvestmentTab.COMPOUND -> Icons.Default.Percent
               InvestmentTab.PPF -> Icons.Default.AccountBalance
@@ -240,6 +242,147 @@ fun InvestmentScreen(
                   onPresetClick = { viewModel.updateSip(years = it.toInt().toString()) },
                   testTag = "sip_years_input"
                 )
+              }
+
+              InvestmentTab.STEP_UP_SIP -> {
+                NumberInputField(
+                  value = state.stepUpMonthly,
+                  onValueChange = { viewModel.updateStepUpSip(monthly = it) },
+                  label = "Starting Monthly Investment",
+                  prefix = "₹",
+                  sliderValue = (state.stepUpMonthly.toFloatOrNull() ?: 10000f).coerceIn(500f, 200000f),
+                  sliderRange = 500f..200000f,
+                  onSliderChange = { viewModel.updateStepUpSip(monthly = it.toLong().toString()) },
+                  presets = listOf("+1,000" to 1000.0, "+5,000" to 5000.0, "+10,000" to 10000.0),
+                  onPresetClick = {
+                    val cur = state.stepUpMonthly.toDoubleOrNull() ?: 0.0
+                    viewModel.updateStepUpSip(monthly = (cur + it).toLong().toString())
+                  },
+                  testTag = "step_up_monthly_input"
+                )
+
+                NumberInputField(
+                  value = state.stepUpPercent,
+                  onValueChange = { viewModel.updateStepUpSip(percent = it) },
+                  label = "Annual Step-Up Increment (% per year)",
+                  suffix = "%",
+                  sliderValue = (state.stepUpPercent.toFloatOrNull() ?: 10f).coerceIn(1f, 50f),
+                  sliderRange = 1f..50f,
+                  onSliderChange = { viewModel.updateStepUpSip(percent = it.toInt().toString()) },
+                  presets = listOf("5%" to 5.0, "10%" to 10.0, "15%" to 15.0, "20%" to 20.0),
+                  onPresetClick = { viewModel.updateStepUpSip(percent = it.toInt().toString()) },
+                  testTag = "step_up_percent_input"
+                )
+
+                NumberInputField(
+                  value = state.stepUpRate,
+                  onValueChange = { viewModel.updateStepUpSip(rate = it) },
+                  label = "Expected Return Rate (% p.a.)",
+                  suffix = "%",
+                  sliderValue = (state.stepUpRate.toFloatOrNull() ?: 12f).coerceIn(1f, 30f),
+                  sliderRange = 1f..30f,
+                  onSliderChange = { viewModel.updateStepUpSip(rate = String.format(java.util.Locale.US, "%.1f", it)) },
+                  testTag = "step_up_rate_input"
+                )
+
+                NumberInputField(
+                  value = state.stepUpYears,
+                  onValueChange = { viewModel.updateStepUpSip(years = it) },
+                  label = "Tenure Duration (Years)",
+                  suffix = "Yr",
+                  sliderValue = (state.stepUpYears.toFloatOrNull() ?: 15f).coerceIn(1f, 40f),
+                  sliderRange = 1f..40f,
+                  onSliderChange = { viewModel.updateStepUpSip(years = it.toInt().toString()) },
+                  presets = listOf("5 Yrs" to 5.0, "10 Yrs" to 10.0, "15 Yrs" to 15.0, "20 Yrs" to 20.0),
+                  onPresetClick = { viewModel.updateStepUpSip(years = it.toInt().toString()) },
+                  testTag = "step_up_years_input"
+                )
+
+                // Comparison info banner
+                Surface(
+                  shape = RoundedCornerShape(12.dp),
+                  color = Color(0xFF10B981).copy(alpha = 0.12f),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    Icon(Icons.Default.TrendingUp, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
+                    Text(
+                      text = "Step-up generates ${String.format(java.util.Locale.US, "%.0f%%", state.stepUpResult.wealthBoostPercentage)} higher wealth than a flat SIP! Ending monthly SIP: ${CurrencyFormatter.format(state.stepUpResult.finalMonthlySip)}.",
+                      style = MaterialTheme.typography.bodySmall,
+                      color = Color(0xFF047857),
+                      fontWeight = FontWeight.SemiBold
+                    )
+                  }
+                }
+              }
+
+              InvestmentTab.GOAL_PLANNER -> {
+                NumberInputField(
+                  value = state.goalTargetAmount,
+                  onValueChange = { viewModel.updateGoalPlanner(target = it) },
+                  label = "Target Wealth / Goal Corpus (₹)",
+                  prefix = "₹",
+                  sliderValue = (state.goalTargetAmount.toFloatOrNull() ?: 5000000f).coerceIn(100000f, 20000000f),
+                  sliderRange = 100000f..20000000f,
+                  onSliderChange = { viewModel.updateGoalPlanner(target = it.toLong().toString()) },
+                  presets = listOf("₹25 Lakh" to 2500000.0, "₹50 Lakh" to 5000000.0, "₹1 Crore" to 10000000.0, "₹2 Crore" to 20000000.0),
+                  onPresetClick = { viewModel.updateGoalPlanner(target = it.toLong().toString()) },
+                  testTag = "goal_target_input"
+                )
+
+                NumberInputField(
+                  value = state.goalRate,
+                  onValueChange = { viewModel.updateGoalPlanner(rate = it) },
+                  label = "Expected Return Rate (% p.a.)",
+                  suffix = "%",
+                  sliderValue = (state.goalRate.toFloatOrNull() ?: 12f).coerceIn(1f, 30f),
+                  sliderRange = 1f..30f,
+                  onSliderChange = { viewModel.updateGoalPlanner(rate = String.format(java.util.Locale.US, "%.1f", it)) },
+                  testTag = "goal_rate_input"
+                )
+
+                NumberInputField(
+                  value = state.goalYears,
+                  onValueChange = { viewModel.updateGoalPlanner(years = it) },
+                  label = "Target Timeline (Years)",
+                  suffix = "Yr",
+                  sliderValue = (state.goalYears.toFloatOrNull() ?: 7f).coerceIn(1f, 30f),
+                  sliderRange = 1f..30f,
+                  onSliderChange = { viewModel.updateGoalPlanner(years = it.toInt().toString()) },
+                  presets = listOf("3 Yrs" to 3.0, "5 Yrs" to 5.0, "7 Yrs" to 7.0, "10 Yrs" to 10.0),
+                  onPresetClick = { viewModel.updateGoalPlanner(years = it.toInt().toString()) },
+                  testTag = "goal_years_input"
+                )
+
+                // Required Monthly SIP Hero Highlight
+                Surface(
+                  shape = RoundedCornerShape(12.dp),
+                  color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                  ) {
+                    Text("Required Monthly SIP to Hit Target", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                      text = "${CurrencyFormatter.format(state.goalResult.requiredMonthlySip)} / month",
+                      style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary
+                      )
+                    )
+                    Text(
+                      text = "You will invest a total of ${CurrencyFormatter.format(state.goalResult.totalInvested)}, and market returns will create ${CurrencyFormatter.format(state.goalResult.wealthCreatedByReturns)} in wealth!",
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                  }
+                }
               }
 
               InvestmentTab.LUMPSUM -> {

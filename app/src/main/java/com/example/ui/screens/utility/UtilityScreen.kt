@@ -33,11 +33,17 @@ import com.example.domain.calculator.UnitConverter
 import com.example.ui.components.CurrencyFormatter
 import com.example.ui.components.NumberInputField
 
+import android.content.Intent
+import com.example.ui.screens.utility.UtilityViewModel
+import com.example.ui.screens.utility.UtilityTab
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UtilityScreen(
   viewModel: UtilityViewModel,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  taxSalaryViewModel: com.example.ui.screens.tax.TaxSalaryViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+  onNavigateToTaxSalary: ((com.example.ui.screens.tax.TaxSalaryTab) -> Unit)? = null
 ) {
   val state by viewModel.uiState.collectAsState()
   val context = LocalContext.current
@@ -96,8 +102,9 @@ fun UtilityScreen(
         }
     ) {
       // Sub-Tabs with distinctive icons so users can choose visually
-      TabRow(
+      ScrollableTabRow(
         selectedTabIndex = state.selectedTab.ordinal,
+        edgePadding = 12.dp,
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         modifier = Modifier
           .fillMaxWidth()
@@ -109,6 +116,8 @@ fun UtilityScreen(
             UtilityTab.UNIT_CONVERTER -> Icons.Default.Straighten
             UtilityTab.TIP_SPLIT -> Icons.Default.Group
             UtilityTab.GST_TAX -> Icons.AutoMirrored.Filled.ReceiptLong
+            UtilityTab.INCOME_TAX -> Icons.Default.ReceiptLong
+            UtilityTab.SALARY -> Icons.Default.AccountBalanceWallet
           }
           Tab(
             selected = state.selectedTab == tab,
@@ -116,12 +125,13 @@ fun UtilityScreen(
               haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
               viewModel.selectTab(tab)
             },
-            icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+            icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
             text = {
               Text(
                 text = tab.title,
                 fontWeight = if (state.selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
-                fontSize = 11.sp
+                fontSize = 11.sp,
+                maxLines = 1
               )
             }
           )
@@ -173,6 +183,85 @@ fun UtilityScreen(
           ) {
             item {
               GstTaxSection(viewModel = viewModel)
+            }
+            item {
+              Spacer(modifier = Modifier.height(32.dp))
+            }
+          }
+        }
+        UtilityTab.INCOME_TAX -> {
+          val taxState by taxSalaryViewModel.uiState.collectAsState()
+          LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+          ) {
+            item {
+              com.example.ui.screens.tax.IncomeTaxSection(
+                state = taxState,
+                viewModel = taxSalaryViewModel,
+                onSave = { taxSalaryViewModel.saveTaxCalculation(context) },
+                onShare = {
+                  val res = taxState.taxResult
+                  val shareText = """
+                    🇮🇳 Income Tax Comparison (${res.financialYear})
+                    Gross Salary: ${CurrencyFormatter.format(res.grossSalary)}
+                    
+                    • New Regime Tax: ${CurrencyFormatter.format(res.newRegime.totalTaxPayable)} (Std Ded: ₹75,000)
+                    • Old Regime Tax: ${CurrencyFormatter.format(res.oldRegime.totalTaxPayable)}
+                    
+                    Recommendation: ${res.recommendationSummary}
+                    
+                    Calculated with OmniCalc
+                  """.trimIndent()
+                  val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    putExtra(Intent.EXTRA_TEXT, shareText)
+                    type = "text/plain"
+                  }
+                  context.startActivity(Intent.createChooser(sendIntent, "Share Tax Calculation"))
+                }
+              )
+            }
+            item {
+              Spacer(modifier = Modifier.height(32.dp))
+            }
+          }
+        }
+        UtilityTab.SALARY -> {
+          val taxState by taxSalaryViewModel.uiState.collectAsState()
+          LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+          ) {
+            item {
+              com.example.ui.screens.tax.SalaryBreakdownSection(
+                state = taxState,
+                viewModel = taxSalaryViewModel,
+                onSave = { taxSalaryViewModel.saveSalaryCalculation(context) },
+                onShare = {
+                  val s = taxState.salaryResult
+                  val shareText = """
+                    💼 Take-Home Pay Slip Breakdown
+                    Annual CTC: ${CurrencyFormatter.format(s.annualCtc)}
+                    
+                    • Monthly Gross Salary: ${CurrencyFormatter.format(s.monthlyGrossSalary)}
+                    • Monthly In-Hand (Net): ${CurrencyFormatter.format(s.monthlyInHand)}
+                    
+                    Deductions:
+                    - Employee PF: ${CurrencyFormatter.format(s.monthlyEpf)}
+                    - Professional Tax: ${CurrencyFormatter.format(s.monthlyProfessionalTax)}
+                    - Income Tax (TDS): ${CurrencyFormatter.format(s.monthlyTds)}
+                    
+                    Calculated with OmniCalc
+                  """.trimIndent()
+                  val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    putExtra(Intent.EXTRA_TEXT, shareText)
+                    type = "text/plain"
+                  }
+                  context.startActivity(Intent.createChooser(sendIntent, "Share Salary Breakdown"))
+                }
+              )
             }
             item {
               Spacer(modifier = Modifier.height(32.dp))

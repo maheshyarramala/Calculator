@@ -19,7 +19,9 @@ enum class UtilityTab(val title: String) {
   CURRENCY("Currency"),
   UNIT_CONVERTER("Units"),
   TIP_SPLIT("Split Bill"),
-  GST_TAX("GST / Tax")
+  GST_TAX("GST"),
+  INCOME_TAX("Income Tax"),
+  SALARY("Take Home")
 }
 
 data class UtilityUiState(
@@ -255,6 +257,8 @@ class UtilityViewModel : ViewModel() {
       }
       "TIP" -> { _uiState.update { it.copy(selectedTab = UtilityTab.TIP_SPLIT) }; updateBillAmount(value("Input Bill Amount", _uiState.value.billAmount)); updateTipPercent(value("Input Tip Percent", _uiState.value.tipPercent.toString()).toDoubleOrNull() ?: 0.0); updateNumPersons(value("Input Persons", _uiState.value.numPersons.toString()).toIntOrNull() ?: 1) }
       "GST" -> { _uiState.update { it.copy(selectedTab = UtilityTab.GST_TAX) }; updateGstAmount(value("Input GST Amount", _uiState.value.gstAmount)); updateGstRate(value("Input GST Rate", _uiState.value.gstRate.toString()).toDoubleOrNull() ?: 18.0); updateGstExclusive(value("Input GST Exclusive", _uiState.value.gstIsExclusive.toString()).toBoolean()) }
+      "TAX", "INCOME_TAX" -> { _uiState.update { it.copy(selectedTab = UtilityTab.INCOME_TAX) } }
+      "SALARY" -> { _uiState.update { it.copy(selectedTab = UtilityTab.SALARY) } }
     }
   }
 
@@ -302,6 +306,24 @@ class UtilityViewModel : ViewModel() {
             title = "GST ${res.ratePercent}%: Total ${CurrencyFormatter.format(res.finalTotalAmount)}",
             summary = "Base: ${CurrencyFormatter.format(res.baseAmount)} + Tax: ${CurrencyFormatter.format(res.gstAmount)}",
             detailsText = "Base: ${res.baseAmount}\nGST (${res.ratePercent}%): ${res.gstAmount}\nCGST: ${res.cgstAmount}\nSGST: ${res.sgstAmount}\nTotal: ${res.finalTotalAmount}",
+            timestamp = System.currentTimeMillis()
+          )
+        }
+        UtilityTab.INCOME_TAX -> {
+          CalculationRecord(
+            category = "TAX",
+            title = "Income Tax Calculation",
+            summary = "Old vs New Regime comparison",
+            detailsText = "Income Tax comparison saved from Utility tab",
+            timestamp = System.currentTimeMillis()
+          )
+        }
+        UtilityTab.SALARY -> {
+          CalculationRecord(
+            category = "SALARY",
+            title = "Take-Home Salary Breakdown",
+            summary = "Monthly in-hand pay slip",
+            detailsText = "Salary pay slip breakdown saved from Utility tab",
             timestamp = System.currentTimeMillis()
           )
         }

@@ -27,6 +27,7 @@ import com.example.domain.finance.BankSmsParser
 import org.json.JSONObject
 import java.util.Calendar
 import android.net.Uri
+import java.io.File
 import java.time.LocalDate
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -60,6 +61,8 @@ data class FinanceUiState(
   val showBackupModal: Boolean = false,
   val showPasteJsonDialog: Boolean = false,
   val replaceExistingOnImport: Boolean = false,
+  val isBiometricLockEnabled: Boolean = false,
+  val isFinanceLocked: Boolean = false,
   val toastMessage: String? = null
 )
 
@@ -144,8 +147,11 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
   val totalExpense: StateFlow<Double> = repository.totalExpense
   val currentMonthExpenses: StateFlow<Double> = repository.currentMonthExpenses
 
-  // Ensure default categories exist if empty
+  // Ensure default categories exist if empty & load biometric lock
   init {
+    val lockEnabled = com.example.domain.security.BiometricLockManager.isLockEnabled(application)
+    _uiState.update { it.copy(isBiometricLockEnabled = lockEnabled, isFinanceLocked = lockEnabled) }
+
     viewModelScope.launch {
       val existing = dao.getAllCategories().first()
       if (existing.isEmpty()) {
@@ -161,6 +167,30 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
         )
         dao.insertDefaultCategories(defaults)
       }
+    }
+  }
+
+  fun setBiometricLockEnabled(enabled: Boolean) {
+    com.example.domain.security.BiometricLockManager.setLockEnabled(getApplication(), enabled)
+    _uiState.update { it.copy(isBiometricLockEnabled = enabled, isFinanceLocked = false) }
+  }
+
+  fun unlockFinance() {
+    _uiState.update { it.copy(isFinanceLocked = false) }
+  }
+
+  fun lockFinance() {
+    if (_uiState.value.isBiometricLockEnabled) {
+      _uiState.update { it.copy(isFinanceLocked = true) }
+    }
+  }
+
+  fun exportCsv(context: Context) {
+    viewModelScope.launch {
+      val accounts = accountsWithBalances.value
+      val exps = expenses.value
+      val file = com.example.domain.report.CsvReportGenerator.generateFullFinanceReportCsv(context, accounts, exps)
+      com.example.domain.report.CsvReportGenerator.shareCsv(context, file, "Export OmniCalc Finance Statement")
     }
   }
 
@@ -810,22 +840,68 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     )
   }
 
-  fun exportToUri(context: Context, uri: Uri) {
+  fun saveBackupDirectly(context: Context) {
     viewModelScope.launch {
       val json = getBackupJsonString()
-      val success = FinanceBackupManager.writeToUri(context, uri, json)
+      val savedFileName = FinanceBackupManager.saveBackupToStorage(context, json)
       _uiState.update {
         it.copy(
-          toastMessage = if (success) "Universal backup exported successfully to file!" else "Failed to write backup file.",
-          showBackupModal = false
+          toastMessage = if (savedFileName != null) {
+            "Backup saved: $savedFileName (in Downloads & Documents)"
+          } else {
+            "Failed to save backup file to device."
+          }
         )
+      }
+    }
+  }
+
+  fun exportToUri(context: Context, uri: Uri) {
+    viewModelScope.launch {
+      try {
+        val json = getBackupJsonString()
+        val success = FinanceBackupManager.writeToUri(context, uri, json)
+        if (success) {
+          _uiState.update {
+            it.copy(
+              toastMessage = "Backup saved successfully!",
+              showBackupModal = false
+            )
+          }
+        } else {
+          _uiState.update {
+            it.copy(
+              toastMessage = "Failed to write backup to selected file."
+            )
+          }
+        }
+      } catch (e: Exception) {
+        _uiState.update {
+          it.copy(
+            toastMessage = "Error saving backup: ${e.localizedMessage ?: "Unknown error"}"
+          )
+        }
       }
     }
   }
 
   fun shareBackup(context: Context) {
     val json = getBackupJsonString()
-    FinanceBackupManager.shareBackupFile(context, json)
+    val success = FinanceBackupManager.shareBackupFile(context, json)
+    if (!success) {
+      _uiState.update { it.copy(toastMessage = "Unable to open share menu. You can use 'Save Backup' or 'Copy JSON'.") }
+    }
+  }
+
+  fun restoreFromFile(file: File, replaceExisting: Boolean) {
+    viewModelScope.launch {
+      try {
+        val json = file.readText(Charsets.UTF_8)
+        importFromJson(json, replaceExisting)
+      } catch (e: Exception) {
+        _uiState.update { it.copy(toastMessage = "Failed to read backup file: ${e.localizedMessage}") }
+      }
+    }
   }
 
   fun copyBackupJson(context: Context) {
@@ -837,12 +913,20 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
 
   fun importFromUri(context: Context, uri: Uri, replaceExisting: Boolean) {
     viewModelScope.launch {
-      val json = FinanceBackupManager.readFromUri(context, uri)
-      if (json.isNullOrBlank()) {
-        _uiState.update { it.copy(toastMessage = "Could not read data from selected file.") }
-        return@launch
+      try {
+        val json = FinanceBackupManager.readFromUri(context, uri)
+        if (json.isNullOrBlank()) {
+          _uiState.update {
+            it.copy(toastMessage = "Selected file is empty or could not be read.")
+          }
+          return@launch
+        }
+        importFromJson(json, replaceExisting)
+      } catch (e: Exception) {
+        _uiState.update {
+          it.copy(toastMessage = "Error reading backup file: ${e.localizedMessage ?: "File error"}")
+        }
       }
-      importFromJson(json, replaceExisting)
     }
   }
 

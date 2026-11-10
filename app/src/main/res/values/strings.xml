@@ -58,4 +58,5 @@
     <string name="card_bill_due_today_short">Due today</string>
     <string name="card_bill_notification_permission_denied">Reminder saved, but notifications are disabled. Enable them in Settings to receive alerts.</string>
     <string name="card_bill_no_credit_cards">Add a credit card in Finance to track its payment due date.</string>
+    <string name="navigation_tax_salary">Tax &amp; Salary</string>
 </resources>

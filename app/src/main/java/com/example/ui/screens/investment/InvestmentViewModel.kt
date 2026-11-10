@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 
 enum class InvestmentTab(val title: String) {
   SIP("SIP"),
+  STEP_UP_SIP("Step-Up SIP"),
+  GOAL_PLANNER("Goal Planner"),
   LUMPSUM("Lump Sum"),
   COMPOUND("Compound Int."),
   PPF("PPF"),
@@ -29,6 +31,17 @@ data class InvestmentUiState(
   val sipMonthly: String = "10000",
   val sipRate: String = "12",
   val sipYears: String = "10",
+  // Step-Up SIP
+  val stepUpMonthly: String = "10000",
+  val stepUpPercent: String = "10",
+  val stepUpRate: String = "12",
+  val stepUpYears: String = "15",
+  val stepUpResult: InvestmentCalculators.StepUpSipResult = InvestmentCalculators.calculateStepUpSip(10000.0, 10.0, 12.0, 15),
+  // Goal Planner
+  val goalTargetAmount: String = "5000000",
+  val goalRate: String = "12",
+  val goalYears: String = "7",
+  val goalResult: InvestmentCalculators.GoalTargetResult = InvestmentCalculators.calculateTargetGoalSip(5000000.0, 12.0, 7),
   // Lump sum
   val lumpPrincipal: String = "100000",
   val lumpRate: String = "12",
@@ -69,6 +82,25 @@ class InvestmentViewModel : ViewModel() {
     recalculate()
   }
 
+  fun updateStepUpSip(
+    monthly: String = _uiState.value.stepUpMonthly,
+    percent: String = _uiState.value.stepUpPercent,
+    rate: String = _uiState.value.stepUpRate,
+    years: String = _uiState.value.stepUpYears
+  ) {
+    _uiState.update { it.copy(stepUpMonthly = monthly, stepUpPercent = percent, stepUpRate = rate, stepUpYears = years) }
+    recalculate()
+  }
+
+  fun updateGoalPlanner(
+    target: String = _uiState.value.goalTargetAmount,
+    rate: String = _uiState.value.goalRate,
+    years: String = _uiState.value.goalYears
+  ) {
+    _uiState.update { it.copy(goalTargetAmount = target, goalRate = rate, goalYears = years) }
+    recalculate()
+  }
+
   fun updateLump(principal: String = _uiState.value.lumpPrincipal, rate: String = _uiState.value.lumpRate, years: String = _uiState.value.lumpYears) {
     _uiState.update { it.copy(lumpPrincipal = principal, lumpRate = rate, lumpYears = years) }
     recalculate()
@@ -95,12 +127,42 @@ class InvestmentViewModel : ViewModel() {
 
   private fun recalculate() {
     val state = _uiState.value
+    var stepUpRes = state.stepUpResult
+    var goalRes = state.goalResult
+
     val res = when (state.selectedTab) {
       InvestmentTab.SIP -> {
         val m = state.sipMonthly.toDoubleOrNull() ?: 0.0
         val r = state.sipRate.toDoubleOrNull() ?: 0.0
         val y = state.sipYears.toIntOrNull() ?: 1
         InvestmentCalculators.calculateSip(m, r, y)
+      }
+      InvestmentTab.STEP_UP_SIP -> {
+        val m = state.stepUpMonthly.toDoubleOrNull() ?: 0.0
+        val p = state.stepUpPercent.toDoubleOrNull() ?: 0.0
+        val r = state.stepUpRate.toDoubleOrNull() ?: 0.0
+        val y = state.stepUpYears.toIntOrNull() ?: 1
+        stepUpRes = InvestmentCalculators.calculateStepUpSip(m, p, r, y)
+        InvestmentResult(
+          title = "Step-Up SIP Investment",
+          investedAmount = stepUpRes.investedAmount,
+          estimatedReturns = stepUpRes.estimatedReturns,
+          totalValue = stepUpRes.totalValue,
+          yearlyBreakdown = stepUpRes.yearlyBreakdown
+        )
+      }
+      InvestmentTab.GOAL_PLANNER -> {
+        val t = state.goalTargetAmount.toDoubleOrNull() ?: 0.0
+        val r = state.goalRate.toDoubleOrNull() ?: 0.0
+        val y = state.goalYears.toIntOrNull() ?: 1
+        goalRes = InvestmentCalculators.calculateTargetGoalSip(t, r, y)
+        InvestmentResult(
+          title = "Goal Target Planner",
+          investedAmount = goalRes.totalInvested,
+          estimatedReturns = goalRes.wealthCreatedByReturns,
+          totalValue = goalRes.targetCorpus,
+          yearlyBreakdown = goalRes.yearlyBreakdown
+        )
       }
       InvestmentTab.LUMPSUM -> {
         val p = state.lumpPrincipal.toDoubleOrNull() ?: 0.0
@@ -127,7 +189,7 @@ class InvestmentViewModel : ViewModel() {
       }
       InvestmentTab.TRADE -> InvestmentResult("Trade P&L", 0.0, 0.0, 0.0, emptyList())
     }
-    _uiState.update { it.copy(result = res) }
+    _uiState.update { it.copy(result = res, stepUpResult = stepUpRes, goalResult = goalRes) }
   }
 
   fun restoreFromRecord(record: CalculationRecord) {

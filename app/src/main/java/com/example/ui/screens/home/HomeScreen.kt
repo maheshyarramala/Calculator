@@ -105,39 +105,18 @@ fun HomeScreen(
   }
   var showCreditCardReminderDialog by rememberSaveable { mutableStateOf(false) }
   var editingCreditCardAccountId by rememberSaveable { mutableStateOf<Long?>(null) }
-  var pendingCreditCardReminder by remember { mutableStateOf<CreditCardBillReminder?>(null) }
-  val notificationPermissionLauncher = rememberLauncherForActivityResult(
-    ActivityResultContracts.RequestPermission()
-  ) { granted ->
-    pendingCreditCardReminder?.let { reminder ->
-      val account = creditCardAccounts.firstOrNull { it.id == reminder.accountId }
-      if (account != null) {
-        financeViewModel.saveCreditCardBillReminder(
-          reminder.copy(notificationsEnabled = granted),
-          account.bankName
-        )
-        if (!granted) {
-          Toast.makeText(
-            context,
-            context.getString(R.string.card_bill_notification_permission_denied),
-            Toast.LENGTH_LONG
-          ).show()
-        }
-      }
-    }
-    pendingCreditCardReminder = null
-  }
   val saveCreditCardReminder: (CreditCardBillReminder) -> Unit = { reminder ->
     val account = creditCardAccounts.firstOrNull { it.id == reminder.accountId }
     if (account != null) {
       val notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
       if (reminder.notificationsEnabled && !notificationsAllowed) {
-        pendingCreditCardReminder = reminder
-        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-      } else {
-        financeViewModel.saveCreditCardBillReminder(reminder, account.bankName)
+        val activity = context as? android.app.Activity
+        if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 102)
+        }
       }
+      financeViewModel.saveCreditCardBillReminder(reminder, account.bankName)
     }
   }
 

@@ -1,8 +1,12 @@
 package com.example.domain.backup
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.CreditCardBillReminder
@@ -478,31 +482,97 @@ object FinanceBackupManager {
 
   fun writeToUri(context: Context, uri: Uri, content: String): Boolean {
     return try {
-      val outputStream = context.contentResolver.openOutputStream(uri) ?: return false
+      val outputStream = context.contentResolver.openOutputStream(uri, "wt")
+        ?: context.contentResolver.openOutputStream(uri, "w")
+      if (outputStream == null) return false
       outputStream.use { stream ->
         stream.write(content.toByteArray(Charsets.UTF_8))
         stream.flush()
       }
       true
-    } catch (e: Exception) {
+    } catch (_: Throwable) {
       false
     }
   }
 
   fun readFromUri(context: Context, uri: Uri): String? {
     return try {
-      context.contentResolver.openInputStream(uri)?.use { stream ->
+      val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+      inputStream.use { stream ->
         BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { reader ->
           reader.readText()
         }
       }
-    } catch (e: Exception) {
+    } catch (_: Throwable) {
       null
     }
   }
 
-  fun shareBackupFile(context: Context, jsonContent: String) {
-    try {
+  fun saveBackupToStorage(context: Context, jsonContent: String): String? {
+    return try {
+      val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+      val fileName = "OmniCalc_Backup_$dateStr.json"
+
+      // 1. Save to app's external files directory (always accessible and persistent)
+      val appDocDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+        ?: File(context.filesDir, "backups")
+      if (!appDocDir.exists()) appDocDir.mkdirs()
+      val localFile = File(appDocDir, fileName)
+      localFile.writeText(jsonContent, Charsets.UTF_8)
+
+      // 2. Also save to public Downloads on Android 10+ via MediaStore or standard public downloads
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        try {
+          val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+          }
+          val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+          if (uri != null) {
+            context.contentResolver.openOutputStream(uri)?.use { stream ->
+              stream.write(jsonContent.toByteArray(Charsets.UTF_8))
+              stream.flush()
+            }
+          }
+        } catch (_: Throwable) {
+          // Fallback to localFile is already successful
+        }
+      } else {
+        try {
+          val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+          if (downloadsDir != null && downloadsDir.exists()) {
+            val pubFile = File(downloadsDir, fileName)
+            pubFile.writeText(jsonContent, Charsets.UTF_8)
+          }
+        } catch (_: Throwable) {}
+      }
+
+      fileName
+    } catch (e: Throwable) {
+      null
+    }
+  }
+
+  fun getLocalBackupFiles(context: Context): List<File> {
+    val files = mutableListOf<File>()
+    val appDocDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+    if (appDocDir != null && appDocDir.exists()) {
+      files.addAll(appDocDir.listFiles { f -> f.name.endsWith(".json", ignoreCase = true) }?.toList().orEmpty())
+    }
+    val internalDir = File(context.filesDir, "backups")
+    if (internalDir.exists()) {
+      files.addAll(internalDir.listFiles { f -> f.name.endsWith(".json", ignoreCase = true) }?.toList().orEmpty())
+    }
+    val cacheDir = File(context.cacheDir, "backups")
+    if (cacheDir.exists()) {
+      files.addAll(cacheDir.listFiles { f -> f.name.endsWith(".json", ignoreCase = true) }?.toList().orEmpty())
+    }
+    return files.distinctBy { it.name }.sortedByDescending { it.lastModified() }
+  }
+
+  fun shareBackupFile(context: Context, jsonContent: String): Boolean {
+    return try {
       val dir = File(context.cacheDir, "backups")
       if (!dir.exists()) dir.mkdirs()
       val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
@@ -519,16 +589,22 @@ object FinanceBackupManager {
       val chooser = Intent.createChooser(intent, "Share OmniCalc Backup")
       chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       context.startActivity(chooser)
-    } catch (e: Exception) {
+      true
+    } catch (e: Throwable) {
       // Fallback to plain text sharing
-      val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, jsonContent)
-        putExtra(Intent.EXTRA_SUBJECT, "OmniCalc Finance Backup")
+      try {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+          type = "text/plain"
+          putExtra(Intent.EXTRA_TEXT, jsonContent)
+          putExtra(Intent.EXTRA_SUBJECT, "OmniCalc Finance Backup")
+        }
+        val chooser = Intent.createChooser(intent, "Share OmniCalc Backup JSON")
+        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
+        true
+      } catch (_: Throwable) {
+        false
       }
-      val chooser = Intent.createChooser(intent, "Share OmniCalc Backup JSON")
-      chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      context.startActivity(chooser)
     }
   }
 }

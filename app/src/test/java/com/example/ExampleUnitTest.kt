@@ -332,4 +332,51 @@ class ExampleUnitTest {
     assertEquals(50.00, transfers.single().amount, 0.001)
   }
 
+  @Test
+  fun testIncomeTaxCalculatorBudget2024() {
+    // Under ₹7.75L in New Regime with ₹75k standard deduction, taxable is <= 7L so zero tax under 87A rebate
+    val res775k = IncomeTaxCalculator.calculateTax(775000.0)
+    assertEquals(75000.0, res775k.newRegime.standardDeduction, 0.01)
+    assertEquals(700000.0, res775k.newRegime.taxableIncome, 0.01)
+    assertEquals(0.0, res775k.newRegime.totalTaxPayable, 0.01)
+
+    // CTC of 12L with 1.5L 80C and 25k 80D
+    val res12L = IncomeTaxCalculator.calculateTax(1200000.0, section80C = 150000.0, section80D = 25000.0)
+    assertTrue("Tax comparison should be non-zero", res12L.newRegime.totalTaxPayable > 0.0)
+    assertTrue("Should have recommendation", res12L.recommendedRegime.isNotBlank())
+  }
+
+  @Test
+  fun testSalaryCalculatorTakeHome() {
+    // Annual CTC: 12,00,000 (1 Lakh/month)
+    val salary = SalaryCalculator.calculate(1200000.0)
+    assertEquals(100000.0, salary.monthlyCtc, 0.01)
+    assertTrue("Monthly in-hand should be positive and reasonable", salary.monthlyInHand in 70000.0..95000.0)
+    assertTrue("Employee PF should be deducted", salary.monthlyEpf > 0.0)
+    assertEquals(200.0, salary.monthlyProfessionalTax, 0.01)
+  }
+
+  @Test
+  fun testStepUpSipAndGoalPlanner() {
+    // Step-up SIP: 10,000/mo, 10% annual increment, 12% return, 15 years
+    val stepUp = InvestmentCalculators.calculateStepUpSip(10000.0, 10.0, 12.0, 15)
+    assertTrue("Step up total wealth > regular SIP", stepUp.totalValue > stepUp.regularSipTotalValue)
+    assertTrue("Wealth boost should be substantial", stepUp.wealthBoostPercentage > 20.0)
+    assertEquals(15, stepUp.yearlyBreakdown.size)
+
+    // Goal Planner: Target 50 Lakh in 7 years at 12%
+    val goal = InvestmentCalculators.calculateTargetGoalSip(5000000.0, 12.0, 7)
+    assertEquals(5000000.0, goal.targetCorpus, 0.01)
+    assertTrue("Required SIP should be between 35,000 and 45,000/mo", goal.requiredMonthlySip in 35000.0..45000.0)
+    assertTrue("Wealth created by returns should be positive", goal.wealthCreatedByReturns > 0.0)
+  }
+
+  @Test
+  fun testUtilityTabEnumValues() {
+    val tabs = com.example.ui.screens.utility.UtilityTab.values()
+    assertEquals(6, tabs.size)
+    assertEquals("GST", com.example.ui.screens.utility.UtilityTab.GST_TAX.title)
+    assertEquals("Income Tax", com.example.ui.screens.utility.UtilityTab.INCOME_TAX.title)
+    assertEquals("Take Home", com.example.ui.screens.utility.UtilityTab.SALARY.title)
+  }
 }

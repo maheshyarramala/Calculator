@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
@@ -80,6 +81,8 @@ import com.example.ui.components.CreditCardBillReminderDialog
 import com.example.ui.components.CurrencyFormatter
 import com.example.ui.components.NumberInputField
 import android.net.Uri
+import java.io.File
+import com.example.domain.backup.FinanceBackupManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import java.text.SimpleDateFormat
@@ -148,19 +151,45 @@ fun FinanceHubScreen(
       viewModel.clearToast()
     }
   }
+
+  LaunchedEffect(uiState.isFinanceLocked) {
+    if (uiState.isFinanceLocked) {
+      val fragmentActivity = context as? androidx.fragment.app.FragmentActivity
+      if (fragmentActivity != null) {
+        com.example.domain.security.BiometricLockManager.authenticate(
+          activity = fragmentActivity,
+          onSuccess = { viewModel.unlockFinance() },
+          onError = { /* Keep locked */ }
+        )
+      }
+    }
+  }
+
   var editingAccountForOpeningBalance by remember { mutableStateOf<BankAccount?>(null) }
 
   // Storage Access Framework (SAF) Launchers for JSON Export & Import
   val exportFileLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.CreateDocument("application/json")
+    contract = ActivityResultContracts.CreateDocument("*/*")
   ) { uri: Uri? ->
-    uri?.let { viewModel.exportToUri(context, it) }
+    if (uri != null) {
+      viewModel.exportToUri(context, uri)
+    }
   }
 
   val importFileLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
   ) { uri: Uri? ->
-    uri?.let { viewModel.importFromUri(context, it, uiState.replaceExistingOnImport) }
+    if (uri != null) {
+      viewModel.importFromUri(context, uri, uiState.replaceExistingOnImport)
+    }
+  }
+
+  val getContentImportLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.GetContent()
+  ) { uri: Uri? ->
+    if (uri != null) {
+      viewModel.importFromUri(context, uri, uiState.replaceExistingOnImport)
+    }
   }
 
   // Backup & Restore Dialogs
@@ -178,12 +207,24 @@ fun FinanceHubScreen(
       onReplaceExistingChange = { viewModel.setReplaceExistingOnImport(it) },
       onExportToFile = {
         val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
-        exportFileLauncher.launch("OmniCalc_Finance_Backup_$dateStr.json")
+        try {
+          exportFileLauncher.launch("OmniCalc_Backup_$dateStr.json")
+        } catch (e: Exception) {
+          viewModel.showToast("Could not open folder picker: ${e.localizedMessage ?: "File picker error"}")
+        }
       },
       onShareBackup = { viewModel.shareBackup(context) },
       onCopyJson = { viewModel.copyBackupJson(context) },
       onImportFromFile = {
-        importFileLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+        try {
+          importFileLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+        } catch (_: Exception) {
+          try {
+            getContentImportLauncher.launch("*/*")
+          } catch (e2: Exception) {
+            viewModel.showToast("Could not open file browser: ${e2.localizedMessage ?: "File browser error"}")
+          }
+        }
       },
       onPasteJsonClick = {
         viewModel.setShowBackupModal(false)
@@ -647,29 +688,95 @@ fun FinanceHubScreen(
     },
     modifier = modifier.fillMaxSize()
   ) { paddingValues ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(paddingValues)
-        .pointerInput(uiState.selectedTab) {
-          var horizontalDrag = 0f
-          detectHorizontalDragGestures(
-            onHorizontalDrag = { _, dragAmount -> horizontalDrag += dragAmount },
-            onDragEnd = {
-              if (abs(horizontalDrag) > 90f) {
-                val tabs = FinanceTab.values()
-                val direction = if (horizontalDrag < 0f) 1 else -1
-                val nextIndex = (uiState.selectedTab.ordinal + direction).coerceIn(tabs.indices)
-                if (nextIndex != uiState.selectedTab.ordinal) viewModel.selectTab(tabs[nextIndex])
-              }
-              horizontalDrag = 0f
-            },
-            onDragCancel = { horizontalDrag = 0f }
+    if (uiState.isFinanceLocked) {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(paddingValues)
+          .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth(0.85f)
+            .padding(24.dp),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+          Box(
+            modifier = Modifier
+              .size(80.dp)
+              .clip(CircleShape)
+              .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              Icons.Default.Fingerprint,
+              contentDescription = "Finance Hub Locked",
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(46.dp)
+            )
+          }
+
+          Text(
+            text = "Finance Hub is Locked",
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
           )
+
+          Text(
+            text = "Biometric Privacy Shield is active to protect your personal bank accounts, credit cards, and ledger records.",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+
+          Button(
+            onClick = {
+              val fragmentActivity = context as? androidx.fragment.app.FragmentActivity
+              if (fragmentActivity != null) {
+                com.example.domain.security.BiometricLockManager.authenticate(
+                  activity = fragmentActivity,
+                  onSuccess = { viewModel.unlockFinance() },
+                  onError = { /* Keep locked */ }
+                )
+              } else {
+                viewModel.unlockFinance()
+              }
+            },
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+          ) {
+            Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Unlock with Fingerprint / PIN")
+          }
         }
-    ) {
-            // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Split Bill, Trip Manager)
-      ScrollableTabRow(
+      }
+    } else {
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(paddingValues)
+          .pointerInput(uiState.selectedTab) {
+            var horizontalDrag = 0f
+            detectHorizontalDragGestures(
+              onHorizontalDrag = { _, dragAmount -> horizontalDrag += dragAmount },
+              onDragEnd = {
+                if (abs(horizontalDrag) > 90f) {
+                  val tabs = FinanceTab.values()
+                  val direction = if (horizontalDrag < 0f) 1 else -1
+                  val nextIndex = (uiState.selectedTab.ordinal + direction).coerceIn(tabs.indices)
+                  if (nextIndex != uiState.selectedTab.ordinal) viewModel.selectTab(tabs[nextIndex])
+                }
+                horizontalDrag = 0f
+              },
+              onDragCancel = { horizontalDrag = 0f }
+            )
+          }
+      ) {
+        // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Split Bill, Trip Manager)
+        ScrollableTabRow(
         selectedTabIndex = uiState.selectedTab.ordinal,
         edgePadding = 12.dp,
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -840,6 +947,7 @@ fun FinanceHubScreen(
       }
     }
   }
+}
 }
 
 @Composable
@@ -2168,7 +2276,9 @@ private fun ExpensesSection(
         SpendingAnalyticsCard(
           expenses = expenseTransactions,
           categories = categories,
-          totalSpent = totalSpentOnExpenses
+          totalSpent = totalSpentOnExpenses,
+          selectedCategory = selectedTransactionCategory,
+          onSelectCategory = { selectedTransactionCategory = it }
         )
       }
     }
@@ -3078,8 +3188,11 @@ private fun findTransferCounterparts(
 private fun SpendingAnalyticsCard(
   expenses: List<ExpenseRecord>,
   categories: List<ExpenseCategory>,
-  totalSpent: Double
+  totalSpent: Double,
+  selectedCategory: String? = null,
+  onSelectCategory: (String?) -> Unit = {}
 ) {
+  val haptic = LocalHapticFeedback.current
   val catSpendList = remember(expenses, categories, totalSpent) {
     val map = mutableMapOf<String, Double>()
     expenses.forEach { exp ->
@@ -3133,19 +3246,30 @@ private fun SpendingAnalyticsCard(
             overflow = TextOverflow.Ellipsis
           )
         }
-        Surface(
-          shape = RoundedCornerShape(8.dp),
-          color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-        ) {
-          Text(
-            text = "${catSpendList.size} Categories",
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1,
-            softWrap = false,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        if (selectedCategory != null) {
+          FilterChip(
+            selected = true,
+            onClick = {
+              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+              onSelectCategory(null)
+            },
+            label = { Text("Filter: $selectedCategory ✕", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
           )
+        } else {
+          Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+          ) {
+            Text(
+              text = "${catSpendList.size} Categories",
+              fontSize = 11.5.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.primary,
+              maxLines = 1,
+              softWrap = false,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+          }
         }
       }
 
@@ -3155,23 +3279,51 @@ private fun SpendingAnalyticsCard(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        // Compose Canvas Donut Chart
+        // Compose Canvas Donut Chart with Tap support
         Box(
-          modifier = Modifier.size(125.dp),
+          modifier = Modifier.size(135.dp),
           contentAlignment = Alignment.Center
         ) {
-          Canvas(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+          Canvas(
+            modifier = Modifier
+              .fillMaxSize()
+              .padding(10.dp)
+              .pointerInput(catSpendList) {
+                detectTapGestures { offset ->
+                  val center = Offset(size.width / 2f, size.height / 2f)
+                  val dx = offset.x - center.x
+                  val dy = offset.y - center.y
+                  val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+                  val outerR = size.width / 2f
+                  val innerR = outerR - 26.dp.toPx()
+                  if (dist in innerR..outerR) {
+                    val angle = ((Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())) + 450.0) % 360.0)
+                    var acc = 0.0
+                    for (item in catSpendList) {
+                      val sweep = (item.third.second / 100.0) * 360.0
+                      if (angle >= acc && angle < acc + sweep) {
+                        haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSelectCategory(if (selectedCategory == item.first) null else item.first)
+                        break
+                      }
+                      acc += sweep
+                    }
+                  }
+                }
+              }
+          ) {
             var startAngle = -90f
-            catSpendList.forEach { (_, _, colorAndPercent) ->
+            catSpendList.forEach { (catName, _, colorAndPercent) ->
+              val isSelected = selectedCategory != null && selectedCategory.equals(catName, ignoreCase = true)
               val sweepAngle = (colorAndPercent.second / 100f) * 360f
               if (sweepAngle > 0f) {
                 drawArc(
-                  color = colorAndPercent.first,
+                  color = if (selectedCategory == null || isSelected) colorAndPercent.first else colorAndPercent.first.copy(alpha = 0.25f),
                   startAngle = startAngle,
                   sweepAngle = (sweepAngle - 2f).coerceAtLeast(1f),
                   useCenter = false,
                   style = Stroke(
-                    width = 22.dp.toPx(),
+                    width = if (isSelected) 26.dp.toPx() else 20.dp.toPx(),
                     cap = StrokeCap.Round
                   )
                 )
@@ -3181,13 +3333,13 @@ private fun SpendingAnalyticsCard(
           }
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-              text = "Top",
+              text = if (selectedCategory != null) "Filtered" else "Total Spent",
               fontSize = 9.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-              text = catSpendList.firstOrNull()?.first ?: "",
-              fontSize = 11.sp,
+              text = if (selectedCategory != null) selectedCategory else CurrencyFormatter.formatCompact(totalSpent),
+              fontSize = 11.5.sp,
               fontWeight = FontWeight.Bold,
               maxLines = 1,
               color = MaterialTheme.colorScheme.onSurface
@@ -3195,35 +3347,47 @@ private fun SpendingAnalyticsCard(
           }
         }
 
-        // Top Slices Quick Legend
+        // Top Slices Quick Legend with Clickable Pills
         Column(
           modifier = Modifier.padding(start = 10.dp),
           verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-          catSpendList.take(3).forEach { (catName, _, colorAndPercent) ->
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(6.dp)
+          catSpendList.take(4).forEach { (catName, _, colorAndPercent) ->
+            val isSelected = selectedCategory != null && selectedCategory.equals(catName, ignoreCase = true)
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = if (isSelected) colorAndPercent.first.copy(alpha = 0.15f) else Color.Transparent,
+              border = if (isSelected) BorderStroke(1.dp, colorAndPercent.first) else null,
+              modifier = Modifier.clickable {
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onSelectCategory(if (selectedCategory == catName) null else catName)
+              }
             ) {
-              Box(
-                modifier = Modifier
-                  .size(10.dp)
-                  .clip(CircleShape)
-                  .background(colorAndPercent.first)
-              )
-              Text(
-                text = catName,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                modifier = Modifier.widthIn(max = 85.dp)
-              )
-              Text(
-                text = "${colorAndPercent.second.toInt()}%",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-              )
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(colorAndPercent.first)
+                )
+                Text(
+                  text = catName,
+                  fontSize = 11.5.sp,
+                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                  maxLines = 1,
+                  modifier = Modifier.widthIn(max = 85.dp)
+                )
+                Text(
+                  text = "${colorAndPercent.second.toInt()}%",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = if (isSelected) colorAndPercent.first else MaterialTheme.colorScheme.primary
+                )
+              }
             }
           }
         }
@@ -3231,10 +3395,22 @@ private fun SpendingAnalyticsCard(
 
       HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
 
-      // Category breakdown progress bars
+      // Category breakdown progress bars (Tap any to filter!)
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         catSpendList.forEach { (catName, amount, colorAndPercent) ->
-          Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+          val isSelected = selectedCategory != null && selectedCategory.equals(catName, ignoreCase = true)
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(RoundedCornerShape(8.dp))
+              .background(if (isSelected) colorAndPercent.first.copy(alpha = 0.10f) else Color.Transparent)
+              .clickable {
+                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onSelectCategory(if (selectedCategory == catName) null else catName)
+              }
+              .padding(4.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+          ) {
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.SpaceBetween,
@@ -3253,7 +3429,8 @@ private fun SpendingAnalyticsCard(
                 Text(
                   text = catName,
                   fontSize = 12.sp,
-                  fontWeight = FontWeight.Medium
+                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                  color = if (isSelected) colorAndPercent.first else MaterialTheme.colorScheme.onSurface
                 )
               }
               Row(
@@ -4882,11 +5059,14 @@ private fun AddAccountDialog(
   var holderName by remember { mutableStateOf("") }
   var notes by remember { mutableStateOf("") }
 
-  val types = listOf("Savings", "Current", "Cash Wallet", "Salary Account")
+  val types = listOf("Savings", "Current", "Cash Wallet", "Salary Account", "Other")
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Add Bank / Cash Account") },
+    shape = RoundedCornerShape(24.dp),
+    containerColor = MaterialTheme.colorScheme.surface,
+    tonalElevation = 6.dp,
+    title = { Text("Add Bank / Cash Account", fontWeight = FontWeight.Bold) },
     text = {
       Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -4919,16 +5099,17 @@ private fun AddAccountDialog(
         )
 
         Text("Account Type:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.fillMaxWidth()
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
         ) {
           types.forEach { type ->
             FilterChip(
               selected = accountType == type,
               onClick = { accountType = type },
-              label = { Text(type, fontSize = 12.sp) }
+              label = { Text(type, fontSize = 11.5.sp) }
             )
           }
         }
@@ -5157,8 +5338,6 @@ private fun BackupRestoreBottomSheet(
   onPasteJsonClick: () -> Unit,
   onDismiss: () -> Unit
 ) {
-  val haptic = LocalHapticFeedback.current
-
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -5167,7 +5346,8 @@ private fun BackupRestoreBottomSheet(
       modifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = 20.dp)
-        .padding(bottom = 36.dp),
+        .padding(bottom = 36.dp)
+        .verticalScroll(rememberScrollState()),
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
       Row(
@@ -5178,128 +5358,51 @@ private fun BackupRestoreBottomSheet(
         Row(verticalAlignment = Alignment.CenterVertically) {
           Box(
             modifier = Modifier
-              .size(40.dp)
+              .size(42.dp)
               .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+              .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
           ) {
-            Icon(
-              Icons.Default.CloudSync,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(24.dp)
-            )
+            Icon(Icons.Default.CloudSync, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
           }
           Spacer(modifier = Modifier.width(12.dp))
           Column {
-            Text(
-              text = "Data Backup & Restore",
-              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-            )
-            Text(
-              text = "Export and import your custom configurations via JSON",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("Data Backup & Restore", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Export & import offline JSON files", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
           }
         }
-
         IconButton(onClick = onDismiss) {
           Icon(Icons.Default.Close, contentDescription = "Close")
         }
       }
 
-      // Stats Chip / Banner
-      Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Column(
-          modifier = Modifier.padding(12.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-              Text(categoriesCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
-              Text("Categories", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-              Text(banksCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1E3A8A))
-              Text("Bank Accounts", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-              Text(tripsCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0D9488))
-              Text("Trips", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-              Text(expensesCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFDC2626))
-              Text("Expenses", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-          }
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-              Text(loansCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF7C3AED))
-              Text("Loans", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-              Text(debtsCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFEA580C))
-              Text("Debts", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-              Text(subscriptionsCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0891B2))
-              Text("Subscriptions", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-              Text(cardRemindersCount.toString(), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFDB2777))
-              Text("Card Bills", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-          }
-        }
-      }
-
-      // EXPORT SECTION
+      // Export Section
       Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier.fillMaxWidth()
       ) {
-        Column(
-          modifier = Modifier.padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
           Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(8.dp))
             Text("Export Data (Backup)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
           }
           Text(
-            text = "Generate an offline JSON file containing all your custom categories, bank details, and trips.",
+            text = "Choose a destination folder (Downloads, Drive, SD Card) to save your offline JSON backup.",
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
 
           Button(
-            onClick = {
-              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-              onExportToFile()
-            },
+            onClick = onExportToFile,
             shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("export_to_file_btn")
+            modifier = Modifier.fillMaxWidth()
           ) {
-            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Save JSON File to Device")
+            Text("Save Backup to Device (Choose Folder)")
           }
 
           Row(
@@ -5307,111 +5410,83 @@ private fun BackupRestoreBottomSheet(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
           ) {
             OutlinedButton(
-              onClick = {
-                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onShareBackup()
-              },
+              onClick = onShareBackup,
               shape = RoundedCornerShape(10.dp),
-              modifier = Modifier
-                .weight(1f)
-                .testTag("share_backup_btn")
+              modifier = Modifier.weight(1f)
             ) {
               Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Share File", fontSize = 12.sp)
+              Text("Share File", fontSize = 12.sp, maxLines = 1, softWrap = false)
             }
-
             OutlinedButton(
-              onClick = {
-                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onCopyJson()
-              },
+              onClick = onCopyJson,
               shape = RoundedCornerShape(10.dp),
-              modifier = Modifier
-                .weight(1f)
-                .testTag("copy_json_btn")
+              modifier = Modifier.weight(1f)
             ) {
               Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Copy JSON", fontSize = 12.sp)
+              Text("Copy JSON", fontSize = 12.sp, maxLines = 1, softWrap = false)
             }
           }
         }
       }
 
-      // IMPORT SECTION
+      // Import Section
       Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = Modifier.fillMaxWidth()
       ) {
-        Column(
-          modifier = Modifier.padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
           Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.FileUpload, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.FileUpload, contentDescription = null, tint = Color(0xFF059669))
             Spacer(modifier = Modifier.width(8.dp))
             Text("Import Data (Restore)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
           }
-
           Text(
-            text = "Select a JSON backup file to load categories, bank details, and trips back into OmniCalc.",
+            text = "Browse your phone storage to select an OmniCalc JSON file to restore.",
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
 
-          // Import Strategy Choice
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Import Strategy:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              FilterChip(
-                selected = !replaceExisting,
-                onClick = { onReplaceExistingChange(false) },
-                label = { Text("Merge (Keep current)") },
-                modifier = Modifier.weight(1f)
-              )
-              FilterChip(
-                selected = replaceExisting,
-                onClick = { onReplaceExistingChange(true) },
-                label = { Text("Replace (Overwrite)") },
-                modifier = Modifier.weight(1f)
-              )
-            }
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            FilterChip(
+              selected = !replaceExisting,
+              onClick = { onReplaceExistingChange(false) },
+              label = { Text("Merge Data") },
+              modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+              selected = replaceExisting,
+              onClick = { onReplaceExistingChange(true) },
+              label = { Text("Overwrite (Replace)") },
+              modifier = Modifier.weight(1f)
+            )
           }
 
           Button(
-            onClick = {
-              haptic.performConfiguredHapticFeedback(HapticFeedbackType.LongPress)
-              onImportFromFile()
-            },
+            onClick = onImportFromFile,
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
             shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("import_from_file_btn")
+            modifier = Modifier.fillMaxWidth()
           ) {
             Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Select JSON Backup File")
+            Text("Select Backup File from Device")
           }
 
           OutlinedButton(
-            onClick = {
-              haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-              onPasteJsonClick()
-            },
+            onClick = onPasteJsonClick,
             shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("paste_json_btn")
+            modifier = Modifier.fillMaxWidth()
           ) {
             Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Paste JSON Text Directly")
+            Text("Paste JSON Text Directly", fontSize = 12.sp)
           }
         }
       }

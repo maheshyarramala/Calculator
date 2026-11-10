@@ -343,4 +343,108 @@ object InvestmentCalculators {
       yearlyBreakdown = yearlyBreakdown
     )
   }
+
+  data class StepUpSipResult(
+    val investedAmount: Double,
+    val estimatedReturns: Double,
+    val totalValue: Double,
+    val finalMonthlySip: Double,
+    val regularSipTotalValue: Double,
+    val wealthBoostPercentage: Double,
+    val yearlyBreakdown: List<YearlyBreakdown>
+  )
+
+  data class GoalTargetResult(
+    val targetCorpus: Double,
+    val requiredMonthlySip: Double,
+    val totalInvested: Double,
+    val wealthCreatedByReturns: Double,
+    val tenureYears: Int,
+    val expectedReturnRate: Double,
+    val yearlyBreakdown: List<YearlyBreakdown>
+  )
+
+  fun calculateStepUpSip(
+    initialMonthlySip: Double,
+    annualStepUpPercentage: Double,
+    annualReturnRate: Double,
+    tenureYears: Int
+  ): StepUpSipResult {
+    if (initialMonthlySip <= 0.0 || tenureYears <= 0) {
+      return StepUpSipResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
+    }
+
+    val monthlyRate = (annualReturnRate / 12.0) / 100.0
+    val stepUpRate = (annualStepUpPercentage.coerceAtLeast(0.0)) / 100.0
+
+    var balance = 0.0
+    var totalInvested = 0.0
+    var currentMonthly = initialMonthlySip
+    val yearlyBreakdown = mutableListOf<YearlyBreakdown>()
+
+    for (year in 1..tenureYears) {
+      for (m in 1..12) {
+        totalInvested += currentMonthly
+        balance = if (monthlyRate > 0.0) {
+          (balance + currentMonthly) * (1.0 + monthlyRate)
+        } else {
+          balance + currentMonthly
+        }
+      }
+      val returns = (balance - totalInvested).coerceAtLeast(0.0)
+      yearlyBreakdown.add(YearlyBreakdown(year, totalInvested, returns, balance))
+
+      if (year < tenureYears) {
+        currentMonthly *= (1.0 + stepUpRate)
+      }
+    }
+
+    val regularSip = calculateSip(initialMonthlySip, annualReturnRate, tenureYears)
+    val wealthBoost = if (regularSip.totalValue > 0) {
+      ((balance - regularSip.totalValue) / regularSip.totalValue) * 100.0
+    } else 0.0
+
+    return StepUpSipResult(
+      investedAmount = totalInvested,
+      estimatedReturns = (balance - totalInvested).coerceAtLeast(0.0),
+      totalValue = balance,
+      finalMonthlySip = currentMonthly,
+      regularSipTotalValue = regularSip.totalValue,
+      wealthBoostPercentage = wealthBoost,
+      yearlyBreakdown = yearlyBreakdown
+    )
+  }
+
+  fun calculateTargetGoalSip(
+    targetCorpus: Double,
+    annualReturnRate: Double,
+    tenureYears: Int
+  ): GoalTargetResult {
+    if (targetCorpus <= 0.0 || tenureYears <= 0) {
+      return GoalTargetResult(0.0, 0.0, 0.0, 0.0, tenureYears, annualReturnRate, emptyList())
+    }
+
+    val totalMonths = tenureYears * 12
+    val monthlyRate = (annualReturnRate / 12.0) / 100.0
+
+    val requiredMonthly = if (monthlyRate <= 0.0) {
+      targetCorpus / totalMonths
+    } else {
+      val factor = (((1.0 + monthlyRate).pow(totalMonths.toDouble()) - 1.0) / monthlyRate) * (1.0 + monthlyRate)
+      if (factor > 0) targetCorpus / factor else targetCorpus / totalMonths
+    }
+
+    val sipSim = calculateSip(requiredMonthly, annualReturnRate, tenureYears)
+
+    return GoalTargetResult(
+      targetCorpus = targetCorpus,
+      requiredMonthlySip = requiredMonthly,
+      totalInvested = sipSim.investedAmount,
+      wealthCreatedByReturns = (targetCorpus - sipSim.investedAmount).coerceAtLeast(0.0),
+      tenureYears = tenureYears,
+      expectedReturnRate = annualReturnRate,
+      yearlyBreakdown = sipSim.yearlyBreakdown
+    )
+  }
 }
+

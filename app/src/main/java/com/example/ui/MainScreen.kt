@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -85,7 +86,8 @@ enum class MainDestination(
   UTILITIES(R.string.navigation_utility, Icons.Default.Widgets),
   HOME(R.string.navigation_home, Icons.Default.Dashboard, isBottomTab = false),
   INTEREST(R.string.navigation_interest, Icons.Default.Percent, isBottomTab = false),
-  AGE_CALENDAR(R.string.navigation_age_date, Icons.Default.CalendarMonth, isBottomTab = false)
+  AGE_CALENDAR(R.string.navigation_age_date, Icons.Default.CalendarMonth, isBottomTab = false),
+  TAX_SALARY(R.string.navigation_tax_salary, Icons.Default.ReceiptLong, isBottomTab = false)
 }
 
 private val mainDestinationSaver = Saver<MainDestination, String>(
@@ -128,9 +130,12 @@ fun MainScreen(
   val calculatorViewModel: CalculatorViewModel = viewModel()
   val ageCalendarViewModel: AgeCalendarViewModel = viewModel()
   val utilityViewModel: UtilityViewModel = viewModel()
+  val taxSalaryViewModel: com.example.ui.screens.tax.TaxSalaryViewModel = viewModel()
   val historyViewModel: HistoryViewModel = viewModel()
 
+  val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
+  val financeUiState by financeViewModel.uiState.collectAsState()
 
   showAppInfoDialog?.let { info ->
     AppInfoModalDialog(
@@ -175,6 +180,9 @@ fun MainScreen(
           "CURRENCY", "UNIT", "TIP", "GST" -> {
             utilityViewModel.restoreFromRecord(record)
             currentDestination = MainDestination.UTILITIES
+          }
+          "TAX", "SALARY" -> {
+            currentDestination = MainDestination.TAX_SALARY
           }
           else -> currentDestination = MainDestination.CALCULATOR
         }
@@ -256,6 +264,26 @@ fun MainScreen(
         CalculatorHubItem("GST & Tax", "Inclusive & exclusive", Icons.AutoMirrored.Filled.ReceiptLong, Color(0xFF6366F1)) {
           currentDestination = MainDestination.UTILITIES
           utilityViewModel.selectTab(UtilityTab.GST_TAX)
+          showHubSheet = false
+        },
+        CalculatorHubItem("Income Tax", "Old vs New Regime (Budget '24)", Icons.Default.ReceiptLong, Color(0xFF059669)) {
+          currentDestination = MainDestination.UTILITIES
+          utilityViewModel.selectTab(UtilityTab.INCOME_TAX)
+          showHubSheet = false
+        },
+        CalculatorHubItem("In-Hand Salary", "CTC to Take-Home pay slip", Icons.Default.AccountBalanceWallet, Color(0xFF2563EB)) {
+          currentDestination = MainDestination.UTILITIES
+          utilityViewModel.selectTab(UtilityTab.SALARY)
+          showHubSheet = false
+        },
+        CalculatorHubItem("Step-Up SIP", "Annual increment compounding", Icons.Default.TrendingUp, Color(0xFF10B981)) {
+          currentDestination = MainDestination.INVESTMENTS
+          investmentViewModel.selectTab(InvestmentTab.STEP_UP_SIP)
+          showHubSheet = false
+        },
+        CalculatorHubItem("Goal Target Planner", "Target wealth corpus planner", Icons.Default.TrackChanges, Color(0xFFF59E0B)) {
+          currentDestination = MainDestination.INVESTMENTS
+          investmentViewModel.selectTab(InvestmentTab.GOAL_PLANNER)
           showHubSheet = false
         }
       )
@@ -339,6 +367,24 @@ fun MainScreen(
                   menuExpanded = false
                   currentDestination = MainDestination.FINANCE
                   financeViewModel.setShowBackupModal(true)
+                }
+              )
+              DropdownMenuItem(
+                text = { Text("Export Finance (CSV)") },
+                onClick = {
+                  menuExpanded = false
+                  financeViewModel.exportCsv(context)
+                }
+              )
+              DropdownMenuItem(
+                text = {
+                  val isLocked = financeUiState.isBiometricLockEnabled
+                  Text(if (isLocked) "Disable Biometric Lock" else "Enable Biometric Lock")
+                },
+                onClick = {
+                  menuExpanded = false
+                  val newState = !financeUiState.isBiometricLockEnabled
+                  financeViewModel.setBiometricLockEnabled(newState)
                 }
               )
               DropdownMenuItem(
@@ -464,9 +510,20 @@ fun MainScreen(
         MainDestination.INVESTMENTS -> InvestmentScreen(viewModel = investmentViewModel)
         MainDestination.FINANCE -> FinanceHubScreen(viewModel = financeViewModel)
         MainDestination.CALCULATOR -> CalculatorScreen(viewModel = calculatorViewModel)
-        MainDestination.UTILITIES -> UtilityScreen(viewModel = utilityViewModel)
+        MainDestination.UTILITIES -> UtilityScreen(
+          viewModel = utilityViewModel,
+          taxSalaryViewModel = taxSalaryViewModel,
+          onNavigateToTaxSalary = { tab ->
+            taxSalaryViewModel.selectTab(tab)
+            currentDestination = MainDestination.TAX_SALARY
+          }
+        )
         MainDestination.INTEREST -> InterestCalculatorScreen(viewModel = interestViewModel)
         MainDestination.AGE_CALENDAR -> AgeCalendarScreen(viewModel = ageCalendarViewModel)
+        MainDestination.TAX_SALARY -> com.example.ui.screens.tax.TaxSalaryScreen(
+          viewModel = taxSalaryViewModel,
+          onNavigateBack = { currentDestination = MainDestination.FINANCE }
+        )
         }
       }
     }
