@@ -2173,58 +2173,7 @@ private fun ExpensesSection(
       }
     }
 
-    // Category Chips Bar
-    item(key = "categories_list") {
-      LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        items(categories, key = { it.id }) { cat ->
-          val color = remember(cat.colorHex) {
-            try {
-              Color(android.graphics.Color.parseColor(cat.colorHex))
-            } catch (e: Exception) {
-              Color(0xFF6366F1)
-            }
-          }
-          Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = color.copy(alpha = 0.12f),
-            modifier = Modifier.padding(vertical = 2.dp)
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(10.dp)
-                  .clip(CircleShape)
-                  .background(color)
-              )
-              Spacer(modifier = Modifier.width(6.dp))
-              Text(
-                text = cat.name,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-              )
-              if (cat.isCustom) {
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                  Icons.Default.Close,
-                  contentDescription = "Remove custom category",
-                  modifier = Modifier
-                    .size(14.dp)
-                    .clickable { onDeleteCategory(cat) },
-                  tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-              }
-            }
-          }
-        }
-      }
-    }
+    // Category shortcut chips removed to reduce clutter above Recent Transactions.
 
     // Recent Transactions Title and Filter indicator
     item(key = "expenses_title") {
@@ -2251,65 +2200,138 @@ private fun ExpensesSection(
     }
 
     item(key = "transaction_filters") {
-      Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedTextField(
-          value = transactionSearch,
-          onValueChange = { transactionSearch = it },
-          modifier = Modifier.fillMaxWidth().testTag("transaction_search"),
-          singleLine = true,
-          placeholder = { Text("Search merchant, category, account or note") },
-          leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search transactions") },
-          trailingIcon = {
-            if (transactionSearch.isNotEmpty()) {
-              IconButton(onClick = { transactionSearch = "" }) {
-                Icon(Icons.Default.Close, contentDescription = "Clear search")
+      Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+      ) {
+        Column(
+          modifier = Modifier.padding(10.dp),
+          verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+          OutlinedTextField(
+            value = transactionSearch,
+            onValueChange = { transactionSearch = it },
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(54.dp)
+              .testTag("transaction_search"),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            placeholder = {
+              Text(
+                "Search merchant, category, account or note",
+                maxLines = 1,
+                fontSize = 13.sp,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+              )
+            },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search transactions", modifier = Modifier.size(20.dp)) },
+            trailingIcon = {
+              if (transactionSearch.isNotEmpty()) {
+                IconButton(onClick = { transactionSearch = "" }) {
+                  Icon(Icons.Default.Close, contentDescription = "Clear search")
+                }
               }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+              focusedBorderColor = MaterialTheme.colorScheme.primary,
+              unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+              focusedContainerColor = MaterialTheme.colorScheme.surface,
+              unfocusedContainerColor = MaterialTheme.colorScheme.surface
+            )
+          )
+          LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            items(listOf("ALL" to "Any date", "WEEK" to "7 days", "MONTH" to "This month", "LAST_MONTH" to "Last month"), key = { it.first }) { (period, label) ->
+              val selected = selectedTransactionPeriod == period
+              FilterChip(
+                selected = selected,
+                onClick = { selectedTransactionPeriod = period },
+                label = { Text(label, maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                colors = FilterChipDefaults.filterChipColors(
+                  selectedContainerColor = when (period) {
+                    "WEEK" -> Color(0xFFDBEAFE)
+                    "MONTH" -> Color(0xFFD1FAE5)
+                    "LAST_MONTH" -> Color(0xFFFFEDD5)
+                    else -> Color(0xFFEDE9FE)
+                  },
+                  selectedLabelColor = when (period) {
+                    "WEEK" -> Color(0xFF1D4ED8)
+                    "MONTH" -> Color(0xFF047857)
+                    "LAST_MONTH" -> Color(0xFFC2410C)
+                    else -> Color(0xFF5B21B6)
+                  },
+                  selectedLeadingIconColor = MaterialTheme.colorScheme.primary
+                ),
+                border = BorderStroke(1.dp, if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant)
+              )
             }
           }
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          items(listOf("ALL" to "Any date", "WEEK" to "7 days", "MONTH" to "This month", "LAST_MONTH" to "Last month"), key = { it.first }) { (period, label) ->
-            FilterChip(
-              selected = selectedTransactionPeriod == period,
-              onClick = { selectedTransactionPeriod = period },
-              label = { Text(label, maxLines = 1, softWrap = false) }
-            )
+          LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            items(
+              listOf(
+                null to "All",
+                "EXPENSE" to "Expenses",
+                "INCOME" to "Income",
+                "TRANSFER" to "Transfers"
+              ),
+              key = { it.first ?: "all_types" }
+            ) { (type, label) ->
+              val selected = selectedTransactionType == type
+              val chipColor = when (type) {
+                "EXPENSE" -> Color(0xFFDC2626)
+                "INCOME" -> Color(0xFF059669)
+                "TRANSFER" -> Color(0xFF2563EB)
+                else -> Color(0xFF5B4AE8)
+              }
+              FilterChip(
+                selected = selected,
+                onClick = { selectedTransactionType = type },
+                label = { Text(label, maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                colors = FilterChipDefaults.filterChipColors(
+                  selectedContainerColor = chipColor.copy(alpha = 0.14f),
+                  selectedLabelColor = chipColor,
+                  selectedLeadingIconColor = chipColor
+                ),
+                border = BorderStroke(1.dp, if (selected) chipColor.copy(alpha = 0.55f) else MaterialTheme.colorScheme.outlineVariant)
+              )
+            }
           }
-        }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          items(
-            listOf(
-              null to "All",
-              "EXPENSE" to "Expenses",
-              "INCOME" to "Income",
-              "TRANSFER" to "Transfers"
-            ),
-            key = { it.first ?: "all_types" }
-          ) { (type, label) ->
-            FilterChip(
-              selected = selectedTransactionType == type,
-              onClick = { selectedTransactionType = type },
-              label = { Text(label, maxLines = 1, softWrap = false) }
-            )
-          }
-        }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          item(key = "all_categories") {
-            FilterChip(
-              selected = selectedTransactionCategory == null,
-              onClick = { selectedTransactionCategory = null },
-              label = { Text("All Categories", maxLines = 1, softWrap = false) }
-            )
-          }
-          items(transactionCategories, key = { it.lowercase() }) { category ->
-            FilterChip(
-              selected = selectedTransactionCategory.equals(category, ignoreCase = true),
-              onClick = {
-                selectedTransactionCategory =
-                  if (selectedTransactionCategory.equals(category, ignoreCase = true)) null else category
-              },
-              label = { Text(category, maxLines = 1, softWrap = false) }
-            )
+          LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            item(key = "all_categories") {
+              val selected = selectedTransactionCategory == null
+              FilterChip(
+                selected = selected,
+                onClick = { selectedTransactionCategory = null },
+                label = { Text("All Categories", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                colors = FilterChipDefaults.filterChipColors(
+                  selectedContainerColor = Color(0xFFEDE9FE),
+                  selectedLabelColor = Color(0xFF5B21B6)
+                ),
+                border = BorderStroke(1.dp, if (selected) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.outlineVariant)
+              )
+            }
+            items(transactionCategories, key = { it.lowercase() }) { category ->
+              val selected = selectedTransactionCategory.equals(category, ignoreCase = true)
+              val categoryColor = categories.firstOrNull { it.name.equals(category, ignoreCase = true) }?.let {
+                try { Color(android.graphics.Color.parseColor(it.colorHex)) } catch (_: Exception) { Color(0xFF0D9488) }
+              } ?: Color(0xFF0D9488)
+              FilterChip(
+                selected = selected,
+                onClick = {
+                  selectedTransactionCategory =
+                    if (selected) null else category
+                },
+                label = { Text(category, maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                colors = FilterChipDefaults.filterChipColors(
+                  selectedContainerColor = categoryColor.copy(alpha = 0.15f),
+                  selectedLabelColor = categoryColor
+                ),
+                border = BorderStroke(1.dp, if (selected) categoryColor.copy(alpha = 0.65f) else MaterialTheme.colorScheme.outlineVariant)
+              )
+            }
           }
         }
       }
