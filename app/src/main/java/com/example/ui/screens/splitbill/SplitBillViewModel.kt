@@ -284,9 +284,11 @@ class SplitBillViewModel(application: Application) : AndroidViewModel(applicatio
     _uiState.update { state ->
       val updatedParticipants = state.participants.filter { it.id != id }
       val updatedItems = state.items.map { item ->
+        val updatedClaims = item.claimedParticipantIds.filter { it != id }
         item.copy(
-          claimedParticipantIds = item.claimedParticipantIds.filter { it != id },
-          paidByParticipantId = item.paidByParticipantId?.takeUnless { it == id }
+          claimedParticipantIds = updatedClaims,
+          paidByParticipantId = item.paidByParticipantId?.takeUnless { it == id },
+          isUnassigned = item.isUnassigned || (item.claimedParticipantIds.isNotEmpty() && updatedClaims.isEmpty())
         )
       }
       state.copy(participants = updatedParticipants, items = updatedItems)
