@@ -1435,7 +1435,7 @@ private fun ExpensesSection(
     accountsWithBalances.filter { it.account.id in creditCardAccountIds }
   }
   val bankAndCashAccounts = remember(accountsWithBalances) {
-    accountsWithBalances.filter { it.account.accountType != "Credit Card" }
+    accountsWithBalances.filter { !it.account.accountType.equals("Credit Card", ignoreCase = true) }
   }
   var selectedTransactionType by rememberSaveable { mutableStateOf<String?>(null) }
   var selectedTransactionCategory by rememberSaveable { mutableStateOf<String?>(null) }
