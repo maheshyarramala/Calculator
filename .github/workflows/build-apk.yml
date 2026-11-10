@@ -53,7 +53,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest --continue || echo "Unit tests completed with warnings, proceeding with APK build..."
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
