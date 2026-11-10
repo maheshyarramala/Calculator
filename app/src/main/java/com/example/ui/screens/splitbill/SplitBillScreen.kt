@@ -71,6 +71,9 @@ fun SplitBillScreen(
   val clipboard = LocalClipboardManager.current
   var currencyMenu by remember { mutableStateOf(false) }
   var showTripImportDialog by remember { mutableStateOf(false) }
+  var showNewGroupDialog by remember { mutableStateOf(false) }
+  var newGroupName by remember { mutableStateOf("") }
+  var groupMenuExpanded by remember { mutableStateOf(false) }
   var selectedExpense by remember { mutableStateOf<ReceiptItem?>(null) }
   var editingExpense by remember { mutableStateOf<ReceiptItem?>(null) }
   var expensePendingDelete by remember { mutableStateOf<ReceiptItem?>(null) }
@@ -177,6 +180,15 @@ fun SplitBillScreen(
     )
   }
 
+
+  if (showNewGroupDialog) AlertDialog(
+    onDismissRequest = { showNewGroupDialog = false },
+    title = { Text("Create a new split") },
+    text = { OutlinedTextField(value = newGroupName, onValueChange = { newGroupName = it }, label = { Text("Group name") }, placeholder = { Text("e.g. Family Trip") }, singleLine = true) },
+    confirmButton = { Button(onClick = { viewModel.createNewGroup(newGroupName); newGroupName = ""; showNewGroupDialog = false }) { Text("Create split") } },
+    dismissButton = { TextButton(onClick = { showNewGroupDialog = false; newGroupName = "" }) { Text("Cancel") } }
+  )
+
   if (state.showOcrDialog) OcrScannerBottomSheet(
     onDismiss = { viewModel.setShowOcrDialog(false) },
     onApplyReceipt = { viewModel.applyParsedReceipt(it.copy(tax = 0.0, tip = 0.0, discount = 0.0)) },
@@ -187,7 +199,21 @@ fun SplitBillScreen(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
       Column(Modifier.weight(1f)) {
         Text("Split Bill", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(state.billTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box {
+          TextButton(onClick = { groupMenuExpanded = true }, contentPadding = PaddingValues(0.dp)) {
+            Text(state.billTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.ExpandMore, null, modifier = Modifier.size(16.dp))
+          }
+          DropdownMenu(expanded = groupMenuExpanded, onDismissRequest = { groupMenuExpanded = false }) {
+            state.groups.forEach { group ->
+              DropdownMenuItem(text = { Text(group.name) }, onClick = { viewModel.selectGroup(group.id); groupMenuExpanded = false })
+            }
+          }
+        }
+      }
+      FilledTonalButton(onClick = { newGroupName = ""; showNewGroupDialog = true }) {
+        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+        Text("New split", fontSize = 11.sp)
       }
       if (trips.isNotEmpty()) {
         TextButton(onClick = { showTripImportDialog = true }) {
@@ -272,7 +298,6 @@ fun SplitBillScreen(
               Spacer(Modifier.width(12.dp))
               Column(Modifier.weight(1f)) { Text(person.participant.name, fontWeight = FontWeight.SemiBold); Text("Paid ${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.paidAmount)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
               Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.totalToPay)}", fontWeight = FontWeight.Bold); Text("Your share", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-              Text("Edit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
           }
         }
