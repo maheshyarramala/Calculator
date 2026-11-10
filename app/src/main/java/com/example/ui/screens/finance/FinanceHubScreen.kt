@@ -2215,7 +2215,7 @@ private fun ExpensesSection(
             onValueChange = { transactionSearch = it },
             modifier = Modifier
               .fillMaxWidth()
-              .height(54.dp)
+              .height(58.dp)
               .testTag("transaction_search"),
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyMedium,
