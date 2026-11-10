@@ -72,7 +72,7 @@ object DebtSimplifier {
     val weights = subtotals.map { it.coerceAtLeast(0.0) }
     val paymentsByParticipant = participants.associate { participant ->
       val itemPayments = items
-        .filter { it.paidByParticipantId == participant.id }
+        .filter { !it.isUnassigned && it.paidByParticipantId == participant.id }
         .sumOf { toCents(nonNegative(it.price) * it.quantity.coerceAtLeast(1)) / 100.0 }
       participant.id to (nonNegative(participant.paidAmount) + itemPayments)
     }
