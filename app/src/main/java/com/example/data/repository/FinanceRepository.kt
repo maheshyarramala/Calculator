@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.room.withTransaction
 import java.util.Calendar
 
 class FinanceRepository private constructor(context: Context) {
@@ -179,8 +180,14 @@ class FinanceRepository private constructor(context: Context) {
     financeDao.insertBankAccount(account)
   }
 
-  suspend fun deleteBankAccount(account: BankAccount) = withContext(Dispatchers.IO) {
-    financeDao.deleteBankAccount(account)
+  suspend fun deleteBankAccount(account: BankAccount): Boolean = withContext(Dispatchers.IO) {
+    val linkedRecords = financeDao.getAccountLinkedRecordCount(account.id)
+    if (linkedRecords > 0) return@withContext false
+    database.withTransaction {
+      financeDao.deleteCreditCardBillReminder(account.id)
+      financeDao.deleteBankAccount(account)
+    }
+    true
   }
 
   suspend fun updateBankAccount(account: BankAccount) = withContext(Dispatchers.IO) {
@@ -205,36 +212,38 @@ class FinanceRepository private constructor(context: Context) {
     amount: Double,
     notes: String
   ): Boolean = withContext(Dispatchers.IO) {
-    if (fromAccountId == toAccountId || amount <= 0.0) return@withContext false
+    if (fromAccountId == toAccountId || !amount.isFinite() || amount <= 0.0) return@withContext false
     val accounts = accountsWithBalances.value
     val fromAcc = accounts.find { it.account.id == fromAccountId } ?: return@withContext false
     val toAcc = accounts.find { it.account.id == toAccountId } ?: return@withContext false
 
     val timestamp = System.currentTimeMillis()
-    financeDao.insertExpense(
-      ExpenseRecord(
-        title = "Transfer to ${toAcc.account.bankName}",
-        amount = amount,
-        categoryName = "Bills & Utilities",
-        type = "TRANSFER_OUT",
-        bankAccountId = fromAccountId,
-        bankAccountName = fromAcc.account.bankName,
-        dateTimestamp = timestamp,
-        notes = notes
+    database.withTransaction {
+      financeDao.insertExpense(
+        ExpenseRecord(
+          title = "Transfer to ${toAcc.account.bankName}",
+          amount = amount,
+          categoryName = "Bills & Utilities",
+          type = "TRANSFER_OUT",
+          bankAccountId = fromAccountId,
+          bankAccountName = fromAcc.account.bankName,
+          dateTimestamp = timestamp,
+          notes = notes
+        )
       )
-    )
-    financeDao.insertExpense(
-      ExpenseRecord(
-        title = "Transfer from ${fromAcc.account.bankName}",
-        amount = amount,
-        categoryName = "Bills & Utilities",
-        type = "TRANSFER_IN",
-        bankAccountId = toAccountId,
-        bankAccountName = toAcc.account.bankName,
-        dateTimestamp = timestamp,
-        notes = notes
+      financeDao.insertExpense(
+        ExpenseRecord(
+          title = "Transfer from ${fromAcc.account.bankName}",
+          amount = amount,
+          categoryName = "Bills & Utilities",
+          type = "TRANSFER_IN",
+          bankAccountId = toAccountId,
+          bankAccountName = toAcc.account.bankName,
+          dateTimestamp = timestamp,
+          notes = notes
+        )
       )
-    )
+    }
     true
   }
 
