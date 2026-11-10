@@ -1425,11 +1425,17 @@ private fun ExpensesSection(
       .sortedBy { it.lowercase() }
   }
 
+  val creditCardAccountIds = remember(accountsWithBalances) {
+    accountsWithBalances.asSequence()
+      .filter { it.account.accountType.equals("Credit Card", ignoreCase = true) }
+      .map { it.account.id }
+      .toSet()
+  }
   val creditCardAccounts = remember(accountsWithBalances) {
-    accountsWithBalances.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) }
+    accountsWithBalances.filter { it.account.id in creditCardAccountIds }
   }
   val bankAndCashAccounts = remember(accountsWithBalances) {
-    accountsWithBalances.filter { !it.account.accountType.equals("Credit Card", ignoreCase = true) }
+    accountsWithBalances.filter { it.account.accountType != "Credit Card" }
   }
   var selectedTransactionType by rememberSaveable { mutableStateOf<String?>(null) }
   var selectedTransactionCategory by rememberSaveable { mutableStateOf<String?>(null) }
@@ -2303,10 +2309,12 @@ private fun ExpensesSection(
         }
       }
     } else {
-      items(filteredExpenses, key = { it.id }) { expense ->
-        val isCc = remember(expense.bankAccountId, creditCardAccounts) {
-          creditCardAccounts.any { it.account.id == expense.bankAccountId }
-        }
+      items(
+        items = filteredExpenses,
+        key = { it.id },
+        contentType = { "expense_transaction" }
+      ) { expense ->
+        val isCc = expense.bankAccountId in creditCardAccountIds
         ExpenseItemCard(
           expense = expense,
           categories = categories,
