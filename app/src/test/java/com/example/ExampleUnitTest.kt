@@ -299,4 +299,37 @@ class ExampleUnitTest {
     assertEquals(0.0, result.sumOf { it.subtotal }, 0.001)
   }
 
+  @Test
+  fun itemizedSplitRoundsToExactTotalAndSettlementBalances() {
+    val people = listOf(
+      com.example.domain.splitbill.Participant(id = "a", name = "A"),
+      com.example.domain.splitbill.Participant(id = "b", name = "B")
+    )
+    val item = com.example.domain.splitbill.ReceiptItem(
+      id = "rounding-item",
+      title = "Dinner",
+      price = 100.01,
+      claimedParticipantIds = listOf("a", "b"),
+      paidByParticipantId = "a"
+    )
+    val breakdowns = com.example.domain.splitbill.DebtSimplifier.calculateBreakdowns(
+      com.example.domain.splitbill.SplitMode.ITEMIZED,
+      people,
+      listOf(item),
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    )
+    assertEquals(100.01, breakdowns.sumOf { it.totalToPay }, 0.001)
+    assertEquals(50.01, breakdowns[0].totalToPay, 0.001)
+    assertEquals(50.00, breakdowns[1].totalToPay, 0.001)
+
+    val transfers = com.example.domain.splitbill.DebtSimplifier.simplifyDebts(breakdowns)
+    assertEquals(1, transfers.size)
+    assertEquals("b", transfers.single().fromParticipant.id)
+    assertEquals("a", transfers.single().toParticipant.id)
+    assertEquals(50.00, transfers.single().amount, 0.001)
+  }
+
 }
