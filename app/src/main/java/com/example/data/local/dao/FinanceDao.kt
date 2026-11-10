@@ -77,6 +77,9 @@ interface FinanceDao {
   @Delete
   suspend fun deleteBankAccount(account: BankAccount)
 
+  @Query("SELECT (SELECT COUNT(*) FROM expenses WHERE bankAccountId = :accountId) + (SELECT COUNT(*) FROM subscriptions WHERE bankAccountId = :accountId) + (SELECT COUNT(*) FROM loans WHERE bankAccountId = :accountId) + (SELECT COUNT(*) FROM debts WHERE bankAccountId = :accountId) + (SELECT COUNT(*) FROM credit_card_bill_reminders WHERE accountId = :accountId)")
+  suspend fun getAccountLinkedRecordCount(accountId: Long): Int
+
   @Query("DELETE FROM bank_accounts")
   suspend fun deleteAllBankAccounts()
 
