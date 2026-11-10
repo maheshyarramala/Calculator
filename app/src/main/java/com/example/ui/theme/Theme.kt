@@ -7,6 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 
 private val BaseDarkColorScheme =
@@ -55,6 +57,15 @@ private val BaseLightColorScheme =
     outline = OutlineLight,
   )
 
+// Shared Material 3 shape scale for consistent cards, dialogs, and controls.
+private val OmniCalcShapes = Shapes(
+  extraSmall = RoundedCornerShape(6.dp),
+  small = RoundedCornerShape(10.dp),
+  medium = RoundedCornerShape(14.dp),
+  large = RoundedCornerShape(20.dp),
+  extraLarge = RoundedCornerShape(28.dp)
+)
+
 @Composable
 fun OmniCalcTheme(
   content: @Composable () -> Unit,
@@ -90,5 +101,5 @@ fun OmniCalcTheme(
     )
   }
 
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+  MaterialTheme(colorScheme = colorScheme, typography = Typography, shapes = OmniCalcShapes, content = content)
 }
