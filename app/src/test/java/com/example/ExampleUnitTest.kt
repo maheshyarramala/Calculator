@@ -259,4 +259,44 @@ class ExampleUnitTest {
     assertTrue(SubscriptionDueDateCalculator.isPaidInCurrentCycle(monthlySub, LocalDate.of(2025, 2, 28)))
     assertFalse(SubscriptionDueDateCalculator.isPaidInCurrentCycle(monthlySub, LocalDate.of(2025, 3, 1)))
   }
+  @Test
+  fun scientificEvaluatorUsesConventionalUnaryMinusAndPowerPrecedence() {
+    val negativeSquare = ScientificEvaluator.evaluate("-2^2")
+    assertTrue(negativeSquare is ScientificEvaluator.EvalResult.Success)
+    assertEquals(-4.0, (negativeSquare as ScientificEvaluator.EvalResult.Success).value, 0.000001)
+
+    val negativeExponent = ScientificEvaluator.evaluate("2^-2")
+    assertTrue(negativeExponent is ScientificEvaluator.EvalResult.Success)
+    assertEquals(0.25, (negativeExponent as ScientificEvaluator.EvalResult.Success).value, 0.000001)
+
+    val parenthesizedNegative = ScientificEvaluator.evaluate("(-2)^2")
+    assertTrue(parenthesizedNegative is ScientificEvaluator.EvalResult.Success)
+    assertEquals(4.0, (parenthesizedNegative as ScientificEvaluator.EvalResult.Success).value, 0.000001)
+  }
+
+  @Test
+  fun unassignedSplitBillItemsAreNotSilentlySharedWithEveryone() {
+    val participants = listOf(
+      com.example.domain.splitbill.Participant(id = "a", name = "A"),
+      com.example.domain.splitbill.Participant(id = "b", name = "B")
+    )
+    val unassignedItem = com.example.domain.splitbill.ReceiptItem(
+      id = "item-1",
+      title = "Dinner",
+      price = 100.0,
+      claimedParticipantIds = emptyList(),
+      isUnassigned = true
+    )
+    val result = com.example.domain.splitbill.DebtSimplifier.calculateBreakdowns(
+      com.example.domain.splitbill.SplitMode.ITEMIZED,
+      participants,
+      listOf(unassignedItem),
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    )
+    assertEquals(0.0, result.sumOf { it.subtotal }, 0.001)
+  }
+
 }
