@@ -1439,6 +1439,8 @@ private fun ExpensesSection(
   }
   var selectedTransactionType by rememberSaveable { mutableStateOf<String?>(null) }
   var selectedTransactionCategory by rememberSaveable { mutableStateOf<String?>(null) }
+  var transactionSearch by rememberSaveable { mutableStateOf("") }
+  var selectedTransactionPeriod by rememberSaveable { mutableStateOf("ALL") }
   var expensePendingDelete by remember { mutableStateOf<ExpenseRecord?>(null) }
   LaunchedEffect(selectedAccountFilterId) {
     selectedTransactionCategory = null
@@ -1446,8 +1448,21 @@ private fun ExpensesSection(
   val filteredExpenses = remember(
     displayedExpenses,
     selectedTransactionType,
-    selectedTransactionCategory
+    selectedTransactionCategory,
+    transactionSearch,
+    selectedTransactionPeriod
   ) {
+    val now = Calendar.getInstance()
+    val periodStart = when (selectedTransactionPeriod) {
+      "WEEK" -> (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -7) }.timeInMillis
+      "MONTH" -> (now.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
+      "LAST_MONTH" -> (now.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, 1); add(Calendar.MONTH, -1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
+      else -> null
+    }
+    val periodEnd = if (selectedTransactionPeriod == "LAST_MONTH") {
+      (now.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
+    } else null
+    val query = transactionSearch.trim()
     displayedExpenses.filter { expense ->
       val matchesType = when (selectedTransactionType) {
         "EXPENSE" -> expense.type == "EXPENSE"
@@ -1455,9 +1470,16 @@ private fun ExpensesSection(
         "TRANSFER" -> expense.type == "TRANSFER_IN" || expense.type == "TRANSFER_OUT"
         else -> true
       }
-      matchesType &&
-        (selectedTransactionCategory == null ||
-          expense.categoryName.equals(selectedTransactionCategory, ignoreCase = true))
+      val matchesCategory = selectedTransactionCategory == null ||
+        expense.categoryName.equals(selectedTransactionCategory, ignoreCase = true)
+      val matchesSearch = query.isBlank() ||
+        expense.title.contains(query, ignoreCase = true) ||
+        expense.categoryName.contains(query, ignoreCase = true) ||
+        expense.bankAccountName.contains(query, ignoreCase = true) ||
+        expense.notes.contains(query, ignoreCase = true)
+      val matchesPeriod = (periodStart == null || expense.dateTimestamp >= periodStart) &&
+        (periodEnd == null || expense.dateTimestamp < periodEnd)
+      matchesType && matchesCategory && matchesSearch && matchesPeriod
     }
   }
 
@@ -2230,6 +2252,30 @@ private fun ExpensesSection(
 
     item(key = "transaction_filters") {
       Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedTextField(
+          value = transactionSearch,
+          onValueChange = { transactionSearch = it },
+          modifier = Modifier.fillMaxWidth().testTag("transaction_search"),
+          singleLine = true,
+          placeholder = { Text("Search merchant, category, account or note") },
+          leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search transactions") },
+          trailingIcon = {
+            if (transactionSearch.isNotEmpty()) {
+              IconButton(onClick = { transactionSearch = "" }) {
+                Icon(Icons.Default.Close, contentDescription = "Clear search")
+              }
+            }
+          }
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          items(listOf("ALL" to "Any date", "WEEK" to "7 days", "MONTH" to "This month", "LAST_MONTH" to "Last month"), key = { it.first }) { (period, label) ->
+            FilterChip(
+              selected = selectedTransactionPeriod == period,
+              onClick = { selectedTransactionPeriod = period },
+              label = { Text(label, maxLines = 1, softWrap = false) }
+            )
+          }
+        }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           items(
             listOf(
