@@ -44,6 +44,33 @@ abstract class AppDatabase : RoomDatabase() {
   abstract fun debtDao(): DebtDao
 
   companion object {
+
+    // Historical migrations reconstructed from the original v1-v4 Room entity definitions.
+    // Keeping this chain explicit lets existing installations upgrade without destructive fallback.
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS expense_categories (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, colorHex TEXT NOT NULL, iconName TEXT NOT NULL, isCustom INTEGER NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS expenses (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, title TEXT NOT NULL, amount REAL NOT NULL, categoryName TEXT NOT NULL, dateTimestamp INTEGER NOT NULL, notes TEXT NOT NULL, tripId INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS bank_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, bankName TEXT NOT NULL, accountType TEXT NOT NULL, accountNumber TEXT NOT NULL, ifscOrRouting TEXT NOT NULL, holderName TEXT NOT NULL, balance REAL NOT NULL, notes TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS trips (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, tripName TEXT NOT NULL, destination TEXT NOT NULL, budget REAL NOT NULL, startDate TEXT NOT NULL, endDate TEXT NOT NULL, notes TEXT NOT NULL)")
+      }
+    }
+
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE expenses ADD COLUMN type TEXT NOT NULL DEFAULT 'EXPENSE'")
+        db.execSQL("ALTER TABLE expenses ADD COLUMN bankAccountId INTEGER")
+        db.execSQL("ALTER TABLE expenses ADD COLUMN bankAccountName TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE bank_accounts ADD COLUMN openingBalance REAL NOT NULL DEFAULT 0.0")
+      }
+    }
+
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE trips ADD COLUMN categoryCapsJson TEXT NOT NULL DEFAULT '{}'")
+        db.execSQL("CREATE TABLE IF NOT EXISTS subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, amount REAL NOT NULL, billingCycle TEXT NOT NULL, dueDayOfMonth INTEGER NOT NULL, categoryName TEXT NOT NULL, bankAccountId INTEGER, bankAccountName TEXT NOT NULL, lastPaidTimestamp INTEGER NOT NULL, notes TEXT NOT NULL)")
+      }
+    }
     private val MIGRATION_4_5 = object : Migration(4, 5) {
       override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE subscriptions ADD COLUMN dueMonth INTEGER NOT NULL DEFAULT 1")
@@ -117,6 +144,7 @@ abstract class AppDatabase : RoomDatabase() {
           AppDatabase::class.java,
           "omni_calc_db"
         )
+          .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
           .addMigrations(MIGRATION_4_5)
           .addMigrations(MIGRATION_5_6)
           .addMigrations(MIGRATION_6_7)
