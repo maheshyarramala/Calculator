@@ -90,7 +90,7 @@ object ScientificEvaluator {
     }
 
     private fun parseTerm(): Double {
-      var x = parseFactor()
+      var x = parseUnary()
       while (true) {
         when {
           eat('*'.code) -> x *= parseUnary()
