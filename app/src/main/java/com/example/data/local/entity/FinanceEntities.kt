@@ -1,9 +1,11 @@
 package com.example.data.local.entity
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 
+@Immutable
 @Entity(tableName = "expense_categories")
 data class ExpenseCategory(
   @PrimaryKey(autoGenerate = true)
@@ -14,6 +16,7 @@ data class ExpenseCategory(
   val isCustom: Boolean = false
 )
 
+@Immutable
 @Entity(tableName = "expenses")
 data class ExpenseRecord(
   @PrimaryKey(autoGenerate = true)
@@ -33,6 +36,7 @@ data class ExpenseRecord(
   val debtId: Long? = null
 )
 
+@Immutable
 @Entity(tableName = "bank_accounts")
 data class BankAccount(
   @PrimaryKey(autoGenerate = true)
@@ -48,6 +52,7 @@ data class BankAccount(
   val notes: String = ""
 )
 
+@Immutable
 @Entity(tableName = "credit_card_bill_reminders")
 data class CreditCardBillReminder(
   @PrimaryKey
@@ -60,6 +65,7 @@ data class CreditCardBillReminder(
   val notificationsEnabled: Boolean = true
 )
 
+@Immutable
 @Entity(tableName = "trips")
 data class TripRecord(
   @PrimaryKey(autoGenerate = true)
@@ -74,6 +80,7 @@ data class TripRecord(
   val categoryCapsJson: String = "{}"
 )
 
+@Immutable
 @Entity(tableName = "subscriptions")
 data class SubscriptionRecord(
   @PrimaryKey(autoGenerate = true)
@@ -93,6 +100,7 @@ data class SubscriptionRecord(
   val notes: String = ""
 )
 
+@Immutable
 data class AccountWithBalance(
   val account: BankAccount,
   val openingBalance: Double,

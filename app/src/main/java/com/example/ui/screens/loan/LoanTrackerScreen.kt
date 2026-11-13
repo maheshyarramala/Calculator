@@ -541,16 +541,21 @@ private fun LoanItemCard(
   onPayEmi: () -> Unit,
   onUndoEmi: () -> Unit
 ) {
-  Card(
+  val progressFraction = remember(loan.paidEmisCount, loan.tenureMonths) { loan.progressFraction }
+  val cumulativePrincipalPaid = remember(loan.principalAmount, loan.annualInterestRate, loan.tenureMonths, loan.paidEmisCount, loan.emiAmount) {
+    loan.cumulativePrincipalPaid
+  }
+  val remainingPrincipal = remember(loan.principalAmount, cumulativePrincipalPaid) {
+    maxOf(0.0, loan.principalAmount - cumulativePrincipalPaid)
+  }
+
+  Surface(
+    onClick = onClick,
     shape = RoundedCornerShape(20.dp),
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.surface
-    ),
+    color = MaterialTheme.colorScheme.surface,
     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
-      .clickable(onClick = onClick)
       .testTag("loan_card_${loan.id}")
   ) {
     Column(
@@ -571,8 +576,7 @@ private fun LoanItemCard(
           Box(
             modifier = Modifier
               .size(42.dp)
-              .clip(RoundedCornerShape(12.dp))
-              .background(getLoanCategoryColor(loan.loanCategory).copy(alpha = 0.15f)),
+              .background(getLoanCategoryColor(loan.loanCategory).copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
           ) {
             Icon(
@@ -599,9 +603,11 @@ private fun LoanItemCard(
               horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
               // Status Badge
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = if (loan.isFullyPaid) Color(0xFF10B981).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+              Box(
+                modifier = Modifier.background(
+                  if (loan.isFullyPaid) Color(0xFF10B981).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                  RoundedCornerShape(6.dp)
+                )
               ) {
                 Text(
                   text = if (loan.isFullyPaid) "Closed" else "Active • ${loan.remainingEmisCount} left",
@@ -614,10 +620,10 @@ private fun LoanItemCard(
                 )
               }
 
+              val pillBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
               // Interest Rate Chip
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+              Box(
+                modifier = Modifier.background(pillBg, RoundedCornerShape(6.dp))
               ) {
                 Text(
                   text = "${loan.annualInterestRate}% p.a.",
@@ -630,9 +636,8 @@ private fun LoanItemCard(
                 )
               }
 
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+              Box(
+                modifier = Modifier.background(pillBg, RoundedCornerShape(6.dp))
               ) {
                 Text(
                   text = "Due day ${loan.dueDayOfMonth}",
@@ -647,9 +652,8 @@ private fun LoanItemCard(
 
               // Linked Account Chip
               if (loan.bankAccountName.isNotBlank()) {
-                Surface(
-                  shape = RoundedCornerShape(6.dp),
-                  color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                Box(
+                  modifier = Modifier.background(pillBg, RoundedCornerShape(6.dp))
                 ) {
                   Text(
                     text = loan.bankAccountName,
@@ -707,12 +711,14 @@ private fun LoanItemCard(
           )
         }
 
-        Surface(
-          shape = RoundedCornerShape(8.dp),
-          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        Box(
+          modifier = Modifier.background(
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            RoundedCornerShape(8.dp)
+          )
         ) {
           Text(
-            text = "${(loan.progressFraction * 100).toInt()}% Paid • ${loan.remainingEmisCount} EMIs Pending",
+            text = "${(progressFraction * 100).toInt()}% Paid • ${loan.remainingEmisCount} EMIs Pending",
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             color = if (loan.isFullyPaid) Color(0xFF059669) else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -725,7 +731,7 @@ private fun LoanItemCard(
 
       // Progress Bar representation
       LinearProgressIndicator(
-        progress = { loan.progressFraction },
+        progress = { progressFraction },
         modifier = Modifier
           .fillMaxWidth()
           .height(8.dp)
@@ -766,7 +772,7 @@ private fun LoanItemCard(
             }
             Spacer(modifier = Modifier.height(3.dp))
             Text(
-              text = CurrencyFormatter.format(loan.cumulativePrincipalPaid),
+              text = CurrencyFormatter.format(cumulativePrincipalPaid),
               fontSize = 13.sp,
               fontWeight = FontWeight.ExtraBold,
               color = Color(0xFF059669)
@@ -799,7 +805,7 @@ private fun LoanItemCard(
             }
             Spacer(modifier = Modifier.height(3.dp))
             Text(
-              text = CurrencyFormatter.format(loan.remainingPrincipal),
+              text = CurrencyFormatter.format(remainingPrincipal),
               fontSize = 13.sp,
               fontWeight = FontWeight.ExtraBold,
               color = if (loan.isFullyPaid) Color(0xFF059669) else Color(0xFFDC2626)

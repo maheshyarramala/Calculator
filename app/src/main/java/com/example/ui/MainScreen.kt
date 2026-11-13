@@ -135,7 +135,6 @@ fun MainScreen(
 
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
-  val financeUiState by financeViewModel.uiState.collectAsState()
 
   showAppInfoDialog?.let { info ->
     AppInfoModalDialog(
@@ -357,71 +356,74 @@ fun MainScreen(
             ) {
               Icon(Icons.Default.MoreVert, contentDescription = "More options", modifier = Modifier.size(20.dp))
             }
-            DropdownMenu(
-              expanded = menuExpanded,
-              onDismissRequest = { menuExpanded = false }
-            ) {
-              DropdownMenuItem(
-                text = { Text("Backup & Restore") },
-                onClick = {
-                  menuExpanded = false
-                  currentDestination = MainDestination.FINANCE
-                  financeViewModel.setShowBackupModal(true)
-                }
-              )
-              DropdownMenuItem(
-                text = { Text("Export Finance (CSV)") },
-                onClick = {
-                  menuExpanded = false
-                  financeViewModel.exportCsv(context)
-                }
-              )
-              DropdownMenuItem(
-                text = {
-                  val isLocked = financeUiState.isBiometricLockEnabled
-                  Text(if (isLocked) "Disable Biometric Lock" else "Enable Biometric Lock")
-                },
-                onClick = {
-                  menuExpanded = false
-                  val newState = !financeUiState.isBiometricLockEnabled
-                  financeViewModel.setBiometricLockEnabled(newState)
-                }
-              )
-              DropdownMenuItem(
-                text = { Text("About") },
-                onClick = {
-                  menuExpanded = false
-                  showAppInfoDialog = AppInfoType.ABOUT
-                }
-              )
-              DropdownMenuItem(
-                text = { Text("Terms & Conditions") },
-                onClick = {
-                  menuExpanded = false
-                  showAppInfoDialog = AppInfoType.TERMS
-                }
-              )
-              DropdownMenuItem(
-                text = { Text("Privacy Policy") },
-                onClick = {
-                  menuExpanded = false
-                  showAppInfoDialog = AppInfoType.PRIVACY
-                }
-              )
-              DropdownMenuItem(
-                text = { Text("Feedback & Contact") },
-                onClick = {
-                  menuExpanded = false
-                  showAppInfoDialog = AppInfoType.CONTACT
-                }
-              )
-              DropdownMenuItem(
-                text = { Text("Donate") },
-                onClick = {
-                  menuExpanded = false
-                  showAppInfoDialog = AppInfoType.DONATE
-                }
-              )
+            if (menuExpanded) {
+              val financeUiState by financeViewModel.uiState.collectAsState()
+              DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
+              ) {
+                DropdownMenuItem(
+                  text = { Text("Backup & Restore") },
+                  onClick = {
+                    menuExpanded = false
+                    currentDestination = MainDestination.FINANCE
+                    financeViewModel.setShowBackupModal(true)
+                  }
+                )
+                DropdownMenuItem(
+                  text = { Text("Export Finance (CSV)") },
+                  onClick = {
+                    menuExpanded = false
+                    financeViewModel.exportCsv(context)
+                  }
+                )
+                DropdownMenuItem(
+                  text = {
+                    val isLocked = financeUiState.isBiometricLockEnabled
+                    Text(if (isLocked) "Disable Biometric Lock" else "Enable Biometric Lock")
+                  },
+                  onClick = {
+                    menuExpanded = false
+                    val newState = !financeUiState.isBiometricLockEnabled
+                    financeViewModel.setBiometricLockEnabled(newState)
+                  }
+                )
+                DropdownMenuItem(
+                  text = { Text("About") },
+                  onClick = {
+                    menuExpanded = false
+                    showAppInfoDialog = AppInfoType.ABOUT
+                  }
+                )
+                DropdownMenuItem(
+                  text = { Text("Terms & Conditions") },
+                  onClick = {
+                    menuExpanded = false
+                    showAppInfoDialog = AppInfoType.TERMS
+                  }
+                )
+                DropdownMenuItem(
+                  text = { Text("Privacy Policy") },
+                  onClick = {
+                    menuExpanded = false
+                    showAppInfoDialog = AppInfoType.PRIVACY
+                  }
+                )
+                DropdownMenuItem(
+                  text = { Text("Feedback & Contact") },
+                  onClick = {
+                    menuExpanded = false
+                    showAppInfoDialog = AppInfoType.CONTACT
+                  }
+                )
+                DropdownMenuItem(
+                  text = { Text("Donate") },
+                  onClick = {
+                    menuExpanded = false
+                    showAppInfoDialog = AppInfoType.DONATE
+                  }
+                )
+              }
             }
           }
         },

@@ -1,10 +1,12 @@
 package com.example.data.local.entity
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 import kotlin.math.pow
 
+@Immutable
 @Entity(tableName = "loans")
 data class LoanRecord(
   @PrimaryKey(autoGenerate = true)

@@ -644,17 +644,13 @@ private fun DebtItemCard(
   val dateCreated = remember(debt.dateTimestamp) { formatDebtDate(debt.dateTimestamp) }
   val dueDateStr = remember(debt.dueDateTimestamp) { debt.dueDateTimestamp?.let { formatDebtDate(it) } }
 
-  Card(
+  Surface(
+    onClick = onClick,
     shape = RoundedCornerShape(18.dp),
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.surface
-    ),
+    color = MaterialTheme.colorScheme.surface,
     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
-      .clip(RoundedCornerShape(18.dp))
-      .clickable(onClick = onClick)
       .testTag("debt_card_${debt.id}")
   ) {
     Column(
@@ -672,8 +668,7 @@ private fun DebtItemCard(
           Box(
             modifier = Modifier
               .size(42.dp)
-              .clip(CircleShape)
-              .background(primaryColor.copy(alpha = 0.15f)),
+              .background(primaryColor.copy(alpha = 0.15f), CircleShape),
             contentAlignment = Alignment.Center
           ) {
             Text(
@@ -699,9 +694,8 @@ private fun DebtItemCard(
               )
               if (debt.isOverdue) {
                 Spacer(modifier = Modifier.width(6.dp))
-                Surface(
-                  shape = RoundedCornerShape(4.dp),
-                  color = MaterialTheme.colorScheme.errorContainer
+                Box(
+                  modifier = Modifier.background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(4.dp))
                 ) {
                   Text(
                     text = "OVERDUE",

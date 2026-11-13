@@ -5,20 +5,24 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -113,6 +117,30 @@ private val TRANSACTION_TYPE_OPTIONS = listOf(
   "EXPENSE" to "Expenses",
   "INCOME" to "Income",
   "TRANSFER" to "Transfers"
+)
+private val EXPENSE_CARD_SHAPE = RoundedCornerShape(16.dp)
+private val EXPENSE_ICON_BOX_SHAPE = RoundedCornerShape(10.dp)
+private val EXPENSE_PILL_SHAPE = RoundedCornerShape(6.dp)
+private val PROGRESS_BAR_SHAPE = RoundedCornerShape(3.dp)
+private val EXPENSE_CC_COLOR = Color(0xFFF43F5E)
+private val EXPENSE_CC_BG = Color(0xFFF43F5E).copy(alpha = 0.15f)
+private val EXPENSE_CC_BORDER = BorderStroke(0.5.dp, Color(0xFFF43F5E).copy(alpha = 0.45f))
+private val EXPENSE_CC_BILL_COLOR = Color(0xFF10B981)
+private val EXPENSE_CC_BILL_BG = Color(0xFF10B981).copy(alpha = 0.15f)
+private val EXPENSE_CC_BILL_BORDER = BorderStroke(0.5.dp, Color(0xFF10B981).copy(alpha = 0.45f))
+private val EXPENSE_INCOME_COLOR = Color(0xFF059669)
+private val EXPENSE_INCOME_BG = Color(0xFF10B981).copy(alpha = 0.15f)
+private val EXPENSE_EXPENSE_COLOR = Color(0xFFDC2626)
+
+@Immutable
+private data class SpendingAnalyticsRow(
+  val categoryName: String,
+  val amount: Double,
+  val color: Color,
+  val percent: Float,
+  val percentInt: Int,
+  val formattedPercent: String,
+  val formattedAmount: String
 )
 
 private fun formatFinanceTimestamp(timestamp: Long, formatter: DateTimeFormatter): String =
@@ -799,20 +827,44 @@ fun FinanceHubScreen(
           .fillMaxSize()
           .padding(paddingValues)
           .pointerInput(uiState.selectedTab) {
-            var horizontalDrag = 0f
-            detectHorizontalDragGestures(
-              onHorizontalDrag = { _, dragAmount -> horizontalDrag += dragAmount },
-              onDragEnd = {
-                if (abs(horizontalDrag) > 90f) {
-                  val tabs = FinanceTab.values()
-                  val direction = if (horizontalDrag < 0f) 1 else -1
-                  val nextIndex = (uiState.selectedTab.ordinal + direction).coerceIn(tabs.indices)
-                  if (nextIndex != uiState.selectedTab.ordinal) viewModel.selectTab(tabs[nextIndex])
+            val touchSlop = viewConfiguration.touchSlop
+            awaitEachGesture {
+              awaitFirstDown(requireUnconsumed = false)
+              var totalDx = 0f
+              var totalDy = 0f
+              var trackingHorizontal = false
+              while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull() ?: break
+                if (!change.pressed) {
+                  if (trackingHorizontal && abs(totalDx) > 90f) {
+                    val tabs = FinanceTab.values()
+                    val direction = if (totalDx < 0f) 1 else -1
+                    val nextIndex = (uiState.selectedTab.ordinal + direction).coerceIn(tabs.indices)
+                    if (nextIndex != uiState.selectedTab.ordinal) viewModel.selectTab(tabs[nextIndex])
+                  }
+                  break
                 }
-                horizontalDrag = 0f
-              },
-              onDragCancel = { horizontalDrag = 0f }
-            )
+                if (change.isConsumed && !trackingHorizontal) {
+                  break
+                }
+                val delta = change.positionChange()
+                totalDx += delta.x
+                totalDy += delta.y
+                if (!trackingHorizontal) {
+                  if (abs(totalDy) > touchSlop && abs(totalDy) >= abs(totalDx)) {
+                    // Vertical scroll takes priority; exit immediately without interfering.
+                    break
+                  }
+                  if (abs(totalDx) > touchSlop * 2f && abs(totalDx) > abs(totalDy) * 1.75f) {
+                    trackingHorizontal = true
+                  }
+                }
+                if (trackingHorizontal) {
+                  change.consume()
+                }
+              }
+            }
           }
       ) {
         // Modern Tab Bar (Expenses & Accounts, Credit Cards, Subscriptions, Lend & Borrow, Split Bill, Trip Manager)
@@ -1757,7 +1809,10 @@ private fun ExpensesSection(
     }
   }
 
+  val listState = rememberLazyListState()
+
   LazyColumn(
+    state = listState,
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2518,12 +2573,13 @@ private fun ExpensesSection(
               unfocusedContainerColor = MaterialTheme.colorScheme.surface
             )
           )
-          LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            items(
-              items = TRANSACTION_PERIOD_OPTIONS,
-              key = { it.first },
-              contentType = { "period_chip" }
-            ) { (period, label) ->
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+          ) {
+            TRANSACTION_PERIOD_OPTIONS.forEach { (period, label) ->
               val selected = selectedTransactionPeriod == period
               FilterChip(
                 selected = selected,
@@ -2548,12 +2604,13 @@ private fun ExpensesSection(
               )
             }
           }
-          LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            items(
-              items = TRANSACTION_TYPE_OPTIONS,
-              key = { it.first ?: "all_types" },
-              contentType = { "type_chip" }
-            ) { (type, label) ->
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+          ) {
+            TRANSACTION_TYPE_OPTIONS.forEach { (type, label) ->
               val selected = selectedTransactionType == type
               val chipColor = when (type) {
                 "EXPENSE" -> Color(0xFFDC2626)
@@ -2574,21 +2631,24 @@ private fun ExpensesSection(
               )
             }
           }
-          LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            item(key = "all_categories", contentType = "category_chip") {
-              val selected = selectedTransactionCategory == null
-              FilterChip(
-                selected = selected,
-                onClick = { selectedTransactionCategory = null },
-                label = { Text("All Categories", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
-                colors = FilterChipDefaults.filterChipColors(
-                  selectedContainerColor = Color(0xFFEDE9FE),
-                  selectedLabelColor = Color(0xFF5B21B6)
-                ),
-                border = BorderStroke(1.dp, if (selected) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.outlineVariant)
-              )
-            }
-            items(transactionCategories, key = { it.lowercase() }, contentType = { "category_chip" }) { category ->
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+          ) {
+            val allSelected = selectedTransactionCategory == null
+            FilterChip(
+              selected = allSelected,
+              onClick = { selectedTransactionCategory = null },
+              label = { Text("All Categories", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+              colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = Color(0xFFEDE9FE),
+                selectedLabelColor = Color(0xFF5B21B6)
+              ),
+              border = BorderStroke(1.dp, if (allSelected) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.outlineVariant)
+            )
+            transactionCategories.forEach { category ->
               val selected = selectedTransactionCategory.equals(category, ignoreCase = true)
               val categoryColor = categoryColorMap[category.lowercase()] ?: Color(0xFF0D9488)
               FilterChip(
@@ -2732,8 +2792,23 @@ private fun ExpenseItemCard(
 
   val amountColor = when {
     isTransfer -> MaterialTheme.colorScheme.primary
-    isIncome -> Color(0xFF059669)
-    else -> Color(0xFFDC2626)
+    isIncome -> EXPENSE_INCOME_COLOR
+    else -> EXPENSE_EXPENSE_COLOR
+  }
+  val catBgColor = remember(catColor) { catColor.copy(alpha = 0.15f) }
+  val iconBgColor = when {
+    isCreditCard -> EXPENSE_CC_BG
+    isCcBillPayment -> EXPENSE_CC_BILL_BG
+    isTransfer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+    isIncome -> EXPENSE_INCOME_BG
+    else -> catBgColor
+  }
+  val iconTintColor = when {
+    isCreditCard -> EXPENSE_CC_COLOR
+    isCcBillPayment -> EXPENSE_CC_BILL_COLOR
+    isTransfer -> MaterialTheme.colorScheme.primary
+    isIncome -> EXPENSE_INCOME_COLOR
+    else -> catColor
   }
 
   val amountText = remember(expense.amount, isIncome) {
@@ -2743,7 +2818,7 @@ private fun ExpenseItemCard(
 
   Surface(
     onClick = onClick,
-    shape = RoundedCornerShape(16.dp),
+    shape = EXPENSE_CARD_SHAPE,
     color = MaterialTheme.colorScheme.surface,
     border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
     modifier = Modifier.fillMaxWidth()
@@ -2762,16 +2837,7 @@ private fun ExpenseItemCard(
         Box(
           modifier = Modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(
-              when {
-                isCreditCard -> Color(0xFFF43F5E).copy(alpha = 0.15f)
-                isCcBillPayment -> Color(0xFF10B981).copy(alpha = 0.15f)
-                isTransfer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                isIncome -> Color(0xFF10B981).copy(alpha = 0.15f)
-                else -> catColor.copy(alpha = 0.15f)
-              }
-            ),
+            .background(iconBgColor, EXPENSE_ICON_BOX_SHAPE),
           contentAlignment = Alignment.Center
         ) {
           Icon(
@@ -2783,13 +2849,7 @@ private fun ExpenseItemCard(
               else -> Icons.Default.Sell
             },
             contentDescription = null,
-            tint = when {
-              isCreditCard -> Color(0xFFF43F5E)
-              isCcBillPayment -> Color(0xFF10B981)
-              isTransfer -> MaterialTheme.colorScheme.primary
-              isIncome -> Color(0xFF059669)
-              else -> catColor
-            },
+            tint = iconTintColor,
             modifier = Modifier.size(20.dp)
           )
         }
@@ -2808,9 +2868,8 @@ private fun ExpenseItemCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
           ) {
-            Surface(
-              shape = RoundedCornerShape(6.dp),
-              color = catColor.copy(alpha = 0.15f)
+            Box(
+              modifier = Modifier.background(catBgColor, EXPENSE_PILL_SHAPE)
             ) {
               Text(
                 text = expense.categoryName,
@@ -2822,61 +2881,57 @@ private fun ExpenseItemCard(
               )
             }
             if (isCreditCard) {
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = Color(0xFFF43F5E).copy(alpha = 0.15f),
-                border = BorderStroke(0.5.dp, Color(0xFFF43F5E).copy(alpha = 0.45f))
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                  .background(EXPENSE_CC_BG, EXPENSE_PILL_SHAPE)
+                  .border(EXPENSE_CC_BORDER, EXPENSE_PILL_SHAPE)
+                  .padding(horizontal = 6.dp, vertical = 2.dp)
               ) {
-                Row(
-                  verticalAlignment = Alignment.CenterVertically,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                  Icon(
-                    Icons.Default.CreditCard,
-                    contentDescription = null,
-                    tint = Color(0xFFF43F5E),
-                    modifier = Modifier.size(11.dp)
-                  )
-                  Spacer(Modifier.width(3.dp))
-                  Text(
-                    text = "Credit Card • ${expense.bankAccountName}",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFF43F5E),
-                    maxLines = 1
-                  )
-                }
+                Icon(
+                  Icons.Default.CreditCard,
+                  contentDescription = null,
+                  tint = EXPENSE_CC_COLOR,
+                  modifier = Modifier.size(11.dp)
+                )
+                Spacer(Modifier.width(3.dp))
+                Text(
+                  text = "Credit Card • ${expense.bankAccountName}",
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  color = EXPENSE_CC_COLOR,
+                  maxLines = 1
+                )
               }
             } else if (isCcBillPayment) {
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = Color(0xFF10B981).copy(alpha = 0.15f),
-                border = BorderStroke(0.5.dp, Color(0xFF10B981).copy(alpha = 0.45f))
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                  .background(EXPENSE_CC_BILL_BG, EXPENSE_PILL_SHAPE)
+                  .border(EXPENSE_CC_BILL_BORDER, EXPENSE_PILL_SHAPE)
+                  .padding(horizontal = 6.dp, vertical = 2.dp)
               ) {
-                Row(
-                  verticalAlignment = Alignment.CenterVertically,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                  Icon(
-                    Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = Color(0xFF10B981),
-                    modifier = Modifier.size(11.dp)
-                  )
-                  Spacer(Modifier.width(3.dp))
-                  Text(
-                    text = "CC Bill Payment",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF10B981),
-                    maxLines = 1
-                  )
-                }
+                Icon(
+                  Icons.Default.CheckCircle,
+                  contentDescription = null,
+                  tint = EXPENSE_CC_BILL_COLOR,
+                  modifier = Modifier.size(11.dp)
+                )
+                Spacer(Modifier.width(3.dp))
+                Text(
+                  text = "CC Bill Payment",
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  color = EXPENSE_CC_BILL_COLOR,
+                  maxLines = 1
+                )
               }
             } else if (expense.bankAccountName.isNotBlank()) {
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+              Box(
+                modifier = Modifier.background(
+                  MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                  EXPENSE_PILL_SHAPE
+                )
               ) {
                 Text(
                   text = expense.bankAccountName,
@@ -3362,8 +3417,16 @@ private fun SpendingAnalyticsCard(
     map.entries.map { entry ->
       val catColor = categoryMap[entry.key.lowercase()] ?: Color(0xFF6366F1)
       val percent = if (totalSpent > 0) (entry.value / totalSpent * 100).toFloat() else 0f
-      Triple(entry.key, entry.value, Pair(catColor, percent))
-    }.sortedByDescending { it.second }
+      SpendingAnalyticsRow(
+        categoryName = entry.key,
+        amount = entry.value,
+        color = catColor,
+        percent = percent,
+        percentInt = percent.toInt(),
+        formattedPercent = String.format(Locale.getDefault(), "%.1f", percent),
+        formattedAmount = CurrencyFormatter.formatWhole(entry.value)
+      )
+    }.sortedByDescending { it.amount }
   }
 
   Card(
@@ -3413,9 +3476,11 @@ private fun SpendingAnalyticsCard(
             label = { Text("Filter: $selectedCategory ✕", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
           )
         } else {
-          Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+          Box(
+            modifier = Modifier.background(
+              MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+              RoundedCornerShape(8.dp)
+            )
           ) {
             Text(
               text = "${catSpendList.size} Categories",
@@ -3457,10 +3522,10 @@ private fun SpendingAnalyticsCard(
                     val angle = ((Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())) + 450.0) % 360.0)
                     var acc = 0.0
                     for (item in catSpendList) {
-                      val sweep = (item.third.second / 100.0) * 360.0
+                      val sweep = (item.percent / 100.0) * 360.0
                       if (angle >= acc && angle < acc + sweep) {
                         haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onSelectCategory(if (selectedCategory == item.first) null else item.first)
+                        onSelectCategory(if (selectedCategory == item.categoryName) null else item.categoryName)
                         break
                       }
                       acc += sweep
@@ -3470,12 +3535,12 @@ private fun SpendingAnalyticsCard(
               }
           ) {
             var startAngle = -90f
-            catSpendList.forEach { (catName, _, colorAndPercent) ->
-              val isSelected = selectedCategory != null && selectedCategory.equals(catName, ignoreCase = true)
-              val sweepAngle = (colorAndPercent.second / 100f) * 360f
+            catSpendList.forEach { row ->
+              val isSelected = selectedCategory != null && selectedCategory.equals(row.categoryName, ignoreCase = true)
+              val sweepAngle = (row.percent / 100f) * 360f
               if (sweepAngle > 0f) {
                 drawArc(
-                  color = if (selectedCategory == null || isSelected) colorAndPercent.first else colorAndPercent.first.copy(alpha = 0.25f),
+                  color = if (selectedCategory == null || isSelected) row.color else row.color.copy(alpha = 0.25f),
                   startAngle = startAngle,
                   sweepAngle = (sweepAngle - 2f).coerceAtLeast(1f),
                   useCenter = false,
@@ -3509,42 +3574,41 @@ private fun SpendingAnalyticsCard(
           modifier = Modifier.padding(start = 10.dp),
           verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-          catSpendList.take(4).forEach { (catName, _, colorAndPercent) ->
-            val isSelected = selectedCategory != null && selectedCategory.equals(catName, ignoreCase = true)
-            Surface(
-              shape = RoundedCornerShape(8.dp),
-              color = if (isSelected) colorAndPercent.first.copy(alpha = 0.15f) else Color.Transparent,
-              border = if (isSelected) BorderStroke(1.dp, colorAndPercent.first) else null,
-              modifier = Modifier.clickable {
-                haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onSelectCategory(if (selectedCategory == catName) null else catName)
-              }
+          catSpendList.take(4).forEach { row ->
+            val isSelected = selectedCategory != null && selectedCategory.equals(row.categoryName, ignoreCase = true)
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              modifier = Modifier
+                .background(
+                  if (isSelected) row.color.copy(alpha = 0.15f) else Color.Transparent,
+                  RoundedCornerShape(8.dp)
+                )
+                .then(if (isSelected) Modifier.border(1.dp, row.color, RoundedCornerShape(8.dp)) else Modifier)
+                .clickable {
+                  haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
+                  onSelectCategory(if (selectedCategory == row.categoryName) null else row.categoryName)
+                }
+                .padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-              ) {
-                Box(
-                  modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(colorAndPercent.first)
-                )
-                Text(
-                  text = catName,
-                  fontSize = 11.5.sp,
-                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                  maxLines = 1,
-                  modifier = Modifier.widthIn(max = 85.dp)
-                )
-                Text(
-                  text = "${colorAndPercent.second.toInt()}%",
-                  fontSize = 11.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = if (isSelected) colorAndPercent.first else MaterialTheme.colorScheme.primary
-                )
-              }
+              Box(
+                modifier = Modifier
+                  .size(10.dp)
+                  .background(row.color, CircleShape)
+              )
+              Text(
+                text = row.categoryName,
+                fontSize = 11.5.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1,
+                modifier = Modifier.widthIn(max = 85.dp)
+              )
+              Text(
+                text = "${row.percentInt}%",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isSelected) row.color else MaterialTheme.colorScheme.primary
+              )
             }
           }
         }
@@ -3553,17 +3617,20 @@ private fun SpendingAnalyticsCard(
       HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
 
       // Category breakdown progress bars (Tap any to filter!)
+      val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        catSpendList.forEach { (catName, amount, colorAndPercent) ->
-          val isSelected = selectedCategory != null && selectedCategory.equals(catName, ignoreCase = true)
+        catSpendList.forEach { row ->
+          val isSelected = selectedCategory != null && selectedCategory.equals(row.categoryName, ignoreCase = true)
           Column(
             modifier = Modifier
               .fillMaxWidth()
-              .clip(RoundedCornerShape(8.dp))
-              .background(if (isSelected) colorAndPercent.first.copy(alpha = 0.10f) else Color.Transparent)
+              .background(
+                if (isSelected) row.color.copy(alpha = 0.10f) else Color.Transparent,
+                RoundedCornerShape(8.dp)
+              )
               .clickable {
                 haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onSelectCategory(if (selectedCategory == catName) null else catName)
+                onSelectCategory(if (selectedCategory == row.categoryName) null else row.categoryName)
               }
               .padding(4.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -3580,14 +3647,13 @@ private fun SpendingAnalyticsCard(
                 Box(
                   modifier = Modifier
                     .size(8.dp)
-                    .clip(CircleShape)
-                    .background(colorAndPercent.first)
+                    .background(row.color, CircleShape)
                 )
                 Text(
-                  text = catName,
+                  text = row.categoryName,
                   fontSize = 12.sp,
                   fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                  color = if (isSelected) colorAndPercent.first else MaterialTheme.colorScheme.onSurface
+                  color = if (isSelected) row.color else MaterialTheme.colorScheme.onSurface
                 )
               }
               Row(
@@ -3595,27 +3661,31 @@ private fun SpendingAnalyticsCard(
                 verticalAlignment = Alignment.CenterVertically
               ) {
                 Text(
-                  text = CurrencyFormatter.formatWhole(amount),
+                  text = row.formattedAmount,
                   fontSize = 12.sp,
                   fontWeight = FontWeight.Bold
                 )
                 Text(
-                  text = "(${String.format(Locale.getDefault(), "%.1f", colorAndPercent.second)}%)",
+                  text = "(${row.formattedPercent}%)",
                   fontSize = 10.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
               }
             }
 
-            LinearProgressIndicator(
-              progress = { colorAndPercent.second / 100f },
+            Box(
               modifier = Modifier
                 .fillMaxWidth()
                 .height(6.dp)
-                .clip(RoundedCornerShape(3.dp)),
-              color = colorAndPercent.first,
-              trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
+                .background(trackColor, PROGRESS_BAR_SHAPE)
+            ) {
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth((row.percent / 100f).coerceIn(0f, 1f))
+                  .fillMaxHeight()
+                  .background(row.color, PROGRESS_BAR_SHAPE)
+              )
+            }
           }
         }
       }
