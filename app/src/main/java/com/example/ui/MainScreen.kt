@@ -630,7 +630,7 @@ private fun AllCalculatorsHubSheet(
               .fillMaxWidth()
               .weight(1f)
           ) {
-            items(filteredItems) { item ->
+            items(filteredItems, key = { it.title }, contentType = { "calculator_hub_item" }) { item ->
               Card(
                 onClick = {
                   haptic.performConfiguredHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -784,7 +784,7 @@ private fun ThemeSettingsBottomSheet(
           horizontalArrangement = Arrangement.spacedBy(10.dp),
           modifier = Modifier.fillMaxWidth()
         ) {
-          items(AccentTheme.values().toList()) { accent ->
+          items(AccentTheme.values().toList(), key = { it.name }, contentType = { "accent_theme" }) { accent ->
             val isSelected = themeState.accentTheme == accent
             Card(
               onClick = {

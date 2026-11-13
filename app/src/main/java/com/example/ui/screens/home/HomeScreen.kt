@@ -59,19 +59,22 @@ import com.example.ui.screens.finance.FinanceHubViewModel
 import com.example.ui.screens.finance.FinanceTab
 import com.example.ui.screens.utility.UtilityTab
 import com.example.ui.screens.utility.UtilityViewModel
-import java.time.Instant
-import java.text.SimpleDateFormat
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
+import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
-import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+
+private val HOME_HEADER_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("EEEE, dd MMMM", Locale.getDefault())
+private val TRIP_DATE_FORMATTERS: List<DateTimeFormatter> = listOf(
+  DateTimeFormatter.ISO_LOCAL_DATE,
+  DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault()),
+  DateTimeFormatter.ofPattern("dd-MM-yyyy", Locale.getDefault())
+)
 
 @Composable
 fun HomeScreen(
@@ -89,53 +92,13 @@ fun HomeScreen(
   modifier: Modifier = Modifier
 ) {
   val haptic = LocalHapticFeedback.current
-  val totalNetBalance by financeViewModel.totalNetBalance.collectAsState()
-  val totalIncome by financeViewModel.totalIncome.collectAsState()
-  val totalExpense by financeViewModel.totalExpense.collectAsState()
-  val monthlyBudgetLimit by financeViewModel.monthlyBudgetLimit.collectAsState()
-  val currentMonthExpenses by financeViewModel.currentMonthExpenses.collectAsState()
-  val trips by financeViewModel.trips.collectAsState()
-  val expenses by financeViewModel.expenses.collectAsState()
-  val subscriptions by financeViewModel.subscriptions.collectAsState()
-  val accounts by financeViewModel.accountsWithBalances.collectAsState()
-  val creditCardBillReminders by financeViewModel.creditCardBillReminders.collectAsState()
   val context = LocalContext.current
-  val creditCardAccounts = remember(accounts) {
-    accounts.map { it.account }.filter { it.accountType.equals("Credit Card", ignoreCase = true) }
-  }
   var showCreditCardReminderDialog by rememberSaveable { mutableStateOf(false) }
   var editingCreditCardAccountId by rememberSaveable { mutableStateOf<Long?>(null) }
-  val saveCreditCardReminder: (CreditCardBillReminder) -> Unit = { reminder ->
-    val account = creditCardAccounts.firstOrNull { it.id == reminder.accountId }
-    if (account != null) {
-      val notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-      if (reminder.notificationsEnabled && !notificationsAllowed) {
-        val activity = context as? android.app.Activity
-        if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 102)
-        }
-      }
-      financeViewModel.saveCreditCardBillReminder(reminder, account.bankName)
-    }
-  }
 
-  // Format today's date
-  val todayFormatted = remember {
-    SimpleDateFormat("EEEE, dd MMMM", Locale.getDefault()).format(Date())
-  }
-
-  // Active or most recent trip
-  val activeTrip = trips.firstOrNull()
-  val activeTripExpenses = remember(activeTrip, expenses) {
-    if (activeTrip != null) expenses.filter { it.tripId == activeTrip.id } else emptyList()
-  }
-  val activeTripSpent = remember(activeTripExpenses) { activeTripExpenses.sumOf { it.amount } }
-
-  // Upcoming subscription
-  val today = LocalDate.now()
-  val upcomingSub = remember(subscriptions, today) {
-    subscriptions.minByOrNull { SubscriptionDueDateCalculator.nextDueDate(it, today) }
+  val today = remember { LocalDate.now() }
+  val todayFormatted = remember(today) {
+    today.format(HOME_HEADER_DATE_FORMATTER)
   }
 
   LazyVerticalGrid(
@@ -148,7 +111,7 @@ fun HomeScreen(
       .testTag("home_widgets_grid")
   ) {
     // 1. Top Header & Welcome Banner (Full Width)
-    item(span = { GridItemSpan(maxLineSpan) }) {
+    item(key = "home_header", contentType = "home_header", span = { GridItemSpan(maxLineSpan) }) {
       Column(
         modifier = Modifier
           .fillMaxWidth()
@@ -247,7 +210,11 @@ fun HomeScreen(
     }
 
     // 2. HERO WIDGET: Total Net Balance & Funds Glance (Full Width Span)
-    item(span = { GridItemSpan(maxLineSpan) }) {
+    item(key = "home_net_balance", contentType = "home_hero_card", span = { GridItemSpan(maxLineSpan) }) {
+      val totalNetBalance by financeViewModel.totalNetBalance.collectAsState()
+      val totalIncome by financeViewModel.totalIncome.collectAsState()
+      val totalExpense by financeViewModel.totalExpense.collectAsState()
+      val accounts by financeViewModel.accountsWithBalances.collectAsState()
       HomeNetBalanceHeroWidget(
         totalBalance = totalNetBalance,
         totalIncome = totalIncome,
@@ -258,7 +225,9 @@ fun HomeScreen(
     }
 
     // 3. WIDGET: Monthly Budget Meter & Alert
-    item {
+    item(key = "home_monthly_budget", contentType = "home_widget_card") {
+      val monthlyBudgetLimit by financeViewModel.monthlyBudgetLimit.collectAsState()
+      val currentMonthExpenses by financeViewModel.currentMonthExpenses.collectAsState()
       HomeMonthlyBudgetWidget(
         spent = currentMonthExpenses,
         limit = monthlyBudgetLimit,
@@ -266,7 +235,12 @@ fun HomeScreen(
       )
     }
 
-    item {
+    item(key = "home_credit_card_bills", contentType = "home_widget_card") {
+      val accounts by financeViewModel.accountsWithBalances.collectAsState()
+      val creditCardBillReminders by financeViewModel.creditCardBillReminders.collectAsState()
+      val creditCardAccounts = remember(accounts) {
+        accounts.map { it.account }.filter { it.accountType.equals("Credit Card", ignoreCase = true) }
+      }
       HomeCreditCardBillsWidget(
         cardAccounts = creditCardAccounts,
         reminders = creditCardBillReminders,
@@ -285,7 +259,13 @@ fun HomeScreen(
     }
 
     // 4. WIDGET: Trip Manager Speedometer & Burn Rate
-    item {
+    item(key = "home_trip_speedometer", contentType = "home_widget_card") {
+      val trips by financeViewModel.trips.collectAsState()
+      val expenses by financeViewModel.expenses.collectAsState()
+      val activeTrip = trips.firstOrNull()
+      val activeTripSpent = remember(activeTrip, expenses) {
+        if (activeTrip == null) 0.0 else expenses.sumOf { if (it.tripId == activeTrip.id) it.amount else 0.0 }
+      }
       HomeTripSpeedometerWidget(
         trip = activeTrip,
         spent = activeTripSpent,
@@ -295,7 +275,11 @@ fun HomeScreen(
     }
 
     // 5. WIDGET: Recurring Subscriptions & Bills Countdown
-    item {
+    item(key = "home_subscriptions", contentType = "home_widget_card") {
+      val subscriptions by financeViewModel.subscriptions.collectAsState()
+      val upcomingSub = remember(subscriptions, today) {
+        subscriptions.minByOrNull { SubscriptionDueDateCalculator.nextDueDate(it, today) }
+      }
       HomeSubscriptionsWidget(
         upcomingSub = upcomingSub,
         today = today,
@@ -306,35 +290,35 @@ fun HomeScreen(
     }
 
     // 6. WIDGET: Quick Loan & EMI Calculator
-    item {
+    item(key = "home_emi_calc", contentType = "home_shortcut_card") {
       HomeEmiCalculatorWidget(
         onClick = onNavigateToEmi
       )
     }
 
     // 7. WIDGET: Split Bill & Group Diner Share
-    item {
+    item(key = "home_split_bill", contentType = "home_shortcut_card") {
       HomeSplitBillWidget(
         onClick = { onNavigateToUtility(UtilityTab.TIP_SPLIT) }
       )
     }
 
     // 8. WIDGET: Currency & FX Rates
-    item {
+    item(key = "home_currency", contentType = "home_shortcut_card") {
       HomeCurrencyWidget(
         onClick = { onNavigateToUtility(UtilityTab.CURRENCY) }
       )
     }
 
     // 9. WIDGET: Investment & SIP Compounding Growth
-    item {
+    item(key = "home_invest", contentType = "home_shortcut_card") {
       HomeInvestWidget(
         onClick = onNavigateToInvest
       )
     }
 
     // 10. WIDGET: Scientific & Basic Calculator
-    item {
+    item(key = "home_quick_calc", contentType = "home_shortcut_card") {
       HomeQuickCalcWidget(
         onClick = onNavigateToCalc
       )
@@ -342,6 +326,11 @@ fun HomeScreen(
   }
 
   if (showCreditCardReminderDialog) {
+    val accounts by financeViewModel.accountsWithBalances.collectAsState()
+    val creditCardBillReminders by financeViewModel.creditCardBillReminders.collectAsState()
+    val creditCardAccounts = remember(accounts) {
+      accounts.map { it.account }.filter { it.accountType.equals("Credit Card", ignoreCase = true) }
+    }
     CreditCardBillReminderDialog(
       cardAccounts = creditCardAccounts,
       reminders = creditCardBillReminders,
@@ -349,7 +338,18 @@ fun HomeScreen(
       onDismiss = { showCreditCardReminderDialog = false },
       onSave = { reminder ->
         showCreditCardReminderDialog = false
-        saveCreditCardReminder(reminder)
+        val account = creditCardAccounts.firstOrNull { it.id == reminder.accountId }
+        if (account != null) {
+          val notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+          if (reminder.notificationsEnabled && !notificationsAllowed) {
+            val activity = context as? android.app.Activity
+            if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+              activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 102)
+            }
+          }
+          financeViewModel.saveCreditCardBillReminder(reminder, account.bankName)
+        }
       }
     )
   }
@@ -369,7 +369,7 @@ private fun HomeNetBalanceHeroWidget(
   Card(
     shape = RoundedCornerShape(22.dp),
     colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .clickable(onClick = onClick)
@@ -517,7 +517,8 @@ private fun HomeMonthlyBudgetWidget(
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 180.dp)
@@ -614,7 +615,8 @@ private fun HomeTripSpeedometerWidget(
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 180.dp)
@@ -803,7 +805,8 @@ private fun HomeCreditCardBillsWidget(
   Card(
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 180.dp)
@@ -938,7 +941,8 @@ private fun HomeSubscriptionsWidget(
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 180.dp)
@@ -1048,7 +1052,8 @@ private fun HomeEmiCalculatorWidget(
   Card(
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 180.dp)
@@ -1098,7 +1103,8 @@ private fun HomeSplitBillWidget(
   Card(
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 180.dp)
@@ -1148,7 +1154,8 @@ private fun HomeCurrencyWidget(
   Card(
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 180.dp)
@@ -1198,7 +1205,8 @@ private fun HomeInvestWidget(
   Card(
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 180.dp)
@@ -1248,7 +1256,8 @@ private fun HomeQuickCalcWidget(
   Card(
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 180.dp)
@@ -1291,32 +1300,25 @@ private fun HomeQuickCalcWidget(
 // -------------------------------------------------------------
 // DATE CALCULATION HELPERS
 // -------------------------------------------------------------
-private fun calculateTripDays(startDateStr: String, endDateStr: String): Int {
-  return try {
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    val start = sdf.parse(startDateStr.trim())
-    val end = sdf.parse(endDateStr.trim())
-    if (start != null && end != null) {
-      val diffMs = end.time - start.time
-      val days = (diffMs / (1000 * 60 * 60 * 24)).toInt() + 1
-      days.coerceAtLeast(1)
-    } else 7
-  } catch (e: Exception) {
-    7
+private fun parseTripDate(dateStr: String): LocalDate? {
+  val trimmed = dateStr.trim()
+  if (trimmed.isEmpty()) return null
+  for (formatter in TRIP_DATE_FORMATTERS) {
+    try {
+      return LocalDate.parse(trimmed, formatter)
+    } catch (_: DateTimeParseException) {
+    }
   }
+  return null
+}
+
+private fun calculateTripDays(startDateStr: String, endDateStr: String): Int {
+  val start = parseTripDate(startDateStr) ?: return 7
+  val end = parseTripDate(endDateStr) ?: return 7
+  return (ChronoUnit.DAYS.between(start, end).toInt() + 1).coerceAtLeast(1)
 }
 
 private fun calculateElapsedDays(startDateStr: String): Int {
-  return try {
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    val start = sdf.parse(startDateStr.trim())
-    if (start != null) {
-      val now = System.currentTimeMillis()
-      val diffMs = now - start.time
-      val days = (diffMs / (1000 * 60 * 60 * 24)).toInt() + 1
-      days.coerceAtLeast(1)
-    } else 1
-  } catch (e: Exception) {
-    1
-  }
+  val start = parseTripDate(startDateStr) ?: return 1
+  return (ChronoUnit.DAYS.between(start, LocalDate.now()).toInt() + 1).coerceAtLeast(1)
 }

@@ -15,6 +15,7 @@ import com.example.data.local.entity.ExpenseCategory
 import com.example.data.local.entity.ExpenseRecord
 import com.example.data.local.entity.LoanRecord
 import com.example.data.local.entity.TripRecord
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -106,13 +107,19 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
     repository.allExpenses,
     categories
   ) { exps, cats ->
-    val cal = Calendar.getInstance()
-    val currMonth = cal.get(Calendar.MONTH)
-    val currYear = cal.get(Calendar.YEAR)
+    val cal = Calendar.getInstance().apply {
+      set(Calendar.DAY_OF_MONTH, 1)
+      set(Calendar.HOUR_OF_DAY, 0)
+      set(Calendar.MINUTE, 0)
+      set(Calendar.SECOND, 0)
+      set(Calendar.MILLISECOND, 0)
+    }
+    val monthStart = cal.timeInMillis
+    cal.add(Calendar.MONTH, 1)
+    val nextMonthStart = cal.timeInMillis
+
     val monthExpenses = exps.filter { item ->
-      if (item.type != "EXPENSE") return@filter false
-      val itemCal = Calendar.getInstance().apply { timeInMillis = item.dateTimestamp }
-      itemCal.get(Calendar.MONTH) == currMonth && itemCal.get(Calendar.YEAR) == currYear
+      item.type == "EXPENSE" && item.dateTimestamp in monthStart until nextMonthStart
     }
     val total = monthExpenses.sumOf { it.amount }
     if (total <= 0.0) return@combine emptyList()
@@ -131,7 +138,7 @@ class FinanceHubViewModel(application: Application) : AndroidViewModel(applicati
         )
       }
       .sortedByDescending { it.totalAmount }
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+  }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   private val prefs = application.getSharedPreferences("omni_calc_finance_prefs", Context.MODE_PRIVATE)
   private val _monthlyBudgetLimit = MutableStateFlow(prefs.getFloat("monthly_budget_limit", 50000f).toDouble())

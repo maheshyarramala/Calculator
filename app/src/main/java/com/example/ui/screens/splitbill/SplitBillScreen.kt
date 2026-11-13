@@ -255,14 +255,14 @@ fun SplitBillScreen(
     Spacer(Modifier.height(12.dp))
     when (state.activeTab) {
       0 -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
-        item {
+        item(key = "split_expenses_header", contentType = "split_header") {
           Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column { Text("Your expenses", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Add what the group spent", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             FilledTonalButton(onClick = { viewModel.setShowAddItemDialog(true) }) { Icon(Icons.Default.Add, null); Text("Add") }
           }
         }
-        if (state.items.isEmpty()) item { EmptySplitCard(Icons.AutoMirrored.Filled.ReceiptLong, "No expenses yet", "Add the first expense to start splitting the bill.", "Add expense") { viewModel.setShowAddItemDialog(true) } }
-        items(state.items, key = { it.id }) { item ->
+        if (state.items.isEmpty()) item(key = "split_expenses_empty", contentType = "split_empty") { EmptySplitCard(Icons.AutoMirrored.Filled.ReceiptLong, "No expenses yet", "Add the first expense to start splitting the bill.", "Add expense") { viewModel.setShowAddItemDialog(true) } }
+        items(state.items, key = { it.id }, contentType = { "split_expense" }) { item ->
           val payer = state.participants.firstOrNull { it.id == item.paidByParticipantId }?.name ?: "Not specified"
           val names = state.participants.filter { it.id in item.claimedParticipantIds }.joinToString { it.name }.ifBlank { state.participants.joinToString { it.name } }
           Card(Modifier.fillMaxWidth().clickable { selectedExpense = item }, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))) {
@@ -281,19 +281,22 @@ fun SplitBillScreen(
             }
           }
         }
-        item { OutlinedButton(onClick = { viewModel.setShowOcrDialog(true) }, Modifier.fillMaxWidth()) { Icon(Icons.Default.DocumentScanner, null); Spacer(Modifier.width(8.dp)); Text("Scan or import receipt") } }
+        item(key = "split_ocr_btn", contentType = "split_footer") { OutlinedButton(onClick = { viewModel.setShowOcrDialog(true) }, Modifier.fillMaxWidth()) { Icon(Icons.Default.DocumentScanner, null); Spacer(Modifier.width(8.dp)); Text("Scan or import receipt") } }
       }
       1 -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
-        item {
+        item(key = "split_members_header", contentType = "split_header") {
           Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column { Text("Group members", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Manage who shares this bill", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             FilledTonalButton(onClick = { viewModel.setShowAddParticipantDialog(true) }) { Icon(Icons.Default.PersonAdd, null); Text("Add") }
           }
         }
-        items(breakdowns, key = { it.participant.id }) { person ->
+        items(breakdowns, key = { it.participant.id }, contentType = { "split_person" }) { person ->
+          val fallbackPrimary = MaterialTheme.colorScheme.primary
+          val avatar = remember(person.participant.avatarColorHex, fallbackPrimary) {
+            runCatching { Color(android.graphics.Color.parseColor(person.participant.avatarColorHex)) }.getOrDefault(fallbackPrimary)
+          }
           Card(Modifier.fillMaxWidth().clickable { selectedPerson = person.participant }, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-              val avatar = runCatching { Color(android.graphics.Color.parseColor(person.participant.avatarColorHex)) }.getOrDefault(MaterialTheme.colorScheme.primary)
               Surface(shape = CircleShape, color = avatar.copy(alpha = .16f)) { Text(person.participant.name.take(1).uppercase(), Modifier.padding(13.dp), color = avatar, fontWeight = FontWeight.Bold) }
               Spacer(Modifier.width(12.dp))
               Column(Modifier.weight(1f)) { Text(person.participant.name, fontWeight = FontWeight.SemiBold); Text("Paid ${state.currencySymbol}${String.format(Locale.US, "%,.2f", person.paidAmount)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -303,12 +306,16 @@ fun SplitBillScreen(
         }
       }
       else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
-        item { Text("Settlement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("See who needs to pay whom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        if (transfers.isEmpty()) item { EmptySplitCard(Icons.Default.CheckCircle, "All settled", if (total <= 0.0) "Add expenses to calculate balances." else "There are no outstanding payments.", "Copy summary") {
+        item(key = "split_settlement_header", contentType = "split_header") { Text("Settlement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("See who needs to pay whom", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (transfers.isEmpty()) item(key = "split_settlement_empty", contentType = "split_empty") { EmptySplitCard(Icons.Default.CheckCircle, "All settled", if (total <= 0.0) "Add expenses to calculate balances." else "There are no outstanding payments.", "Copy summary") {
           val lines = breakdowns.joinToString("\n") { "${it.participant.name}: ${state.currencySymbol}${String.format(Locale.US, "%.2f", it.totalToPay)}" }
           clipboard.setText(AnnotatedString("Split Bill\nTotal: ${state.currencySymbol}${String.format(Locale.US, "%.2f", total)}\n$lines"))
         } }
-        items(transfers) { transfer ->
+        items(
+          items = transfers,
+          key = { "${it.fromParticipant.id}_${it.toParticipant.id}_${it.amount}" },
+          contentType = { "settlement_transfer" }
+        ) { transfer ->
           val key = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
           val settled = key in state.settledTransferKeys
           Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))) {
@@ -318,7 +325,7 @@ fun SplitBillScreen(
             }
           }
         }
-        item {
+        item(key = "split_copy_summary", contentType = "split_footer") {
           OutlinedButton(onClick = {
             val lines = breakdowns.joinToString("\n") { "${it.participant.name}: ${state.currencySymbol}${String.format(Locale.US, "%.2f", it.totalToPay)}" }
             clipboard.setText(AnnotatedString("Split Bill - ${state.billTitle}\nTotal: ${state.currencySymbol}${String.format(Locale.US, "%.2f", total)}\n$lines"))

@@ -146,10 +146,10 @@ fun UtilityScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
           ) {
-            item {
+            item(key = "currency_calc", contentType = "utility_section") {
               CurrencyCalculatorSection(viewModel = viewModel)
             }
-            item {
+            item(key = "currency_spacer", contentType = "utility_spacer") {
               Spacer(modifier = Modifier.height(32.dp))
             }
           }
@@ -160,10 +160,10 @@ fun UtilityScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
           ) {
-            item {
+            item(key = "unit_conv", contentType = "utility_section") {
               UnitConverterSection(viewModel = viewModel)
             }
-            item {
+            item(key = "unit_spacer", contentType = "utility_spacer") {
               Spacer(modifier = Modifier.height(32.dp))
             }
           }
@@ -181,10 +181,10 @@ fun UtilityScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
           ) {
-            item {
+            item(key = "gst_tax", contentType = "utility_section") {
               GstTaxSection(viewModel = viewModel)
             }
-            item {
+            item(key = "gst_spacer", contentType = "utility_spacer") {
               Spacer(modifier = Modifier.height(32.dp))
             }
           }
@@ -196,7 +196,7 @@ fun UtilityScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
           ) {
-            item {
+            item(key = "income_tax", contentType = "utility_section") {
               com.example.ui.screens.tax.IncomeTaxSection(
                 state = taxState,
                 viewModel = taxSalaryViewModel,
@@ -222,7 +222,7 @@ fun UtilityScreen(
                 }
               )
             }
-            item {
+            item(key = "income_tax_spacer", contentType = "utility_spacer") {
               Spacer(modifier = Modifier.height(32.dp))
             }
           }
@@ -234,7 +234,7 @@ fun UtilityScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
           ) {
-            item {
+            item(key = "salary_breakdown", contentType = "utility_section") {
               com.example.ui.screens.tax.SalaryBreakdownSection(
                 state = taxState,
                 viewModel = taxSalaryViewModel,
@@ -263,7 +263,7 @@ fun UtilityScreen(
                 }
               )
             }
-            item {
+            item(key = "salary_spacer", contentType = "utility_spacer") {
               Spacer(modifier = Modifier.height(32.dp))
             }
           }
@@ -372,22 +372,24 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
 
         // Pinned Favorite Currencies (1-tap switching)
         Text("Pinned Favorite Currencies (Tap to set target):", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val favorites = listOf(
-          Triple("USD", "$", "🇺🇸"),
-          Triple("INR", "₹", "🇮🇳"),
-          Triple("EUR", "€", "🇪🇺"),
-          Triple("GBP", "£", "🇬🇧"),
-          Triple("AED", "د.إ", "🇦🇪"),
-          Triple("CAD", "C$", "🇨🇦"),
-          Triple("JPY", "¥", "🇯🇵"),
-          Triple("AUD", "A$", "🇦🇺"),
-          Triple("SGD", "S$", "🇸🇬")
-        )
+        val favorites = remember {
+          listOf(
+            Triple("USD", "$", "🇺🇸"),
+            Triple("INR", "₹", "🇮🇳"),
+            Triple("EUR", "€", "🇪🇺"),
+            Triple("GBP", "£", "🇬🇧"),
+            Triple("AED", "د.إ", "🇦🇪"),
+            Triple("CAD", "C$", "🇨🇦"),
+            Triple("JPY", "¥", "🇯🇵"),
+            Triple("AUD", "A$", "🇦🇺"),
+            Triple("SGD", "S$", "🇸🇬")
+          )
+        }
         LazyRow(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           modifier = Modifier.fillMaxWidth()
         ) {
-          items(favorites) { (code, symbol, flag) ->
+          items(favorites, key = { it.first }, contentType = { "favorite_currency" }) { (code, symbol, flag) ->
             val isSelected = state.currencyTargetCode == code
             FilterChip(
               selected = isSelected,
@@ -498,11 +500,14 @@ private fun CurrencyCalculatorSection(viewModel: UtilityViewModel) {
 
         // Quick Currency Icon Chips row
         Text("Quick Currency Pick:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val quickCurrencies = remember {
+          listOf("USD", "INR", "EUR", "GBP", "AED", "SAR", "JPY", "CAD", "AUD", "SGD")
+        }
         LazyRow(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           modifier = Modifier.fillMaxWidth()
         ) {
-          items(listOf("USD", "INR", "EUR", "GBP", "AED", "SAR", "JPY", "CAD", "AUD", "SGD")) { code ->
+          items(quickCurrencies, key = { it }, contentType = { "quick_currency" }) { code ->
             val info = CurrencyCalculator.defaultCurrencies.find { it.code == code }
             if (info != null) {
               FilterChip(
@@ -675,7 +680,7 @@ private fun CurrencyPickerDialog(
           modifier = Modifier.fillMaxSize(),
           verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-          items(filtered) { curr ->
+          items(filtered, key = { it.code }, contentType = { "currency_picker_row" }) { curr ->
             val isSelected = curr.code == selectedCode
             Card(
               onClick = { onSelect(curr.code) },
@@ -802,17 +807,19 @@ private fun UnitConverterSection(viewModel: UtilityViewModel) {
 
       // Visual Icon Selection for Category (Scrollable to prevent wrapping)
       Text("Category:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-      ) {
-        val categories = listOf(
+      val categories = remember {
+        listOf(
           UnitConverter.Category.LENGTH to Icons.Default.Straighten,
           UnitConverter.Category.WEIGHT to Icons.Default.Scale,
           UnitConverter.Category.TEMPERATURE to Icons.Default.Thermostat,
           UnitConverter.Category.CURRENCY to Icons.Default.CurrencyExchange
         )
-        items(categories) { (cat, icon) ->
+      }
+      LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        items(categories, key = { it.first.name }, contentType = { "unit_category" }) { (cat, icon) ->
           FilterChip(
             selected = state.unitCategory == cat,
             onClick = {

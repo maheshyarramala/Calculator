@@ -39,9 +39,17 @@ import com.example.data.local.entity.LoanRecord
 import com.example.domain.calculator.LoanPrepaymentCalculator
 import com.example.ui.components.CurrencyFormatter
 import com.example.ui.components.NumberInputField
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+private val LOAN_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())
+
+private fun formatLoanDate(timestamp: Long): String =
+  Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).format(LOAN_DATE_FORMATTER)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,7 +104,7 @@ fun LoanTrackerScreen(
       verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
       // 1. Hero Dashboard Card
-      item {
+      item(key = "loan_dashboard", contentType = "loan_dashboard") {
         LoanDashboardCard(
           activeLoansCount = state.totalActiveLoansCount,
           totalRemainingPrincipal = state.totalPrincipalRemaining,
@@ -106,7 +114,7 @@ fun LoanTrackerScreen(
       }
 
       // 2. Category Filter Chips
-      item {
+      item(key = "loan_filters", contentType = "loan_filters") {
         LoanCategoryFilterRow(
           selectedCategory = state.selectedCategoryFilter,
           onSelectCategory = { viewModel.setCategoryFilter(it) }
@@ -114,7 +122,7 @@ fun LoanTrackerScreen(
       }
 
       // 3. Loans Header
-      item {
+      item(key = "loan_header", contentType = "loan_header") {
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween,
@@ -134,7 +142,7 @@ fun LoanTrackerScreen(
 
       // 4. Empty State or Loans List
       if (state.loans.isEmpty()) {
-        item {
+        item(key = "loan_empty", contentType = "loan_empty") {
           Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
@@ -175,7 +183,7 @@ fun LoanTrackerScreen(
           }
         }
       } else {
-        items(state.loans, key = { it.id }) { loan ->
+        items(state.loans, key = { it.id }, contentType = { "loan_item" }) { loan ->
           LoanItemCard(
             loan = loan,
             onClick = { viewModel.selectLoanForDetail(loan) },
@@ -538,7 +546,8 @@ private fun LoanItemCard(
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .clickable(onClick = onClick)
@@ -947,7 +956,8 @@ private fun LoanDetailDialog(
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
               Column(Modifier.weight(1f)) {
                 Text(payment.title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                Text("${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(payment.dateTimestamp))} • ${payment.bankAccountName.ifBlank { "No account" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val formattedPaymentDate = remember(payment.dateTimestamp) { formatLoanDate(payment.dateTimestamp) }
+                Text("$formattedPaymentDate • ${payment.bankAccountName.ifBlank { "No account" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
               }
               Text(CurrencyFormatter.format(payment.amount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
             }
@@ -1507,7 +1517,6 @@ private fun AddLoanDialog(
       Button(
         onClick = {
           if (loanName.isNotBlank() && principalVal > 0 && tenureVal > 0) {
-            val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
             onConfirm(
               loanName,
               loanCategory,
@@ -1515,7 +1524,7 @@ private fun AddLoanDialog(
               rateVal,
               tenureVal,
               calculatedEmi,
-              dateFormat.format(Date()),
+              LocalDate.now().format(LOAN_DATE_FORMATTER),
               initialPaidEmisText.toIntOrNull() ?: 0,
               notes,
               selectedBankId,

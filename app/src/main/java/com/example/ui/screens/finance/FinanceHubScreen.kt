@@ -66,7 +66,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import java.util.Calendar
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
@@ -85,12 +87,22 @@ import java.io.File
 import com.example.domain.backup.FinanceBackupManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+
+private val EXPENSE_ITEM_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("dd MMM, hh:mm a", Locale.getDefault())
+private val EXPENSE_DETAIL_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy, hh:mm a", Locale.getDefault())
+private val TRIP_PICKER_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault())
+private val BACKUP_FILE_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("yyyyMMdd_HHmm", Locale.getDefault())
+
+private fun formatFinanceTimestamp(timestamp: Long, formatter: DateTimeFormatter): String =
+  Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).format(formatter)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,20 +111,6 @@ fun FinanceHubScreen(
   modifier: Modifier = Modifier
 ) {
   val uiState by viewModel.uiState.collectAsState()
-  val categories by viewModel.categories.collectAsState()
-  val expenses by viewModel.expenses.collectAsState()
-  val bankAccounts by viewModel.bankAccounts.collectAsState()
-  val accountsWithBalances by viewModel.accountsWithBalances.collectAsState()
-  val totalNetBalance by viewModel.totalNetBalance.collectAsState()
-  val totalIncome by viewModel.totalIncome.collectAsState()
-  val totalExpense by viewModel.totalExpense.collectAsState()
-  val trips by viewModel.trips.collectAsState()
-  val subscriptions by viewModel.subscriptions.collectAsState()
-  val allLoans by viewModel.allLoans.collectAsState()
-  val allDebts by viewModel.allDebts.collectAsState()
-  val creditCardBillReminders by viewModel.creditCardBillReminders.collectAsState()
-  val monthlyBudgetLimit by viewModel.monthlyBudgetLimit.collectAsState()
-  val currentMonthExpenses by viewModel.currentMonthExpenses.collectAsState()
 
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
@@ -194,6 +192,14 @@ fun FinanceHubScreen(
 
   // Backup & Restore Dialogs
   if (uiState.showBackupModal) {
+    val categories by viewModel.categories.collectAsState()
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
+    val trips by viewModel.trips.collectAsState()
+    val expenses by viewModel.expenses.collectAsState()
+    val allLoans by viewModel.allLoans.collectAsState()
+    val allDebts by viewModel.allDebts.collectAsState()
+    val subscriptions by viewModel.subscriptions.collectAsState()
+    val creditCardBillReminders by viewModel.creditCardBillReminders.collectAsState()
     BackupRestoreBottomSheet(
       categoriesCount = categories.size,
       banksCount = bankAccounts.size,
@@ -206,7 +212,7 @@ fun FinanceHubScreen(
       replaceExisting = uiState.replaceExistingOnImport,
       onReplaceExistingChange = { viewModel.setReplaceExistingOnImport(it) },
       onExportToFile = {
-        val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
+        val dateStr = LocalDateTime.now().format(BACKUP_FILE_DATE_FORMATTER)
         try {
           exportFileLauncher.launch("OmniCalc_Backup_$dateStr.json")
         } catch (e: Exception) {
@@ -253,6 +259,9 @@ fun FinanceHubScreen(
   }
 
   if (uiState.showAddExpenseDialog) {
+    val categories by viewModel.categories.collectAsState()
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
+    val trips by viewModel.trips.collectAsState()
     AddExpenseDialog(
       categories = categories,
       bankAccounts = bankAccounts,
@@ -270,6 +279,7 @@ fun FinanceHubScreen(
   }
 
   if (uiState.showAddIncomeDialog) {
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
     AddIncomeDialog(
       bankAccounts = bankAccounts,
       onDismiss = { viewModel.setShowAddIncome(false) },
@@ -281,6 +291,7 @@ fun FinanceHubScreen(
 
   // Transaction Details Modal (Tap to Inspect)
   selectedExpenseForDetails?.let { expense ->
+    val categories by viewModel.categories.collectAsState()
     TransactionDetailsDialog(
       expense = expense,
       categories = categories,
@@ -310,6 +321,8 @@ fun FinanceHubScreen(
   }
 
   editingExpense?.let { expense ->
+    val categories by viewModel.categories.collectAsState()
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
     EditExpenseDialog(
       expense = expense,
       categories = categories,
@@ -348,6 +361,8 @@ fun FinanceHubScreen(
 
   // Edit Subscription Dialog
   editingSubscription?.let { sub ->
+    val categories by viewModel.categories.collectAsState()
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
     EditSubscriptionDialog(
       sub = sub,
       categories = categories,
@@ -400,6 +415,7 @@ fun FinanceHubScreen(
   }
 
   subscriptionPendingPayment?.let { subscription ->
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
     MarkSubscriptionPaidDialog(
       sub = subscription,
       bankAccounts = bankAccounts,
@@ -412,6 +428,7 @@ fun FinanceHubScreen(
   }
 
   if (showTransferDialog) {
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
     TransferBetweenAccountsDialog(
       accounts = bankAccounts,
       onDismiss = { showTransferDialog = false },
@@ -442,6 +459,7 @@ fun FinanceHubScreen(
   }
 
   payingCreditCardAccount?.let { cardAccount ->
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
     PayCreditCardBillDialog(
       cardAccount = cardAccount,
       reminder = payingCreditCardReminder,
@@ -470,6 +488,8 @@ fun FinanceHubScreen(
   }
 
   accountForDetails?.let { account ->
+    val accountsWithBalances by viewModel.accountsWithBalances.collectAsState()
+    val creditCardBillReminders by viewModel.creditCardBillReminders.collectAsState()
     val currentBalance = accountsWithBalances
       .firstOrNull { it.account.id == account.id }
       ?.currentBalance
@@ -533,6 +553,8 @@ fun FinanceHubScreen(
   }
 
   if (showCreditCardReminderDialog) {
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
+    val creditCardBillReminders by viewModel.creditCardBillReminders.collectAsState()
     val cardAccounts = remember(bankAccounts) {
       bankAccounts.filter { it.accountType.equals("Credit Card", ignoreCase = true) }
     }
@@ -592,6 +614,8 @@ fun FinanceHubScreen(
   }
 
   if (uiState.showAddSubscriptionDialog) {
+    val categories by viewModel.categories.collectAsState()
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
     AddSubscriptionDialog(
       categories = categories,
       bankAccounts = bankAccounts,
@@ -603,6 +627,7 @@ fun FinanceHubScreen(
   }
 
   if (uiState.showSetBudgetDialog) {
+    val monthlyBudgetLimit by viewModel.monthlyBudgetLimit.collectAsState()
     SetMonthlyBudgetDialog(
       currentLimit = monthlyBudgetLimit,
       onDismiss = { viewModel.setShowSetBudget(false) },
@@ -613,6 +638,7 @@ fun FinanceHubScreen(
   }
 
   uiState.selectedTripForCategoryCap?.let { trip ->
+    val categories by viewModel.categories.collectAsState()
     SetTripCategoryCapDialog(
       trip = trip,
       categories = categories,
@@ -805,94 +831,42 @@ fun FinanceHubScreen(
       }
 
       when (uiState.selectedTab) {
-        FinanceTab.EXPENSES -> ExpensesSection(
-          expenses = expenses,
-          categories = categories,
-          accountsWithBalances = accountsWithBalances,
-          creditCardBillReminders = creditCardBillReminders,
-          totalNetBalance = totalNetBalance,
-          totalIncome = totalIncome,
-          totalExpense = totalExpense,
-          monthlyBudgetLimit = monthlyBudgetLimit,
-          currentMonthExpenses = currentMonthExpenses,
-          onEditBudgetClick = { viewModel.setShowSetBudget(true) },
+        FinanceTab.EXPENSES -> ExpensesTabHost(
+          viewModel = viewModel,
           selectedAccountFilterId = uiState.selectedAccountFilterId,
-          onSelectAccountFilter = { viewModel.setSelectedAccountFilter(it) },
-          onAddAccountClick = { viewModel.setShowAddBank(true) },
+          snackbarHostState = snackbarHostState,
           onEditOpeningBalance = { editingAccountForOpeningBalance = it },
           onOpenAccountDetails = { accountForDetails = it },
-          onAddExpenseClick = { viewModel.setShowAddExpense(true) },
-          onAddIncomeClick = { viewModel.setShowAddIncome(true) },
-          onPasteSmsClick = { viewModel.logFromClipboardSms(context) },
           onTransferClick = { showTransferDialog = true },
-          onAddCategoryClick = { viewModel.setShowAddCategory(true) },
-          onDeleteCategory = { viewModel.deleteCategory(it) },
-          onDeleteExpenses = { deletedExpenses ->
-            viewModel.deleteExpensesWithUndo(deletedExpenses) { undo ->
-              coroutineScope.launch {
-                val res = snackbarHostState.showSnackbar(
-                  message = if (deletedExpenses.size > 1) {
-                    "Deleted both entries for this transfer"
-                  } else {
-                    "Deleted '${deletedExpenses.first().title}'"
-                  },
-                  actionLabel = "Undo",
-                  duration = SnackbarDuration.Short
-                )
-                if (res == SnackbarResult.ActionPerformed) {
-                  undo()
-                }
-              }
-            }
-          },
           onEditExpense = { editingExpense = it },
           onSelectExpense = { selectedExpenseForDetails = it },
           onSetCreditCardBill = { accountId ->
             editingCreditCardAccountId = accountId
             showCreditCardReminderDialog = true
           },
-          onMarkCreditCardBillPaid = { reminder ->
-            val cardAcc = bankAccounts.find { it.id == reminder.accountId }
-            if (cardAcc != null) {
-              payingCreditCardAccount = cardAcc
-              payingCreditCardReminder = reminder
-            } else {
-              viewModel.markCreditCardBillPaid(reminder)
-            }
+          onPayCreditCardReminder = { account, reminder ->
+            payingCreditCardAccount = account
+            payingCreditCardReminder = reminder
           }
         )
-        FinanceTab.CREDIT_CARDS -> CreditCardsSection(
-          cardAccounts = accountsWithBalances.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) },
-          reminders = creditCardBillReminders,
+        FinanceTab.CREDIT_CARDS -> CreditCardsTabHost(
+          viewModel = viewModel,
           onAddCardClick = { showAddCreditCardDialog = true },
           onCardClick = { accountForDetails = it },
           onSetBillReminder = { accountId ->
             editingCreditCardAccountId = accountId
             showCreditCardReminderDialog = true
           },
-          onMarkBillPaid = { reminder ->
-            val cardAcc = bankAccounts.find { it.id == reminder.accountId }
-            if (cardAcc != null) {
-              payingCreditCardAccount = cardAcc
-              payingCreditCardReminder = reminder
-            } else {
-              viewModel.markCreditCardBillPaid(reminder)
-            }
+          onPayCreditCardReminder = { account, reminder ->
+            payingCreditCardAccount = account
+            payingCreditCardReminder = reminder
           },
-          onShowTransactions = { accountId ->
-            viewModel.setSelectedAccountFilter(accountId)
-            viewModel.selectTab(FinanceTab.EXPENSES)
-          },
-          onDeleteCard = { account ->
-            accountPendingDelete = account
-          }
+          onDeleteCard = { account -> accountPendingDelete = account }
         )
-        FinanceTab.SUBSCRIPTIONS -> SubscriptionsSection(
-          subscriptions = subscriptions,
-          onAddSubscriptionClick = { viewModel.setShowAddSubscription(true) },
+        FinanceTab.SUBSCRIPTIONS -> SubscriptionsTabHost(
+          viewModel = viewModel,
           onSelectSubscription = { selectedSubscriptionForDetails = it },
-          onMarkPaid = { subscriptionPendingPayment = it },
-          onDeleteSubscription = { viewModel.deleteSubscription(it) }
+          onMarkPaid = { subscriptionPendingPayment = it }
         )
         FinanceTab.DEBTS -> {
           val debtViewModel: DebtTrackerViewModel = viewModel()
@@ -901,53 +875,211 @@ fun FinanceHubScreen(
             modifier = Modifier.fillMaxSize()
           )
         }
-        FinanceTab.SPLIT_BILL -> {
-          val splitBillViewModel: com.example.ui.screens.splitbill.SplitBillViewModel = viewModel()
-          com.example.ui.screens.splitbill.SplitBillScreen(
-            viewModel = splitBillViewModel,
-            modifier = Modifier.fillMaxSize(),
-            accounts = bankAccounts,
-            trips = trips,
-            tripExpenses = expenses,
-            onRecordSettlement = { isIncome, amount, account, title, reference ->
-              if (isIncome) {
-                viewModel.addIncome(title, amount, "Split Bill", account.id, account.bankName, reference)
-              } else {
-                viewModel.addExpense(title, amount, "Split Bill", account.id, account.bankName, reference)
-              }
-            },
-            onUndoSettlement = { reference ->
-              expenses.firstOrNull { it.notes == reference && it.categoryName == "Split Bill" }?.let(viewModel::deleteExpense)
-            },
-            onSyncExpense = { reference, title, amount, account -> viewModel.syncSplitBillExpense(reference, title, amount, account) },
-            onDeleteExpense = { reference -> viewModel.deleteSplitBillExpense(reference) }
-          )
-        }
-        FinanceTab.TRIPS -> TripsSection(
-          trips = trips,
-          expenses = expenses,
+        FinanceTab.SPLIT_BILL -> SplitBillTabHost(viewModel = viewModel)
+        FinanceTab.TRIPS -> TripsTabHost(
+          viewModel = viewModel,
           onAddExpenseForTrip = { trip ->
             preselectedTripIdForExpense = trip.id
             viewModel.setShowAddExpense(true)
           },
           onEditTrip = { editingTrip = it },
-          onTripExpenseClick = { selectedExpenseForDetails = it },
-          onSetCategoryCap = { trip -> viewModel.setSelectedTripForCategoryCap(trip) },
-          onRemoveCategoryCap = { trip, cat -> viewModel.removeTripCategoryCap(trip, cat) },
-          onExportTripPdf = { trip, tripExpenses ->
-            try {
-              val pdfFile = PdfReportGenerator.generateTripReport(context, trip, tripExpenses)
-              PdfReportGenerator.sharePdf(context, pdfFile)
-            } catch (e: Exception) {
-              viewModel.showToast("Failed to generate PDF: ${e.message}")
-            }
-          },
-          onDeleteTrip = { viewModel.deleteTrip(it) }
+          onTripExpenseClick = { selectedExpenseForDetails = it }
         )
       }
     }
   }
 }
+}
+
+@Composable
+private fun ExpensesTabHost(
+  viewModel: FinanceHubViewModel,
+  selectedAccountFilterId: Long?,
+  snackbarHostState: SnackbarHostState,
+  onEditOpeningBalance: (BankAccount) -> Unit,
+  onOpenAccountDetails: (BankAccount) -> Unit,
+  onTransferClick: () -> Unit,
+  onEditExpense: (ExpenseRecord) -> Unit,
+  onSelectExpense: (ExpenseRecord) -> Unit,
+  onSetCreditCardBill: (Long) -> Unit,
+  onPayCreditCardReminder: (BankAccount, CreditCardBillReminder) -> Unit
+) {
+  val context = LocalContext.current
+  val coroutineScope = rememberCoroutineScope()
+  val expenses by viewModel.expenses.collectAsState()
+  val categories by viewModel.categories.collectAsState()
+  val accountsWithBalances by viewModel.accountsWithBalances.collectAsState()
+  val creditCardBillReminders by viewModel.creditCardBillReminders.collectAsState()
+  val totalNetBalance by viewModel.totalNetBalance.collectAsState()
+  val totalIncome by viewModel.totalIncome.collectAsState()
+  val totalExpense by viewModel.totalExpense.collectAsState()
+  val monthlyBudgetLimit by viewModel.monthlyBudgetLimit.collectAsState()
+  val currentMonthExpenses by viewModel.currentMonthExpenses.collectAsState()
+  val bankAccounts by viewModel.bankAccounts.collectAsState()
+
+  ExpensesSection(
+    expenses = expenses,
+    categories = categories,
+    accountsWithBalances = accountsWithBalances,
+    creditCardBillReminders = creditCardBillReminders,
+    totalNetBalance = totalNetBalance,
+    totalIncome = totalIncome,
+    totalExpense = totalExpense,
+    monthlyBudgetLimit = monthlyBudgetLimit,
+    currentMonthExpenses = currentMonthExpenses,
+    onEditBudgetClick = { viewModel.setShowSetBudget(true) },
+    selectedAccountFilterId = selectedAccountFilterId,
+    onSelectAccountFilter = { viewModel.setSelectedAccountFilter(it) },
+    onAddAccountClick = { viewModel.setShowAddBank(true) },
+    onEditOpeningBalance = onEditOpeningBalance,
+    onOpenAccountDetails = onOpenAccountDetails,
+    onAddExpenseClick = { viewModel.setShowAddExpense(true) },
+    onAddIncomeClick = { viewModel.setShowAddIncome(true) },
+    onPasteSmsClick = { viewModel.logFromClipboardSms(context) },
+    onTransferClick = onTransferClick,
+    onAddCategoryClick = { viewModel.setShowAddCategory(true) },
+    onDeleteCategory = { viewModel.deleteCategory(it) },
+    onDeleteExpenses = { deletedExpenses ->
+      viewModel.deleteExpensesWithUndo(deletedExpenses) { undo ->
+        coroutineScope.launch {
+          val res = snackbarHostState.showSnackbar(
+            message = if (deletedExpenses.size > 1) {
+              "Deleted both entries for this transfer"
+            } else {
+              "Deleted '${deletedExpenses.first().title}'"
+            },
+            actionLabel = "Undo",
+            duration = SnackbarDuration.Short
+          )
+          if (res == SnackbarResult.ActionPerformed) {
+            undo()
+          }
+        }
+      }
+    },
+    onEditExpense = onEditExpense,
+    onSelectExpense = onSelectExpense,
+    onSetCreditCardBill = onSetCreditCardBill,
+    onMarkCreditCardBillPaid = { reminder ->
+      val cardAcc = bankAccounts.find { it.id == reminder.accountId }
+      if (cardAcc != null) {
+        onPayCreditCardReminder(cardAcc, reminder)
+      } else {
+        viewModel.markCreditCardBillPaid(reminder)
+      }
+    }
+  )
+}
+
+@Composable
+private fun CreditCardsTabHost(
+  viewModel: FinanceHubViewModel,
+  onAddCardClick: () -> Unit,
+  onCardClick: (BankAccount) -> Unit,
+  onSetBillReminder: (Long) -> Unit,
+  onPayCreditCardReminder: (BankAccount, CreditCardBillReminder) -> Unit,
+  onDeleteCard: (BankAccount) -> Unit
+) {
+  val accountsWithBalances by viewModel.accountsWithBalances.collectAsState()
+  val reminders by viewModel.creditCardBillReminders.collectAsState()
+  val bankAccounts by viewModel.bankAccounts.collectAsState()
+  val cardAccounts = remember(accountsWithBalances) {
+    accountsWithBalances.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) }
+  }
+
+  CreditCardsSection(
+    cardAccounts = cardAccounts,
+    reminders = reminders,
+    onAddCardClick = onAddCardClick,
+    onCardClick = onCardClick,
+    onSetBillReminder = onSetBillReminder,
+    onMarkBillPaid = { reminder ->
+      val cardAcc = bankAccounts.find { it.id == reminder.accountId }
+      if (cardAcc != null) {
+        onPayCreditCardReminder(cardAcc, reminder)
+      } else {
+        viewModel.markCreditCardBillPaid(reminder)
+      }
+    },
+    onShowTransactions = { accountId ->
+      viewModel.setSelectedAccountFilter(accountId)
+      viewModel.selectTab(FinanceTab.EXPENSES)
+    },
+    onDeleteCard = onDeleteCard
+  )
+}
+
+@Composable
+private fun SubscriptionsTabHost(
+  viewModel: FinanceHubViewModel,
+  onSelectSubscription: (SubscriptionRecord) -> Unit,
+  onMarkPaid: (SubscriptionRecord) -> Unit
+) {
+  val subscriptions by viewModel.subscriptions.collectAsState()
+  SubscriptionsSection(
+    subscriptions = subscriptions,
+    onAddSubscriptionClick = { viewModel.setShowAddSubscription(true) },
+    onSelectSubscription = onSelectSubscription,
+    onMarkPaid = onMarkPaid,
+    onDeleteSubscription = { viewModel.deleteSubscription(it) }
+  )
+}
+
+@Composable
+private fun SplitBillTabHost(viewModel: FinanceHubViewModel) {
+  val bankAccounts by viewModel.bankAccounts.collectAsState()
+  val trips by viewModel.trips.collectAsState()
+  val expenses by viewModel.expenses.collectAsState()
+  val splitBillViewModel: com.example.ui.screens.splitbill.SplitBillViewModel = viewModel()
+  com.example.ui.screens.splitbill.SplitBillScreen(
+    viewModel = splitBillViewModel,
+    modifier = Modifier.fillMaxSize(),
+    accounts = bankAccounts,
+    trips = trips,
+    tripExpenses = expenses,
+    onRecordSettlement = { isIncome, amount, account, title, reference ->
+      if (isIncome) {
+        viewModel.addIncome(title, amount, "Split Bill", account.id, account.bankName, reference)
+      } else {
+        viewModel.addExpense(title, amount, "Split Bill", account.id, account.bankName, reference)
+      }
+    },
+    onUndoSettlement = { reference ->
+      expenses.firstOrNull { it.notes == reference && it.categoryName == "Split Bill" }?.let(viewModel::deleteExpense)
+    },
+    onSyncExpense = { reference, title, amount, account -> viewModel.syncSplitBillExpense(reference, title, amount, account) },
+    onDeleteExpense = { reference -> viewModel.deleteSplitBillExpense(reference) }
+  )
+}
+
+@Composable
+private fun TripsTabHost(
+  viewModel: FinanceHubViewModel,
+  onAddExpenseForTrip: (TripRecord) -> Unit,
+  onEditTrip: (TripRecord) -> Unit,
+  onTripExpenseClick: (ExpenseRecord) -> Unit
+) {
+  val context = LocalContext.current
+  val trips by viewModel.trips.collectAsState()
+  val expenses by viewModel.expenses.collectAsState()
+  TripsSection(
+    trips = trips,
+    expenses = expenses,
+    onAddExpenseForTrip = onAddExpenseForTrip,
+    onEditTrip = onEditTrip,
+    onTripExpenseClick = onTripExpenseClick,
+    onSetCategoryCap = { trip -> viewModel.setSelectedTripForCategoryCap(trip) },
+    onRemoveCategoryCap = { trip, cat -> viewModel.removeTripCategoryCap(trip, cat) },
+    onExportTripPdf = { trip, tripExpenses ->
+      try {
+        val pdfFile = PdfReportGenerator.generateTripReport(context, trip, tripExpenses)
+        PdfReportGenerator.sharePdf(context, pdfFile)
+      } catch (e: Exception) {
+        viewModel.showToast("Failed to generate PDF: ${e.message}")
+      }
+    },
+    onDeleteTrip = { viewModel.deleteTrip(it) }
+  )
 }
 
 @Composable
@@ -1545,6 +1677,26 @@ private fun ExpensesSection(
   val bankAndCashAccounts = remember(accountsWithBalances) {
     accountsWithBalances.filter { !it.account.accountType.equals("Credit Card", ignoreCase = true) }
   }
+  val categoryColorMap = remember(categories) {
+    categories.associate { cat ->
+      val parsed = try {
+        Color(android.graphics.Color.parseColor(cat.colorHex))
+      } catch (_: Exception) {
+        Color(0xFF6366F1)
+      }
+      cat.name.lowercase() to parsed
+    }
+  }
+  val remindersByAccountId = remember(creditCardBillReminders) {
+    creditCardBillReminders.associateBy { it.accountId }
+  }
+  val accountNameById = remember(accountsWithBalances) {
+    accountsWithBalances.associate { it.account.id to it.account.bankName }
+  }
+  val (expenseTransactions, totalSpentOnExpenses) = remember(displayedExpenses) {
+    val expList = displayedExpenses.filter { it.type == "EXPENSE" }
+    expList to expList.sumOf { it.amount }
+  }
   var selectedTransactionType by rememberSaveable { mutableStateOf<String?>(null) }
   var selectedTransactionCategory by rememberSaveable { mutableStateOf<String?>(null) }
   var transactionSearch by rememberSaveable { mutableStateOf("") }
@@ -1597,11 +1749,11 @@ private fun ExpensesSection(
     verticalArrangement = Arrangement.spacedBy(8.dp)
   ) {
     // Total Net Balance Dashboard Banner
-    item(key = "total_net_balance_card") {
+    item(key = "total_net_balance_card", contentType = "balance_hero") {
       Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier
           .fillMaxWidth()
           .testTag("total_net_balance_card")
@@ -1799,7 +1951,7 @@ private fun ExpensesSection(
     }
 
     // Monthly Expense Budget Progress Bar & Alerts
-    item(key = "monthly_budget_card") {
+    item(key = "monthly_budget_card", contentType = "monthly_budget") {
       MonthlyBudgetCard(
         spent = currentMonthExpenses,
         limit = monthlyBudgetLimit,
@@ -1808,7 +1960,7 @@ private fun ExpensesSection(
     }
 
     // Accounts & Balances Carousel
-    item(key = "accounts_carousel_header") {
+    item(key = "accounts_carousel_header", contentType = "section_header") {
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1845,12 +1997,12 @@ private fun ExpensesSection(
       }
     }
 
-    item(key = "accounts_carousel_list") {
+    item(key = "accounts_carousel_list", contentType = "accounts_carousel") {
       LazyRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
-        items(bankAndCashAccounts, key = { it.account.id }) { accWithBal ->
+        items(bankAndCashAccounts, key = { it.account.id }, contentType = { "account_card" }) { accWithBal ->
           val isSelected = selectedAccountFilterId == accWithBal.account.id
           Card(
             shape = RoundedCornerShape(16.dp),
@@ -1998,11 +2150,12 @@ private fun ExpensesSection(
 
     // Dedicated Credit Card Bill & Outstandings Tracker Section
     if (creditCardAccounts.isNotEmpty()) {
-      item(key = "credit_card_bills_tracker_widget") {
+      item(key = "credit_card_bills_tracker_widget", contentType = "credit_card_bills_tracker") {
         Card(
           shape = RoundedCornerShape(18.dp),
           colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-          elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+          elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
           modifier = Modifier
             .fillMaxWidth()
             .testTag("credit_card_bills_tracker_widget")
@@ -2062,7 +2215,7 @@ private fun ExpensesSection(
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
               creditCardAccounts.forEach { accWithBal ->
-                val rem = creditCardBillReminders.firstOrNull { it.accountId == accWithBal.account.id }
+                val rem = remindersByAccountId[accWithBal.account.id]
                 val isPaid = rem?.paidDateEpochDay?.let { it >= 0L } == true
                 val daysDue = rem?.let { (it.dueDateEpochDay - LocalDate.now().toEpochDay()).toInt() }
 
@@ -2173,7 +2326,7 @@ private fun ExpensesSection(
     }
 
     // Quick Action Buttons (+ Expense, + Income, + Category)
-    item(key = "quick_actions_bar") {
+    item(key = "quick_actions_bar", contentType = "quick_actions") {
       Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2269,10 +2422,8 @@ private fun ExpensesSection(
       }
     }
 
-    val expenseTransactions = displayedExpenses.filter { it.type == "EXPENSE" }
-    val totalSpentOnExpenses = expenseTransactions.sumOf { it.amount }
     if (totalSpentOnExpenses > 0) {
-      item(key = "spending_analytics") {
+      item(key = "spending_analytics", contentType = "spending_analytics") {
         SpendingAnalyticsCard(
           expenses = expenseTransactions,
           categories = categories,
@@ -2286,7 +2437,7 @@ private fun ExpensesSection(
     // Category shortcut chips removed to reduce clutter above Recent Transactions.
 
     // Recent Transactions Title and Filter indicator
-    item(key = "expenses_title") {
+    item(key = "expenses_title", contentType = "section_header") {
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -2294,7 +2445,7 @@ private fun ExpensesSection(
       ) {
         Text(
           text = if (selectedAccountFilterId != null) {
-            val accName = accountsWithBalances.find { it.account.id == selectedAccountFilterId }?.account?.bankName ?: "Account"
+            val accName = accountNameById[selectedAccountFilterId] ?: "Account"
             "Transactions: $accName"
           } else {
             "Recent Transactions"
@@ -2309,7 +2460,7 @@ private fun ExpensesSection(
       }
     }
 
-    item(key = "transaction_filters") {
+    item(key = "transaction_filters", contentType = "transaction_filters") {
       Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -2354,7 +2505,11 @@ private fun ExpensesSection(
             )
           )
           LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            items(listOf("ALL" to "Any date", "WEEK" to "7 days", "MONTH" to "This month", "LAST_MONTH" to "Last month"), key = { it.first }) { (period, label) ->
+            items(
+              items = listOf("ALL" to "Any date", "WEEK" to "7 days", "MONTH" to "This month", "LAST_MONTH" to "Last month"),
+              key = { it.first },
+              contentType = { "period_chip" }
+            ) { (period, label) ->
               val selected = selectedTransactionPeriod == period
               FilterChip(
                 selected = selected,
@@ -2387,7 +2542,8 @@ private fun ExpensesSection(
                 "INCOME" to "Income",
                 "TRANSFER" to "Transfers"
               ),
-              key = { it.first ?: "all_types" }
+              key = { it.first ?: "all_types" },
+              contentType = { "type_chip" }
             ) { (type, label) ->
               val selected = selectedTransactionType == type
               val chipColor = when (type) {
@@ -2410,7 +2566,7 @@ private fun ExpensesSection(
             }
           }
           LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            item(key = "all_categories") {
+            item(key = "all_categories", contentType = "category_chip") {
               val selected = selectedTransactionCategory == null
               FilterChip(
                 selected = selected,
@@ -2423,11 +2579,9 @@ private fun ExpensesSection(
                 border = BorderStroke(1.dp, if (selected) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.outlineVariant)
               )
             }
-            items(transactionCategories, key = { it.lowercase() }) { category ->
+            items(transactionCategories, key = { it.lowercase() }, contentType = { "category_chip" }) { category ->
               val selected = selectedTransactionCategory.equals(category, ignoreCase = true)
-              val categoryColor = categories.firstOrNull { it.name.equals(category, ignoreCase = true) }?.let {
-                try { Color(android.graphics.Color.parseColor(it.colorHex)) } catch (_: Exception) { Color(0xFF0D9488) }
-              } ?: Color(0xFF0D9488)
+              val categoryColor = categoryColorMap[category.lowercase()] ?: Color(0xFF0D9488)
               FilterChip(
                 selected = selected,
                 onClick = {
@@ -2448,7 +2602,7 @@ private fun ExpensesSection(
     }
 
     if (filteredExpenses.isEmpty()) {
-      item(key = "empty_expenses") {
+      item(key = "empty_expenses", contentType = "empty_state") {
         Card(
           shape = RoundedCornerShape(16.dp),
           colors = CardDefaults.cardColors(
@@ -2493,9 +2647,10 @@ private fun ExpensesSection(
         contentType = { "expense_transaction" }
       ) { expense ->
         val isCc = expense.bankAccountId in creditCardAccountIds
+        val catColor = categoryColorMap[expense.categoryName.lowercase()] ?: Color(0xFF6366F1)
         ExpenseItemCard(
           expense = expense,
-          categories = categories,
+          catColor = catColor,
           isCreditCard = isCc,
           onClick = { onSelectExpense(expense) }
         )
@@ -2554,22 +2709,12 @@ private fun ExpensesSection(
 @Composable
 private fun ExpenseItemCard(
   expense: ExpenseRecord,
-  categories: List<ExpenseCategory>,
+  catColor: Color = Color(0xFF6366F1),
   isCreditCard: Boolean = false,
   onClick: () -> Unit
 ) {
-  val matchedCat = remember(expense.categoryName, categories) {
-    categories.find { it.name.equals(expense.categoryName, ignoreCase = true) }
-  }
-  val catColor = remember(matchedCat) {
-    try {
-      matchedCat?.let { Color(android.graphics.Color.parseColor(it.colorHex)) } ?: Color(0xFF6366F1)
-    } catch (e: Exception) {
-      Color(0xFF6366F1)
-    }
-  }
   val dateFormatted = remember(expense.dateTimestamp) {
-    SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(expense.dateTimestamp))
+    formatFinanceTimestamp(expense.dateTimestamp, EXPENSE_ITEM_DATE_FORMATTER)
   }
   val isTransfer = expense.type == "TRANSFER_IN" || expense.type == "TRANSFER_OUT"
   val isIncome = expense.type == "INCOME" || expense.type == "TRANSFER_IN"
@@ -2586,7 +2731,8 @@ private fun ExpenseItemCard(
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .clip(RoundedCornerShape(16.dp))
@@ -2802,7 +2948,7 @@ private fun TransactionDetailsDialog(
   }
   val amountSign = if (isIncome) "+" else "-"
   val dateFormatted = remember(expense.dateTimestamp) {
-    SimpleDateFormat("EEEE, dd MMMM yyyy, hh:mm a", Locale.getDefault()).format(Date(expense.dateTimestamp))
+    formatFinanceTimestamp(expense.dateTimestamp, EXPENSE_DETAIL_DATE_FORMATTER)
   }
 
   AlertDialog(
@@ -3959,13 +4105,17 @@ private fun TripsSection(
   onEditTrip: (TripRecord) -> Unit = {},
   onTripExpenseClick: (ExpenseRecord) -> Unit = {}
 ) {
+  val expensesByTripId = remember(expenses) {
+    expenses.filter { it.tripId != null }.groupBy { it.tripId }
+  }
+
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
     if (trips.isEmpty()) {
-      item(key = "empty_trips") {
+      item(key = "empty_trips", contentType = "empty_state") {
         Card(
           shape = RoundedCornerShape(16.dp),
           colors = CardDefaults.cardColors(
@@ -4000,10 +4150,8 @@ private fun TripsSection(
         }
       }
     } else {
-      items(trips, key = { it.id }) { trip ->
-        val tripExpenses = remember(expenses, trip.id) {
-          expenses.filter { it.tripId == trip.id }
-        }
+      items(trips, key = { it.id }, contentType = { "trip_card" }) { trip ->
+        val tripExpenses = expensesByTripId[trip.id].orEmpty()
         val spent = remember(tripExpenses) { tripExpenses.sumOf { it.amount } }
         TripCardItem(
           trip = trip,
@@ -4076,7 +4224,8 @@ private fun TripCardItem(
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier.fillMaxWidth().clickable { showTripActions = true }
   ) {
     Column(
@@ -4721,7 +4870,7 @@ private fun AddExpenseDialog(
             ExpensePaymentMethod.CASH -> {
               if (cashAccounts.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                  items(cashAccounts) { acc ->
+                  items(cashAccounts, key = { it.id }, contentType = { "account_chip" }) { acc ->
                     FilterChip(
                       selected = selectedAccountId == acc.id,
                       onClick = { selectedAccountId = acc.id },
@@ -4747,7 +4896,7 @@ private fun AddExpenseDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                  items(availableBanks) { acc ->
+                  items(availableBanks, key = { it.id }, contentType = { "account_chip" }) { acc ->
                     FilterChip(
                       selected = selectedAccountId == acc.id,
                       onClick = { selectedAccountId = acc.id },
@@ -4772,7 +4921,7 @@ private fun AddExpenseDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                  items(creditCardAccounts) { card ->
+                  items(creditCardAccounts, key = { it.id }, contentType = { "credit_card_chip" }) { card ->
                     FilterChip(
                       selected = selectedAccountId == card.id,
                       onClick = { selectedAccountId = card.id },
@@ -4848,14 +4997,14 @@ private fun AddExpenseDialog(
         if (trips.isNotEmpty()) {
           Text("Assign to Trip (Optional):", style = MaterialTheme.typography.bodySmall)
           LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            item {
+            item(key = "no_trip", contentType = "trip_chip") {
               FilterChip(
                 selected = selectedTripId == null,
                 onClick = { selectedTripId = null },
                 label = { Text("None") }
               )
             }
-            items(trips) { trip ->
+            items(trips, key = { it.id }, contentType = { "trip_chip" }) { trip ->
               FilterChip(
                 selected = selectedTripId == trip.id,
                 onClick = { selectedTripId = trip.id },
@@ -4993,7 +5142,7 @@ private fun AddIncomeDialog(
             Text("Deposit into Account:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(4.dp))
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-              items(bankAccounts) { acc ->
+              items(bankAccounts, key = { it.id }, contentType = { "account_chip" }) { acc ->
                 FilterChip(
                   selected = selectedAccountId == acc.id,
                   onClick = { selectedAccountId = acc.id },
@@ -5009,7 +5158,7 @@ private fun AddIncomeDialog(
           Text("Source Category:", style = MaterialTheme.typography.bodySmall)
           Spacer(modifier = Modifier.height(4.dp))
           LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(incomeSources) { src ->
+            items(incomeSources, key = { it }, contentType = { "income_source_chip" }) { src ->
               FilterChip(
                 selected = selectedCategory == src,
                 onClick = { selectedCategory = src },
@@ -5175,7 +5324,7 @@ private fun AddTripDialog(
       confirmButton = {
         TextButton(onClick = {
           startDatePickerState.selectedDateMillis?.let { millis ->
-            startDate = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(millis))
+            startDate = formatFinanceTimestamp(millis, TRIP_PICKER_DATE_FORMATTER)
           }
           showStartDatePicker = false
         }) {
@@ -5198,7 +5347,7 @@ private fun AddTripDialog(
       confirmButton = {
         TextButton(onClick = {
           endDatePickerState.selectedDateMillis?.let { millis ->
-            endDate = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(millis))
+            endDate = formatFinanceTimestamp(millis, TRIP_PICKER_DATE_FORMATTER)
           }
           showEndDatePicker = false
         }) {
@@ -5821,7 +5970,7 @@ private fun SubscriptionsSection(
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(12.dp)
   ) {
-    item(key = "subscriptions_header") {
+    item(key = "subscriptions_header", contentType = "subscriptions_header") {
       Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -5900,7 +6049,7 @@ private fun SubscriptionsSection(
     }
 
     if (subscriptions.isEmpty()) {
-      item(key = "empty_subscriptions") {
+      item(key = "empty_subscriptions", contentType = "empty_state") {
         Card(
           shape = RoundedCornerShape(16.dp),
           colors = CardDefaults.cardColors(
@@ -5935,7 +6084,7 @@ private fun SubscriptionsSection(
         }
       }
     } else {
-      items(subscriptions, key = { it.id }) { sub ->
+      items(subscriptions, key = { it.id }, contentType = { "subscription_item" }) { sub ->
         SubscriptionItemCard(
           sub = sub,
           today = today,
@@ -5954,10 +6103,12 @@ private fun SubscriptionItemCard(
   onClick: () -> Unit,
   onMarkPaid: () -> Unit
 ) {
-  val daysLeft = ChronoUnit.DAYS.between(
-    today,
-    SubscriptionDueDateCalculator.nextDueDate(sub, today)
-  ).toInt()
+  val daysLeft = remember(sub.billingCycle, sub.dueDayOfMonth, sub.dueMonth, sub.dueDayOfWeek, today) {
+    ChronoUnit.DAYS.between(
+      today,
+      SubscriptionDueDateCalculator.nextDueDate(sub, today)
+    ).toInt()
+  }
   val statusLabel = when {
     daysLeft == 0 -> stringResource(com.example.R.string.subscription_due_today)
     daysLeft == 1 -> stringResource(com.example.R.string.subscription_due_in_one_day)
@@ -5966,12 +6117,15 @@ private fun SubscriptionItemCard(
 
   val isUrgent = daysLeft in 0..3
 
-  val isPaidThisCycle = SubscriptionDueDateCalculator.isPaidInCurrentCycle(sub, today)
+  val isPaidThisCycle = remember(sub.billingCycle, sub.dueDayOfMonth, sub.dueMonth, sub.dueDayOfWeek, sub.lastPaidTimestamp, today) {
+    SubscriptionDueDateCalculator.isPaidInCurrentCycle(sub, today)
+  }
 
   Card(
     shape = RoundedCornerShape(16.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .clip(RoundedCornerShape(16.dp))
@@ -6578,6 +6732,10 @@ private fun TripCategoryCapsSection(
   val caps = remember(trip.categoryCapsJson) {
     parseCategoryCaps(trip.categoryCapsJson)
   }
+  val spentByCategory = remember(tripExpenses) {
+    tripExpenses.groupBy { it.categoryName.lowercase() }
+      .mapValues { (_, list) -> list.sumOf { it.amount } }
+  }
 
   Column(
     modifier = Modifier.fillMaxWidth(),
@@ -6612,9 +6770,7 @@ private fun TripCategoryCapsSection(
       )
     } else {
       caps.forEach { (catName, capAmount) ->
-        val catSpent = remember(tripExpenses, catName) {
-          tripExpenses.filter { it.categoryName.equals(catName, ignoreCase = true) }.sumOf { it.amount }
-        }
+        val catSpent = spentByCategory[catName.lowercase()] ?: 0.0
         val ratio = if (capAmount > 0) (catSpent / capAmount).toFloat() else 0f
         val progress = ratio.coerceIn(0f, 1f)
         val isOver = catSpent > capAmount
@@ -6822,7 +6978,7 @@ private fun AddSubscriptionDialog(
         if (bankAccounts.isNotEmpty()) {
           Text("Pay via Account:", style = MaterialTheme.typography.labelSmall)
           LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(bankAccounts) { acc ->
+            items(bankAccounts, key = { it.id }, contentType = { "account_chip" }) { acc ->
               FilterChip(
                 selected = selectedBank?.id == acc.id,
                 onClick = { selectedBank = acc },
@@ -6959,7 +7115,7 @@ private fun SetTripCategoryCapDialog(
 
         Text("Select Category:", style = MaterialTheme.typography.labelSmall)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-          items(categories) { cat ->
+          items(categories, key = { "${it.id}_${it.name}" }, contentType = { "category_chip" }) { cat ->
             FilterChip(
               selected = selectedCategory == cat.name,
               onClick = { selectedCategory = cat.name },
@@ -7057,18 +7213,19 @@ private fun CreditCardsSection(
   onDeleteCard: (BankAccount) -> Unit,
   modifier: Modifier = Modifier
 ) {
-  val totalOutstanding = cardAccounts.sumOf { kotlin.math.abs(it.currentBalance) }
-  val todayEpoch = LocalDate.now().toEpochDay()
-  val unpaidReminders = reminders.filter { it.paidDateEpochDay < 0L }
-  val totalUnpaidBills = unpaidReminders.sumOf { it.amount }
-  val nextDueReminder = unpaidReminders.minByOrNull { it.dueDateEpochDay }
+  val totalOutstanding = remember(cardAccounts) { cardAccounts.sumOf { kotlin.math.abs(it.currentBalance) } }
+  val todayEpoch = remember { LocalDate.now().toEpochDay() }
+  val unpaidReminders = remember(reminders) { reminders.filter { it.paidDateEpochDay < 0L } }
+  val totalUnpaidBills = remember(unpaidReminders) { unpaidReminders.sumOf { it.amount } }
+  val nextDueReminder = remember(unpaidReminders) { unpaidReminders.minByOrNull { it.dueDateEpochDay } }
+  val remindersByAccountId = remember(reminders) { reminders.associateBy { it.accountId } }
 
   LazyColumn(
     modifier = modifier.fillMaxSize(),
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
-    item {
+    item(key = "credit_cards_summary", contentType = "credit_cards_summary") {
       // Header Summary Card
       Card(
         modifier = Modifier.fillMaxWidth().testTag("credit_cards_summary_card"),
@@ -7177,7 +7334,7 @@ private fun CreditCardsSection(
     }
 
     if (cardAccounts.isEmpty()) {
-      item {
+      item(key = "empty_credit_cards", contentType = "empty_state") {
         Card(
           modifier = Modifier
             .fillMaxWidth()
@@ -7233,8 +7390,8 @@ private fun CreditCardsSection(
         }
       }
     } else {
-      items(cardAccounts, key = { it.account.id }) { accWithBal ->
-        val reminder = reminders.firstOrNull { it.accountId == accWithBal.account.id }
+      items(cardAccounts, key = { it.account.id }, contentType = { "credit_card" }) { accWithBal ->
+        val reminder = remindersByAccountId[accWithBal.account.id]
         val outstanding = kotlin.math.abs(accWithBal.currentBalance)
         val isPaid = reminder?.paidDateEpochDay?.let { it >= 0L } == true
 
@@ -7249,7 +7406,7 @@ private fun CreditCardsSection(
             containerColor = MaterialTheme.colorScheme.surface
           ),
           border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-          elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+          elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
           Column(modifier = Modifier.fillMaxWidth()) {
             // Top Card Art Header
@@ -7737,7 +7894,7 @@ private fun PayCreditCardBillDialog(
           )
         } else {
           LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(liquidAccounts) { bank ->
+            items(liquidAccounts, key = { it.id }, contentType = { "account_chip" }) { bank ->
               FilterChip(
                 selected = selectedFromAccountId == bank.id,
                 onClick = { selectedFromAccountId = bank.id },

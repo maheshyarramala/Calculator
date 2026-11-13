@@ -34,10 +34,19 @@ import com.example.data.local.entity.AccountWithBalance
 import com.example.data.local.entity.BankAccount
 import com.example.data.local.entity.DebtRecord
 import com.example.ui.components.CurrencyFormatter
-import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Calendar
-import java.util.Date
 import java.util.Locale
+
+private val DEBT_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())
+private val DEBT_DATETIME_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", Locale.getDefault())
+
+private fun formatDebtDate(timestamp: Long, formatter: DateTimeFormatter = DEBT_DATE_FORMATTER): String =
+  Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).format(formatter)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,7 +96,7 @@ fun DebtTrackerScreen(
       verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
       // 1. Dual Summary Card: Receivable (Green) vs Payable (Red)
-      item {
+      item(key = "debt_summary", contentType = "debt_summary") {
         DebtSummaryOverviewCard(
           totalLent = state.totalLentReceivable,
           totalBorrowed = state.totalBorrowedPayable,
@@ -96,7 +105,7 @@ fun DebtTrackerScreen(
       }
 
       // 2. Tab Navigation: "People Who Owe Me" (Lent) vs "People I Owe" (Borrowed) vs "Settled"
-      item {
+      item(key = "debt_tabs", contentType = "debt_tabs") {
         SingleChoiceSegmentedTabs(
           selectedTab = state.selectedTab,
           onSelectTab = { viewModel.selectTab(it) }
@@ -105,7 +114,7 @@ fun DebtTrackerScreen(
 
       // 2b. 1-Tap UPI Payment Links Banner for "People Who Owe Me"
       if (state.selectedTab == DebtTab.LENT) {
-        item {
+        item(key = "debt_upi_banner", contentType = "debt_upi_banner") {
           Card(
             shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(
@@ -158,7 +167,7 @@ fun DebtTrackerScreen(
       }
 
       // 3. Search Bar
-      item {
+      item(key = "debt_search", contentType = "debt_search") {
         OutlinedTextField(
           value = state.searchQuery,
           onValueChange = { viewModel.setSearchQuery(it) },
@@ -181,7 +190,7 @@ fun DebtTrackerScreen(
 
       // 4. Empty State or Debt Cards List
       if (state.allDebts.isEmpty()) {
-        item {
+        item(key = "debt_empty", contentType = "debt_empty") {
           Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
@@ -236,7 +245,7 @@ fun DebtTrackerScreen(
           }
         }
       } else {
-        items(state.allDebts, key = { it.id }) { debt ->
+        items(state.allDebts, key = { it.id }, contentType = { "debt_item" }) { debt ->
           DebtItemCard(
             debt = debt,
             onClick = { selectedDebtForDetails = debt },
@@ -426,7 +435,8 @@ private fun DebtSummaryOverviewCard(
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier.fillMaxWidth()
   ) {
     Column(
@@ -631,16 +641,16 @@ private fun DebtItemCard(
 ) {
   val isLent = debt.type == "LENT"
   val primaryColor = if (isLent) Color(0xFF059669) else Color(0xFFDC2626)
-  val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-  val dateCreated = dateFormat.format(Date(debt.dateTimestamp))
-  val dueDateStr = debt.dueDateTimestamp?.let { dateFormat.format(Date(it)) }
+  val dateCreated = remember(debt.dateTimestamp) { formatDebtDate(debt.dateTimestamp) }
+  val dueDateStr = remember(debt.dueDateTimestamp) { debt.dueDateTimestamp?.let { formatDebtDate(it) } }
 
   Card(
     shape = RoundedCornerShape(18.dp),
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier
       .fillMaxWidth()
       .clip(RoundedCornerShape(18.dp))
@@ -818,8 +828,10 @@ private fun DebtDetailsDialog(
 ) {
   val isLent = debt.type == "LENT"
   val primaryColor = if (isLent) Color(0xFF059669) else Color(0xFFDC2626)
-  val dateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
-  val dueDateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+  val dateCreated = remember(debt.dateTimestamp) { formatDebtDate(debt.dateTimestamp, DEBT_DATETIME_FORMATTER) }
+  val dueDateStr = remember(debt.dueDateTimestamp) {
+    debt.dueDateTimestamp?.takeIf { it > 0L }?.let { formatDebtDate(it) }
+  }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -881,12 +893,12 @@ private fun DebtDetailsDialog(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
           Column(modifier = Modifier.weight(1f)) {
             Text("Recorded Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(dateFormat.format(Date(debt.dateTimestamp)), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+            Text(dateCreated, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
           }
-          if (debt.dueDateTimestamp != null && debt.dueDateTimestamp > 0L) {
+          if (dueDateStr != null) {
             Column(modifier = Modifier.weight(1f)) {
               Text("Due Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-              Text(dueDateFormat.format(Date(debt.dueDateTimestamp)), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+              Text(dueDateStr, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
             }
           }
         }
@@ -984,8 +996,6 @@ private fun EditDebtDialog(
   var notes by rememberSaveable { mutableStateOf(debt.notes) }
   var selectedBankId by rememberSaveable { mutableStateOf(debt.bankAccountId) }
 
-  val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-
   AlertDialog(
     onDismissRequest = onDismiss,
     title = {
@@ -1077,7 +1087,7 @@ private fun EditDebtDialog(
               Column {
                 Text("Due Date (Optional)", style = MaterialTheme.typography.labelSmall)
                 Text(
-                  text = dueDateMillis?.let { dateFormat.format(Date(it)) } ?: "Tap to set due date",
+                  text = dueDateMillis?.let { formatDebtDate(it) } ?: "Tap to set due date",
                   style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                   color = if (dueDateMillis != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1208,8 +1218,6 @@ private fun AddDebtDialog(
   val amountVal = amountText.toDoubleOrNull() ?: 0.0
   val selectedAccount = bankAccounts.find { it.account.id == selectedBankId }
 
-  val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-
   AlertDialog(
     onDismissRequest = onDismiss,
     title = { Text("Add Lend / Borrow Transaction", fontWeight = FontWeight.Bold) },
@@ -1281,7 +1289,7 @@ private fun AddDebtDialog(
           Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp))
           Spacer(modifier = Modifier.width(6.dp))
           Text(
-            text = dueDateMillis?.let { "Due: ${dateFormat.format(Date(it))}" } ?: "Set Optional Due Date",
+            text = dueDateMillis?.let { "Due: ${formatDebtDate(it)}" } ?: "Set Optional Due Date",
             fontSize = 13.sp
           )
         }

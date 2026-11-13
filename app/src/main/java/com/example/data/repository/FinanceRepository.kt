@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,20 +42,29 @@ class FinanceRepository private constructor(context: Context) {
   /**
    * Authoritative Centralized StateFlow of bank/cash accounts with real-time computed balances:
    * currentBalance = openingBalance + sum(INCOME / TRANSFER_IN) - sum(EXPENSE / TRANSFER_OUT)
+   * Single O(E) pass over expenses followed by O(A) account mapping on Dispatchers.Default.
    */
   val accountsWithBalances: StateFlow<List<AccountWithBalance>> = combine(
     rawBankAccounts,
     allExpenses
   ) { accs, exps ->
+    val expenseByAcc = HashMap<Long, Double>(accs.size)
+    val incomeByAcc = HashMap<Long, Double>(accs.size)
+    for (exp in exps) {
+      val accId = exp.bankAccountId ?: continue
+      when (exp.type) {
+        "EXPENSE", "TRANSFER_OUT" -> {
+          expenseByAcc[accId] = (expenseByAcc[accId] ?: 0.0) + exp.amount
+        }
+        "INCOME", "TRANSFER_IN" -> {
+          incomeByAcc[accId] = (incomeByAcc[accId] ?: 0.0) + exp.amount
+        }
+      }
+    }
+
     accs.map { acc ->
-      val accExpenses = exps.filter {
-        (it.type == "EXPENSE" || it.type == "TRANSFER_OUT") && it.bankAccountId == acc.id
-      }.sumOf { it.amount }
-
-      val accIncome = exps.filter {
-        (it.type == "INCOME" || it.type == "TRANSFER_IN") && it.bankAccountId == acc.id
-      }.sumOf { it.amount }
-
+      val accExpenses = expenseByAcc[acc.id] ?: 0.0
+      val accIncome = incomeByAcc[acc.id] ?: 0.0
       val current = acc.openingBalance + accIncome - accExpenses
 
       AccountWithBalance(
@@ -65,7 +75,7 @@ class FinanceRepository private constructor(context: Context) {
         currentBalance = current
       )
     }
-  }.stateIn(
+  }.flowOn(Dispatchers.Default).stateIn(
     scope = scope,
     started = SharingStarted.Eagerly,
     initialValue = emptyList()
@@ -76,9 +86,10 @@ class FinanceRepository private constructor(context: Context) {
    * Credit card debts are kept strictly separate from liquid cash funds.
    */
   val totalNetBalance: StateFlow<Double> = combine(accountsWithBalances) { (list) ->
-    list.filter { !it.account.accountType.equals("Credit Card", ignoreCase = true) }
-      .sumOf { it.currentBalance }
-  }.stateIn(
+    list.sumOf {
+      if (!it.account.accountType.equals("Credit Card", ignoreCase = true)) it.currentBalance else 0.0
+    }
+  }.flowOn(Dispatchers.Default).stateIn(
     scope = scope,
     started = SharingStarted.Eagerly,
     initialValue = 0.0
@@ -88,40 +99,59 @@ class FinanceRepository private constructor(context: Context) {
    * Centralized real-time Total Credit Card Outstanding Debt.
    */
   val totalCreditCardDue: StateFlow<Double> = combine(accountsWithBalances) { (list) ->
-    list.filter { it.account.accountType.equals("Credit Card", ignoreCase = true) }
-      .sumOf { kotlin.math.abs(it.currentBalance) }
-  }.stateIn(
+    list.sumOf {
+      if (it.account.accountType.equals("Credit Card", ignoreCase = true)) kotlin.math.abs(it.currentBalance) else 0.0
+    }
+  }.flowOn(Dispatchers.Default).stateIn(
     scope = scope,
     started = SharingStarted.Eagerly,
     initialValue = 0.0
   )
 
   val totalIncome: StateFlow<Double> = combine(allExpenses) { (exps) ->
-    exps.filter { it.type == "INCOME" }.sumOf { it.amount }
-  }.stateIn(
+    var sum = 0.0
+    for (item in exps) {
+      if (item.type == "INCOME") sum += item.amount
+    }
+    sum
+  }.flowOn(Dispatchers.Default).stateIn(
     scope = scope,
     started = SharingStarted.Eagerly,
     initialValue = 0.0
   )
 
   val totalExpense: StateFlow<Double> = combine(allExpenses) { (exps) ->
-    exps.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-  }.stateIn(
+    var sum = 0.0
+    for (item in exps) {
+      if (item.type == "EXPENSE") sum += item.amount
+    }
+    sum
+  }.flowOn(Dispatchers.Default).stateIn(
     scope = scope,
     started = SharingStarted.Eagerly,
     initialValue = 0.0
   )
 
   val currentMonthExpenses: StateFlow<Double> = combine(allExpenses) { (exps) ->
-    val cal = Calendar.getInstance()
-    val currMonth = cal.get(Calendar.MONTH)
-    val currYear = cal.get(Calendar.YEAR)
-    exps.filter { item ->
-      if (item.type != "EXPENSE") return@filter false
-      val itemCal = Calendar.getInstance().apply { timeInMillis = item.dateTimestamp }
-      itemCal.get(Calendar.MONTH) == currMonth && itemCal.get(Calendar.YEAR) == currYear
-    }.sumOf { it.amount }
-  }.stateIn(
+    val cal = Calendar.getInstance().apply {
+      set(Calendar.DAY_OF_MONTH, 1)
+      set(Calendar.HOUR_OF_DAY, 0)
+      set(Calendar.MINUTE, 0)
+      set(Calendar.SECOND, 0)
+      set(Calendar.MILLISECOND, 0)
+    }
+    val monthStart = cal.timeInMillis
+    cal.add(Calendar.MONTH, 1)
+    val nextMonthStart = cal.timeInMillis
+
+    var sum = 0.0
+    for (item in exps) {
+      if (item.type == "EXPENSE" && item.dateTimestamp in monthStart until nextMonthStart) {
+        sum += item.amount
+      }
+    }
+    sum
+  }.flowOn(Dispatchers.Default).stateIn(
     scope = scope,
     started = SharingStarted.Eagerly,
     initialValue = 0.0

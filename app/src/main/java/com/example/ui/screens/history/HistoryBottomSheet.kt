@@ -139,7 +139,7 @@ fun HistoryBottomSheet(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
-        items(filters) { (key, label) ->
+        items(filters, key = { it.first }, contentType = { "history_filter" }) { (key, label) ->
           FilterChip(
             selected = selectedFilter == key,
             onClick = {
@@ -185,7 +185,7 @@ fun HistoryBottomSheet(
           verticalArrangement = Arrangement.spacedBy(10.dp),
           modifier = Modifier.fillMaxHeight(0.7f)
         ) {
-          items(historyList, key = { it.id }) { item ->
+          items(historyList, key = { it.id }, contentType = { "history_record" }) { item ->
             HistoryItemCard(
               item = item,
               dateFormat = dateFormat,
