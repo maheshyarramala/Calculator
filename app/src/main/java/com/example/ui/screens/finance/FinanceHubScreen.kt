@@ -100,6 +100,20 @@ private val TRIP_PICKER_DATE_FORMATTER: DateTimeFormatter =
   DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault())
 private val BACKUP_FILE_DATE_FORMATTER: DateTimeFormatter =
   DateTimeFormatter.ofPattern("yyyyMMdd_HHmm", Locale.getDefault())
+private val CC_DUE_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault())
+private val TRANSACTION_PERIOD_OPTIONS = listOf(
+  "ALL" to "Any date",
+  "WEEK" to "7 days",
+  "MONTH" to "This month",
+  "LAST_MONTH" to "Last month"
+)
+private val TRANSACTION_TYPE_OPTIONS = listOf(
+  null to "All",
+  "EXPENSE" to "Expenses",
+  "INCOME" to "Income",
+  "TRANSFER" to "Transfers"
+)
 
 private fun formatFinanceTimestamp(timestamp: Long, formatter: DateTimeFormatter): String =
   Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).format(formatter)
@@ -2112,7 +2126,7 @@ private fun ExpensesSection(
         }
 
         // Add Account Card
-        item(key = "add_account_card") {
+        item(key = "add_account_card", contentType = "add_account_card") {
           Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
@@ -2506,7 +2520,7 @@ private fun ExpensesSection(
           )
           LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             items(
-              items = listOf("ALL" to "Any date", "WEEK" to "7 days", "MONTH" to "This month", "LAST_MONTH" to "Last month"),
+              items = TRANSACTION_PERIOD_OPTIONS,
               key = { it.first },
               contentType = { "period_chip" }
             ) { (period, label) ->
@@ -2536,12 +2550,7 @@ private fun ExpensesSection(
           }
           LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             items(
-              listOf(
-                null to "All",
-                "EXPENSE" to "Expenses",
-                "INCOME" to "Income",
-                "TRANSFER" to "Transfers"
-              ),
+              items = TRANSACTION_TYPE_OPTIONS,
               key = { it.first ?: "all_types" },
               contentType = { "type_chip" }
             ) { (type, label) ->
@@ -2644,15 +2653,16 @@ private fun ExpensesSection(
       items(
         items = filteredExpenses,
         key = { it.id },
-        contentType = { "expense_transaction" }
+        contentType = { "expense_item" }
       ) { expense ->
         val isCc = expense.bankAccountId in creditCardAccountIds
         val catColor = categoryColorMap[expense.categoryName.lowercase()] ?: Color(0xFF6366F1)
+        val onItemClick = remember(expense.id, onSelectExpense) { { onSelectExpense(expense) } }
         ExpenseItemCard(
           expense = expense,
           catColor = catColor,
           isCreditCard = isCc,
-          onClick = { onSelectExpense(expense) }
+          onClick = onItemClick
         )
       }
     }
@@ -2726,17 +2736,17 @@ private fun ExpenseItemCard(
     else -> Color(0xFFDC2626)
   }
 
-  Card(
+  val amountText = remember(expense.amount, isIncome) {
+    val formatted = CurrencyFormatter.formatWhole(expense.amount)
+    if (isIncome) "+ $formatted" else "- $formatted"
+  }
+
+  Surface(
+    onClick = onClick,
     shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.surface
-    ),
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(RoundedCornerShape(16.dp))
-      .clickable(onClick = onClick)
+    color = MaterialTheme.colorScheme.surface,
+    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+    modifier = Modifier.fillMaxWidth()
   ) {
     Row(
       modifier = Modifier
@@ -2900,11 +2910,7 @@ private fun ExpenseItemCard(
 
       Column(horizontalAlignment = Alignment.End) {
         Text(
-          text = if (isIncome) {
-            "+ ${CurrencyFormatter.formatWhole(expense.amount)}"
-          } else {
-            "- ${CurrencyFormatter.formatWhole(expense.amount)}"
-          },
+          text = amountText,
           fontWeight = FontWeight.Bold,
           fontSize = 14.sp,
           color = amountColor
@@ -3340,17 +3346,21 @@ private fun SpendingAnalyticsCard(
 ) {
   val haptic = LocalHapticFeedback.current
   val catSpendList = remember(expenses, categories, totalSpent) {
+    val categoryMap = HashMap<String, Color>(categories.size)
+    categories.forEach { cat ->
+      val parsed = try {
+        Color(android.graphics.Color.parseColor(cat.colorHex))
+      } catch (_: Exception) {
+        Color(0xFF6366F1)
+      }
+      categoryMap[cat.name.lowercase()] = parsed
+    }
     val map = mutableMapOf<String, Double>()
     expenses.forEach { exp ->
       map[exp.categoryName] = (map[exp.categoryName] ?: 0.0) + exp.amount
     }
     map.entries.map { entry ->
-      val matchedCat = categories.find { it.name.equals(entry.key, ignoreCase = true) }
-      val catColor = try {
-        matchedCat?.let { Color(android.graphics.Color.parseColor(it.colorHex)) } ?: Color(0xFF6366F1)
-      } catch (e: Exception) {
-        Color(0xFF6366F1)
-      }
+      val catColor = categoryMap[entry.key.lowercase()] ?: Color(0xFF6366F1)
       val percent = if (totalSpent > 0) (entry.value / totalSpent * 100).toFloat() else 0f
       Triple(entry.key, entry.value, Pair(catColor, percent))
     }.sortedByDescending { it.second }
@@ -3361,7 +3371,8 @@ private fun SpendingAnalyticsCard(
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier.fillMaxWidth()
   ) {
     Column(
@@ -6085,11 +6096,13 @@ private fun SubscriptionsSection(
       }
     } else {
       items(subscriptions, key = { it.id }, contentType = { "subscription_item" }) { sub ->
+        val onSubClick = remember(sub.id, onSelectSubscription) { { onSelectSubscription(sub) } }
+        val onSubPaidClick = remember(sub.id, onMarkPaid) { { onMarkPaid(sub) } }
         SubscriptionItemCard(
           sub = sub,
           today = today,
-          onClick = { onSelectSubscription(sub) },
-          onMarkPaid = { onMarkPaid(sub) }
+          onClick = onSubClick,
+          onMarkPaid = onSubPaidClick
         )
       }
     }
@@ -6121,15 +6134,12 @@ private fun SubscriptionItemCard(
     SubscriptionDueDateCalculator.isPaidInCurrentCycle(sub, today)
   }
 
-  Card(
+  Surface(
+    onClick = onClick,
     shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    color = MaterialTheme.colorScheme.surface,
     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(RoundedCornerShape(16.dp))
-      .clickable(onClick = onClick)
+    modifier = Modifier.fillMaxWidth()
   ) {
     Column(
       modifier = Modifier
@@ -6780,6 +6790,7 @@ private fun TripCategoryCapsSection(
           colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
           ),
+          elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
           modifier = Modifier.fillMaxWidth()
         ) {
           Column(
@@ -7541,7 +7552,7 @@ private fun CreditCardsSection(
                       }
                       Spacer(Modifier.height(2.dp))
                       Text(
-                        "Due Date: ${dueDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault()))}",
+                        "Due Date: ${dueDate.format(CC_DUE_DATE_FORMATTER)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                       )

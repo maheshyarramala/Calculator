@@ -20,8 +20,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.CalculationRecord
-import java.text.SimpleDateFormat
-import java.util.*
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private val FAVORITES_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("dd MMM, hh:mm a", Locale.getDefault())
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +38,6 @@ fun FavoritesBottomSheet(
   val favoritesList by viewModel.favoritesList.collectAsState()
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
-  val dateFormat = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -148,12 +152,16 @@ fun FavoritesBottomSheet(
           verticalArrangement = Arrangement.spacedBy(10.dp),
           modifier = Modifier.fillMaxHeight(0.6f)
         ) {
-          items(favoritesList, key = { it.id }) { item ->
+          items(favoritesList, key = { it.id }, contentType = { "favorite_record" }) { item ->
+            val formattedDate = remember(item.timestamp) {
+              Instant.ofEpochMilli(item.timestamp).atZone(ZoneId.systemDefault()).format(FAVORITES_DATE_FORMATTER)
+            }
             Card(
               shape = RoundedCornerShape(14.dp),
               colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
               ),
+              elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
               modifier = Modifier.fillMaxWidth()
             ) {
               Column(modifier = Modifier.padding(14.dp)) {
@@ -172,7 +180,7 @@ fun FavoritesBottomSheet(
                     modifier = Modifier.height(24.dp)
                   )
                   Text(
-                    text = dateFormat.format(Date(item.timestamp)),
+                    text = formattedDate,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )

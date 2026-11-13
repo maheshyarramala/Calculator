@@ -23,8 +23,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.CalculationRecord
-import java.text.SimpleDateFormat
-import java.util.*
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private val HISTORY_DATE_FORMATTER: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("dd MMM, hh:mm a", Locale.getDefault())
+
+private val HISTORY_FILTERS = listOf(
+  "ALL" to "All",
+  "EMI" to "Loans & EMI",
+  "SIP" to "SIP",
+  "LUMPSUM" to "Lump Sum",
+  "CALCULATOR" to "Calculator",
+  "AGE" to "Age",
+  "CALENDAR" to "Calendar",
+  "CURRENCY" to "Currency",
+  "TIP" to "Tip & Split",
+  "GST" to "GST"
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,20 +58,7 @@ fun HistoryBottomSheet(
   var showClearConfirm by remember { mutableStateOf(false) }
   var selectedRecord by remember { mutableStateOf<CalculationRecord?>(null) }
 
-  val dateFormat = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
-
-  val filters = listOf(
-    "ALL" to "All",
-    "EMI" to "Loans & EMI",
-    "SIP" to "SIP",
-    "LUMPSUM" to "Lump Sum",
-    "CALCULATOR" to "Calculator",
-    "AGE" to "Age",
-    "CALENDAR" to "Calendar",
-    "CURRENCY" to "Currency",
-    "TIP" to "Tip & Split",
-    "GST" to "GST"
-  )
+  val filters = HISTORY_FILTERS
 
   if (showClearConfirm) {
     AlertDialog(
@@ -188,7 +193,6 @@ fun HistoryBottomSheet(
           items(historyList, key = { it.id }, contentType = { "history_record" }) { item ->
             HistoryItemCard(
               item = item,
-              dateFormat = dateFormat,
               onShare = { viewModel.shareRecord(context, item) },
               onDelete = { viewModel.delete(item) },
               onClick = { selectedRecord = item }
@@ -203,14 +207,17 @@ fun HistoryBottomSheet(
 @Composable
 private fun HistoryItemCard(
   item: CalculationRecord,
-  dateFormat: SimpleDateFormat,
   onShare: () -> Unit,
   onDelete: () -> Unit,
   onClick: () -> Unit
 ) {
+  val formattedDate = remember(item.timestamp) {
+    Instant.ofEpochMilli(item.timestamp).atZone(ZoneId.systemDefault()).format(HISTORY_DATE_FORMATTER)
+  }
   Card(
     shape = RoundedCornerShape(14.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
   ) {
     Column(modifier = Modifier.padding(14.dp)) {
@@ -229,7 +236,7 @@ private fun HistoryItemCard(
           modifier = Modifier.height(24.dp)
         )
         Text(
-          text = dateFormat.format(Date(item.timestamp)),
+          text = formattedDate,
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )

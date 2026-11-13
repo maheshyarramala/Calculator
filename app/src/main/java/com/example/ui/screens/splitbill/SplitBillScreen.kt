@@ -265,7 +265,7 @@ fun SplitBillScreen(
         items(state.items, key = { it.id }, contentType = { "split_expense" }) { item ->
           val payer = state.participants.firstOrNull { it.id == item.paidByParticipantId }?.name ?: "Not specified"
           val names = state.participants.filter { it.id in item.claimedParticipantIds }.joinToString { it.name }.ifBlank { state.participants.joinToString { it.name } }
-          Card(Modifier.fillMaxWidth().clickable { selectedExpense = item }, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))) {
+          Card(Modifier.fillMaxWidth().clickable { selectedExpense = item }, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
               Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) { Icon(Icons.Default.ReceiptLong, null, Modifier.padding(11.dp)) }
               Spacer(Modifier.width(12.dp))
@@ -295,7 +295,7 @@ fun SplitBillScreen(
           val avatar = remember(person.participant.avatarColorHex, fallbackPrimary) {
             runCatching { Color(android.graphics.Color.parseColor(person.participant.avatarColorHex)) }.getOrDefault(fallbackPrimary)
           }
-          Card(Modifier.fillMaxWidth().clickable { selectedPerson = person.participant }, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))) {
+          Card(Modifier.fillMaxWidth().clickable { selectedPerson = person.participant }, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
               Surface(shape = CircleShape, color = avatar.copy(alpha = .16f)) { Text(person.participant.name.take(1).uppercase(), Modifier.padding(13.dp), color = avatar, fontWeight = FontWeight.Bold) }
               Spacer(Modifier.width(12.dp))
@@ -318,7 +318,7 @@ fun SplitBillScreen(
         ) { transfer ->
           val key = "${transfer.fromParticipant.id}_${transfer.toParticipant.id}_${transfer.amount}"
           val settled = key in state.settledTransferKeys
-          Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))) {
+          Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
               Column(Modifier.weight(1f)) { Text(transfer.fromParticipant.name, fontWeight = FontWeight.SemiBold); Text("pays ${transfer.toParticipant.name}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
               Column(horizontalAlignment = Alignment.End) { Text("${state.currencySymbol}${String.format(Locale.US, "%,.2f", transfer.amount)}", fontWeight = FontWeight.Bold); TextButton(onClick = { if (settled) { state.settledPaymentReferences[key]?.let(onUndoSettlement); viewModel.toggleSettledTransfer(key) } else { transferPaymentSource = ""; pendingTransfer = PendingSplitTransfer(key, transfer.fromParticipant.id, transfer.toParticipant.id, transfer.amount) } }) { Text(if (settled) "Undo" else "Mark paid") }; state.settledPaymentSources[key]?.takeIf { settled }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }

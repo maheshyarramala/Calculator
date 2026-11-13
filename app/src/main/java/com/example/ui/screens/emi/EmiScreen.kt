@@ -549,12 +549,13 @@ fun EmiScreen(
       // Month-Wise Amortization Items
       items(
         items = filteredSchedule,
-        key = { it.monthIndex }
+        key = { it.monthIndex },
+        contentType = { "amortization_row" }
       ) { monthItem ->
         AmortizationRow(item = monthItem)
       }
 
-      item {
+      item(key = "amortization_spacer", contentType = "spacer") {
         Spacer(modifier = Modifier.height(32.dp))
       }
     }

@@ -341,7 +341,7 @@ private fun LoanDashboardCard(
   Card(
     shape = RoundedCornerShape(24.dp),
     colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier.fillMaxWidth()
   ) {
     Box(
